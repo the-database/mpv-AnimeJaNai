@@ -1,3 +1,4 @@
+@echo off
 :: Note: This bat script must be executed using CMD command prompt and not PowerShell.
 :: You must have ffmpeg installed and available on your path: https://www.wikihow.com/Install-FFmpeg-on-Windows
 
