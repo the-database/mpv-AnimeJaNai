@@ -112,18 +112,20 @@ def run_animejanai(clip, container_fps, chain_conf):
             if model_conf['resize_height_before_upscale'] != 0:
                 resize_factor_before_upscale = 1
 
+            num_streams = max(1, TOTAL_NUM_STREAMS // len(models))
+
             try:
                 clip = vs.core.resize.Spline36(clip, format=vs.RGBH, matrix_in_s=colorspace,
                                               width=clip.width / resize_factor_before_upscale,
                                               height=clip.height / resize_factor_before_upscale)
 
-                clip = run_animejanai_upscale(clip, model_conf, TOTAL_NUM_STREAMS // len(models))
+                clip = run_animejanai_upscale(clip, model_conf, num_streams)
             except:
                 clip = vs.core.resize.Spline36(clip, format=vs.RGBS, matrix_in_s=colorspace,
                                               width=clip.width / resize_factor_before_upscale,
                                               height=clip.height / resize_factor_before_upscale)
 
-                clip = run_animejanai_upscale(clip, model_conf, TOTAL_NUM_STREAMS // len(models))
+                clip = run_animejanai_upscale(clip, model_conf, num_streams)
 
     fmt_out = fmt_in
     if fmt_in not in [vs.YUV410P8, vs.YUV411P8, vs.YUV420P8, vs.YUV422P8, vs.YUV444P8, vs.YUV420P10, vs.YUV422P10,
