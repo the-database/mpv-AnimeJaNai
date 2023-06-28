@@ -6,6 +6,8 @@
 ## Overview
 This project provides a collection of Real-ESRGAN Compact ONNX upscaling models, along with a custom build of mpv video player. The video player (currently Windows only), enables real-time upscaling of 1080p content to 4K by running these models using TensorRT (NVIDIA only). While the default configuration upscales using the 2x_AnimeJaNai V2 models, it can be easily customized to utilize any Real-ESRGAN Compact ONNX models.
 
+Samples: https://slow.pics/c/V3GkBJyR
+
 Join the [**AnimeJaNai Discord server**](https://discord.gg/3ndRcUYA) to get the latest news, get support and questions, share your screenshots (use the `s` key in mpv), or share your feedback. 日本語も大丈夫です。
 
 ## Usage Instructions
@@ -23,6 +25,8 @@ The player is preconfigured to upscale with 2x_AnimeJaNai_V2, and makes 6 upscal
 |||`upscale-on-ultracompact2x`|`Shift+5`||
 |SuperUltraCompact | Fastest performance model which sacrifices a bit more quality | `upscale-on-superultracompact4x` | `Shift+3` | RTX 3060?|
 |||`upscale-on-superultracompact2x`|`Shift+6`||
+
+Comparisons between Compact, UltraCompact, and SuperUltraCompact models: https://slow.pics/c/V3GkBJyR
 
 The 2x and 4x profiles behave the same on HD videos, but the 4x profiles will run the models twice on SD videos and produce a sharper result. 
 
@@ -47,7 +51,7 @@ The development of the V2 models spanned over four months, during which over 200
 - [Improved artifact handling](https://slow.pics/c/keJIWDf4)
 - Better preservation and enhancement of [background details](https://slow.pics/c/Mt2zAIR5) and [grain](https://slow.pics/c/9yGf4p97).
 
-Overall, the V2 models yield significantly more natural and faithful results compared to the V1 models.
+Overall, the V2 models yield significantly more natural and faithful results compared to the V1 models. 
 
 ## Benchmarks
 [Benchmarks](https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Benchmarks) for various hardware configurations tested against various upscaling configurations are available on the wiki. 
