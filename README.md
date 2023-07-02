@@ -8,7 +8,7 @@ This project provides a collection of Real-ESRGAN Compact ONNX upscaling models,
 
 Samples: https://slow.pics/c/V3GkBJyR
 
-Join the [**AnimeJaNai Discord server**](https://discord.gg/3ndRcUYA) to get the latest news, download pre-release and experimental models, get support and ask questions, share your screenshots (use the `s` key in mpv), or share your feedback. 日本語も大丈夫です。
+Join the [**AnimeJaNai Discord server**](https://discord.gg/EeFfZUBvxj) to get the latest news, download pre-release and experimental models, get support and ask questions, share your screenshots (use the `s` key in mpv), or share your feedback. 日本語も大丈夫です。
 
 ## Usage Instructions
 Ensure your NVIDIA graphics drivers are up to date. Download and extract the [latest release archive](https://github.com/the-database/mpv-upscale-2x_animejanai/releases) of mpv-upscale-2x_animejanai. Open the video player at `mpvnet.exe` to use [mpv.net](https://github.com/mpvnet-player/mpv.net) or `mpv.exe` to use plain [mpv](https://github.com/mpv-player/mpv) depending on your preference. 
