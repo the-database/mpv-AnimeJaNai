@@ -1,5 +1,5 @@
 # Upscaling Anime in mpv with 2x_AnimeJaNai V2
-[![Discord](https://img.shields.io/discord/1121653618173546546?label=Discord&logo=Discord&logoColor=white)](https://discord.gg/3ndRcUYA)
+[![Discord](https://img.shields.io/discord/1121653618173546546?label=Discord&logo=Discord&logoColor=white)](https://discord.gg/EeFfZUBvxj)
 
 ![2x animejanai v2 logo demo t6](https://github.com/the-database/mpv-upscale-2x_animejanai/assets/25811902/66edaee7-c94c-4a54-85e8-27e2b67b4f57)
 
