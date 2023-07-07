@@ -21,7 +21,7 @@ set output_dir=<local path>
 :: set video_settings=libx265 -crf 16 -preset slow -x265-params "sao=0:bframes=8:psy-rd=1.5:psy-rdoq=2:aq-mode=3:ref=6"
 
 :: HEVC compression with NVENC, fast encode using GPU but lower quality than CPU encoding
-set video_settings=hevc_nvenc -preset slow -profile:v main10 -b:v 50M
+set video_settings=hevc_nvenc -preset p7 -profile:v main10 -b:v 50M
 
 :: x264 compression (https://ffmpeg.org/ffmpeg-codecs.html#libx264_002c-libx264rgb), OK compression, faster to encode
 :: set video_settings=libx264 -crf 13 -preset slow -tune animation
