@@ -65,7 +65,7 @@ The 2x_AnimeJaNai_V2 ONNX models can be used on a PC with any graphics card to r
 For chaiNNer, the TensorRT backend is recommended for NVIDIA users for fastest rendering performance. AMD users should use the NCNN backend instead. Templates for chaiNNer are available for [NVIDIA](animejanai-nvidia.chn?raw=1) and [AMD](animejanai-amd.chn?raw=1) users. Simply download and open the appropriate `chn` file in chaiNNer, and select the ONNX model file and the input video file to upscale. 
 
 ## Related Projects
-- [mangajanai](https://github.com/the-database/mangajanai): Upscale manga with ESRGAN models
+- [MangaJaNai](https://github.com/the-database/mangajanai): Upscale manga with ESRGAN models
 
 ## Acknowledgements
 - [Upscale Wiki](https://upscale.wiki/wiki/Main_Page) and associated Discord server
