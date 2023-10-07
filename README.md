@@ -60,12 +60,13 @@ Overall, the V2 models yield significantly more natural and faithful results com
 Any media player which supports external DirectShow filters should be able to run these models, by using [avisynth_filter](https://github.com/CrendKing/avisynth_filter) to get VapourSynth running in the video player. 
 
 ## Prerendering Videos using Other Graphics Cards
-The 2x_AnimeJaNai_V2 ONNX models can be used on a PC with any graphics card to render upscaled videos, even when using graphics cards not fast enough for realtime playback. Please see the file `shaders/animejanai_v2_encode_single.bat` or `shaders/animejanai_v2_encode_batch.bat` included in the release package for more details on how to set this up. Alternatively, any program that supports ONNX models can be used, such as [chaiNNer](https://github.com/chaiNNer-org/chaiNNer) or [VSGAN-tensorrt-docker](https://github.com/styler00dollar/VSGAN-tensorrt-docker).
+The 2x_AnimeJaNai_V2 ONNX models can be used on a PC with any graphics card to render upscaled videos, even when using graphics cards not fast enough for realtime playback. Please see the [AnimeJaNaiConverterGui](https://github.com/the-database/AnimeJaNaiConverterGui) project to create upscaled video files using a Windows GUI. Or for creating upscaled videos with the Windows command line, please see the file `shaders/animejanai_v2_encode_single.bat` or `shaders/animejanai_v2_encode_batch.bat` included in the release package. Other options include [chaiNNer](https://github.com/chaiNNer-org/chaiNNer) or [VSGAN-tensorrt-docker](https://github.com/styler00dollar/VSGAN-tensorrt-docker), which are multiplatform options for Windows and non-Windows users.
 
-For chaiNNer, the TensorRT backend is recommended for NVIDIA users for fastest rendering performance. AMD users should use the NCNN backend instead. Templates for chaiNNer are available for [NVIDIA](animejanai-nvidia.chn?raw=1) and [AMD](animejanai-amd.chn?raw=1) users. Simply download and open the appropriate `chn` file in chaiNNer, and select the ONNX model file and the input video file to upscale. 
+The TensorRT backend is recommended for NVIDIA users for fastest rendering performance. AMD users should use the DirectML or NCNN backend instead. Templates for chaiNNer are available for [NVIDIA](animejanai-nvidia.chn?raw=1) and [AMD](animejanai-amd.chn?raw=1) users. Simply download and open the appropriate `chn` file in chaiNNer, and select the ONNX model file and the input video file to upscale. 
 
 ## Related Projects
 - [MangaJaNai](https://github.com/the-database/mangajanai): Upscale manga with ESRGAN models
+- [AnimeJaNaiConverterGui](https://github.com/the-database/AnimeJaNaiConverterGui): Windows GUI for upscaling with extremely fast performance
 
 ## Acknowledgements
 - [Upscale Wiki](https://upscale.wiki/wiki/Main_Page) and associated Discord server
