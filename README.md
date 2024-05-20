@@ -8,7 +8,7 @@
 
 This project provides a collection of Real-ESRGAN Compact ONNX upscaling models, along with a custom build of mpv video player. The video player (currently Windows only), enables real-time upscaling of 1080p content to 4K by running these models using TensorRT (NVIDIA only). While the default configuration upscales using the 2x_AnimeJaNai models, it can be easily customized to utilize any Real-ESRGAN Compact ONNX models.
 
-Join the [**AnimeJaNai Discord server**](https://discord.gg/EeFfZUBvxj) to get the latest news, download pre-release and experimental models, get support and ask questions, share your screenshots (use the `s` key in mpv), or share your feedback. 日本語も大丈夫です。
+Join the [**JaNai Discord server**](https://discord.gg/EeFfZUBvxj) to get the latest news, download pre-release and experimental models, get support and ask questions, share your screenshots (use the `s` key in mpv), or share your feedback. 日本語も大丈夫です。
 
 ## Usage Instructions
 Ensure your NVIDIA graphics drivers are up to date. Download and extract the [latest release archive](https://github.com/the-database/mpv-upscale-2x_animejanai/releases) of mpv-upscale-2x_animejanai. Open the video player at `mpvnet.exe`.
@@ -22,7 +22,7 @@ The player is preconfigured to upscale with 2x_AnimeJaNai models, and makes 3 up
 |Profile | Description | Keybinding | Minimum recommended GPU for upscaling 1080p to 4k |
 |-|-|-|-|
 |Quality | Highest quality model | `Shift+1` | RTX 4090|
-|Balanaced | High quality model which trades slight quality for major performance gains | `Shift+2` | RTX 3080|
+|Balanced | High quality model which trades slight quality for major performance gains | `Shift+2` | RTX 3080|
 |Performance | Fastest performance model which sacrifices a bit more quality  | `Shift+3` | RTX 3060|
 
 The default upscaling profile is the Balanced profile which is recommended for users running an NVIDIA RTX 3080 or higher. 
