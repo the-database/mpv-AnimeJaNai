@@ -1,0 +1,54 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.x'  # Adjust the .NET version as needed
+
+    - name: Publish .NET Core app
+      run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
+
+    - name: Run the console app
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe
+
+    - name: Install 7zip
+      run: sudo apt-get install -y p7zip-full
+
+    - name: Create 7zip archive of the artifact
+      run: 7z a -t7z -mx=9 mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z ./publish/mpv-upscale-2x_animejanai-v3
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.release_version }}
+        release_name: Release ${{ github.event.inputs.release_version }}
+        draft: true
+        prerelease: true
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z
+        asset_name: mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z
+        asset_content_type: application/x-7z-compressed
