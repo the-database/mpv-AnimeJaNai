@@ -9,7 +9,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - name: Checkout repository
@@ -24,10 +24,10 @@ jobs:
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
 
     - name: Run the console app
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe
 
     - name: Install 7zip
-      run: sudo apt-get install -y p7zip-full
+      run: choco install 7zip -y
 
     - name: Create 7zip archive of the artifact
       run: 7z a -t7z -mx=9 mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z ./publish/mpv-upscale-2x_animejanai-v3
