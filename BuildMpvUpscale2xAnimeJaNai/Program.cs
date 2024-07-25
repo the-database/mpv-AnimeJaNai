@@ -109,7 +109,8 @@ async Task InstallVapourSynthMiscFilters()
 
         File.Copy(
             Path.Combine(targetExtractPath, "win64", "MiscFilters.dll"),
-            Path.Combine(vapourSynthPluginsPath, "MiscFilters.dll")
+            Path.Combine(vapourSynthPluginsPath, "MiscFilters.dll"),
+            true
         );
     }
     Directory.Delete(targetExtractPath, true);
@@ -290,6 +291,10 @@ void CopyDirectory(string srcDir, string targetDir)
 
 async Task Main()
 {
+    if (Directory.Exists(installDirectory))
+    {
+        Directory.Delete(installDirectory, true);
+    }
     Directory.CreateDirectory(installDirectory);
     await InstallPortableVapourSynth();
     FixPythonPth();
