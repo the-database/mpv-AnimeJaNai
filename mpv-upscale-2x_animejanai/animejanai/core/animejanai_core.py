@@ -14,7 +14,7 @@ core = vs.core
 core.num_threads = 4  # can influence ram usage
 
 plugin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           r"..\..\vapoursynth64\plugins\vsmlrt-cuda")
+                           r"..\..\vs-plugins\vsmlrt-cuda")
 model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            r"..\onnx")
 
