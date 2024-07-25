@@ -24,7 +24,7 @@ jobs:
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
 
     - name: Run the console app
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai
 
     - name: Install 7zip
       run: sudo apt-get install -y p7zip-full
