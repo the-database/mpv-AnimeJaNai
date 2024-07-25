@@ -8,6 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Update="mpv-upscale-2x_animejanai\**\*">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.4" />
     <PackageReference Include="SevenZipExtractor" Version="1.0.17" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />

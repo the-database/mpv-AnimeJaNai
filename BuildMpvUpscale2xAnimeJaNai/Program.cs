@@ -7,8 +7,8 @@ using System.Management.Automation;
 using System.Text;
 using static Downloader;
 
-var animejanaiDirectory = @"C:\Users\<user>\Documents\programming\mpv-upscale-2x_animejanai\mpv-upscale-2x_animejanai";
-var installDirectory = @"C:\Users\<user>\Documents\programming\mpv-upscale-2x_animejanai\mpv-upscale-2x_animejanai-v3";
+var animejanaiDirectory = Path.GetFullPath(@".\mpv-upscale-2x_animejanai");
+var installDirectory = Path.GetFullPath(@".\mpv-upscale-2x_animejanai-v3");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vapourSynthVersion = "R69";
 
