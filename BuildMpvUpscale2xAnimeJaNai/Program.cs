@@ -13,6 +13,7 @@ var assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Lo
 var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
 var installDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai-v3");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
+var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
 var vapourSynthVersion = "R69";
 
 async Task InstallPortableVapourSynth()
@@ -150,6 +151,49 @@ async Task InstallVsmlrt()
     File.Delete(targetPath);
 }
 
+async Task InstallRife()
+{
+    List<string> models = [
+        "rife_v4.7.7z",
+        "rife_v4.8.7z",
+        "rife_v4.9.7z",
+        "rife_v4.10.7z",
+        "rife_v4.11.7z",
+        "rife_v4.12.7z",
+        "rife_v4.12_lite.7z",
+        "rife_v4.13.7z",
+        "rife_v4.13_lite.7z",
+        "rife_v4.14.7z",
+        "rife_v4.14_lite.7z",
+        "rife_v4.15.7z",
+        "rife_v4.15_lite.7z",
+        "rife_v4.16_lite.7z",
+        "rife_v4.17.7z",
+        "rife_v4.17_lite.7z",
+        "rife_v4.18.7z",
+        "rife_v4.19.7z",
+        "rife_v4.20.7z",
+    ];
+
+    var downloadUrlBase = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/";
+
+    foreach (var model in models)
+    {
+        var downloadUrl = downloadUrlBase + model;
+        var targetPath = Path.GetFullPath(model);
+        await DownloadFileAsync(downloadUrl, targetPath, _ => { });
+
+        using (ArchiveFile archiveFile = new(targetPath))
+        {
+            Directory.CreateDirectory(vsmlrtModelsPath);
+            archiveFile.Extract(vsmlrtModelsPath);
+            var onnxFiles = Directory.GetFiles(Path.Combine(vsmlrtModelsPath, "rife"));
+        }
+
+        File.Delete(targetPath);
+    }
+}
+
 async Task InstallMpvnet()
 {
     var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.1.1-beta/mpv.net-v7.1.1.1-beta-portable-x64.zip";
@@ -187,12 +231,20 @@ void Cleanup()
 {
     List<string> dirs = ["doc", "vs-temp-dl", "Scripts", "sdk", "wheel"];
 
-    foreach (string dir in dirs)
+    foreach (var dir in dirs)
     {
         var targetDir = Path.Combine(installDirectory, dir);
         if (Directory.Exists(targetDir))
         {
             Directory.Delete(targetDir, true);
+        }
+    }
+
+    foreach (var dir in Directory.GetDirectories(vsmlrtModelsPath))
+    {
+        if (Path.GetFileName(dir) != "rife")
+        {
+            Directory.Delete(dir, true);
         }
     }
 }
@@ -327,6 +379,7 @@ async Task Main()
     await InstallPythonVapourSynthPlugins();
     await InstallVapourSynthMiscFilters();
     await InstallVsmlrt();
+    await InstallRife();
     await InstallMpvnet();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();

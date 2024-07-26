@@ -4,8 +4,9 @@ import subprocess
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
-import rife_cuda 
+import rife_cuda
 import animejanai_config
+import zlib
 
 # trtexec num_streams
 TOTAL_NUM_STREAMS = 4
@@ -33,7 +34,9 @@ def init_logger():
                               mode='a', maxBytes=1 * 1024 * 1024, backupCount=2, encoding=None, delay=0)
     rfh.setFormatter(formatter)
     rfh.setLevel(logging.DEBUG)
+    logger.handlers.clear()
     logger.addHandler(rfh)
+    logger.addHandler(logging.StreamHandler())
 
 
 def write_current_log_empty():
@@ -59,20 +62,23 @@ def find_model(model_type, binding):
     return None
 
 
-def create_engine(onnx_name):
+def use_dynamic_engine(width, height):
+    return width <= 1920 and height <= 1080
+
+
+def get_engine_path(onnx_name, trt_settings):
+    return os.path.join(model_path, f"{onnx_name}.{zlib.crc32(trt_settings.encode())}.engine")
+
+
+def create_custom_engine(onnx_name, trt_settings):
     onnx_path = os.path.join(model_path, f"{onnx_name}.onnx")
     if not os.path.isfile(onnx_path):
         raise FileNotFoundError(onnx_path)
 
-    engine_path = os.path.join(model_path, f"{onnx_name}.engine")
+    engine_path = get_engine_path(onnx_name, trt_settings)
 
-    commands = [os.path.join(plugin_path, "trtexec"), "--fp16", f"--onnx={onnx_path}",
-                    "--minShapes=input:1x3x8x8", "--optShapes=input:1x3x1080x1920", "--maxShapes=input:1x3x1080x1920",
-                    "--skipInference", "--infStreams=4", "--builderOptimizationLevel=4", 
-                    # "--layerPrecisions=*:fp16",
-                    # "--layerOutputTypes=*:fp16", "--precisionConstraints=obey", "--inputIOFormats=fp16:chw",
-                    # "--outputIOFormats=fp16:chw", "--useCudaGraph", "--noDataTransfers", "--verbose",
-                    f"--saveEngine={engine_path}", "--tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT"]
+    commands = [os.path.join(plugin_path, "trtexec"), f"--onnx={onnx_path}", f"--saveEngine={engine_path}",
+                    *trt_settings.split(" ")]
 
     logger.debug(' '.join(commands))
 
@@ -90,15 +96,14 @@ def scale_to_1080(clip, w=1920, h=1080):
     return vs.core.resize.Spline36(clip, width=prescalewidth, height=prescaleheight)
 
 
-def upscale2x(clip, backend, engine_name, num_streams):
+def upscale2x(clip, backend, engine_name, num_streams, trt_settings=None):
     if engine_name is None:
         return clip
-    engine_path = os.path.join(model_path, f"{engine_name}.engine")
     network_path = os.path.join(model_path, f"{engine_name}.onnx")
 
     message = f"upscale2x: scaling 2x from {clip.width}x{clip.height} with engine={engine_name}; num_streams={num_streams}"
     logger.debug(message)
-    print(message)
+    # print(message)
 
     if backend.lower() == "directml":
         return core.ort.Model(
@@ -111,19 +116,35 @@ def upscale2x(clip, backend, engine_name, num_streams):
             clip,
             fp16=True,
             network_path=network_path)
-    else: # TensorRT
-        if not os.path.isfile(engine_path):
-            create_engine(engine_name)
 
-        return core.trt.Model(
-            clip,
-            engine_path=engine_path,
-            num_streams=num_streams,
-        )
+    trt_settings = "--fp16 --minShapes=input:1x3x8x8 --optShapes=input:1x3x1080x1920 --maxShapes=input:1x3x1080x1920 --inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT --skipInference"
+
+    # TensorRT
+    return upscale2x_trt(clip, engine_name, num_streams, trt_settings)
+
+
+def upscale2x_trt(clip, engine_name, num_streams, trt_settings):
+    engine_path = get_engine_path(engine_name, trt_settings)
+    if not os.path.isfile(engine_path):
+        create_custom_engine(engine_name, trt_settings)
+
+    if not os.path.exists(engine_path):
+        logger.debug("Engine failed to generate, exiting. Please make sure your TensorRT Engine Settings are appropriate for the type of model you are using.")
+        sys.exit(1)
+
+    return core.trt.Model(
+        clip,
+        engine_path=engine_path,
+        num_streams=num_streams
+    )
 
 
 def run_animejanai(clip, container_fps, chain_conf, backend):
+    logger.debug(f"chain_conf {chain_conf}")
     models = chain_conf.get('models', [])
+    trt_settings = chain_conf.get("tensorrt_engine_settings")
+    if trt_settings is not None:
+        trt_settings = trt_settings.replace("%video_resolution%", f"1x3x{clip.height}x{clip.width}")
     colorspace = "709"
     colorlv = 1
     try:
@@ -148,14 +169,12 @@ def run_animejanai(clip, container_fps, chain_conf, backend):
                 clip = vs.core.resize.Spline36(clip, format=vs.RGBH, matrix_in_s=colorspace,
                                               width=clip.width * resize_factor_before_upscale / 100,
                                               height=clip.height * resize_factor_before_upscale / 100)
-
                 if resize_factor_before_upscale != 100:
                     current_logger_steps.append(f'Applied Resize Factor Before Upscale: {resize_factor_before_upscale}%;    New Video Resolution: {clip.width}x{clip.height}')
 
-                clip = run_animejanai_upscale(clip, backend, model_conf, num_streams)
+                clip = run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams)
 
-                current_logger_steps.append(f"Applied Model: {model_conf['name']};    New Video Resolution: {clip.width}x{clip.height}")
-            except:
+            except Exception as e:
                 clip = vs.core.resize.Spline36(clip, format=vs.RGBS, matrix_in_s=colorspace,
                                               width=clip.width * resize_factor_before_upscale / 100,
                                               height=clip.height * resize_factor_before_upscale / 100)
@@ -163,35 +182,53 @@ def run_animejanai(clip, container_fps, chain_conf, backend):
                 if resize_factor_before_upscale != 100:
                     current_logger_steps.append(f'Applied Resize Factor Before Upscale: {resize_factor_before_upscale}%;    New Video Resolution: {clip.width}x{clip.height}')
 
-                clip = run_animejanai_upscale(clip, backend, model_conf, num_streams)
-                current_logger_steps.append(f"Applied Model: {model_conf['name']};    New Video Resolution: {clip.width}x{clip.height}")
+                clip = run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams)
 
-    fmt_out = fmt_in
-    if fmt_in not in [vs.YUV410P8, vs.YUV411P8, vs.YUV420P8, vs.YUV422P8, vs.YUV444P8, vs.YUV420P10, vs.YUV422P10,
-                      vs.YUV444P10]:
-        fmt_out = vs.YUV420P10
+            current_logger_steps.append(f"Applied Model: {model_conf['name']};    New Video Resolution: {clip.width}x{clip.height}")
 
-    clip = vs.core.resize.Spline36(clip, format=fmt_out, matrix_s=colorspace, range=1 if colorlv == 0 else None)
+    final_resize_height = chain_conf.get("final_resize_height", 0)
+    final_resize_factor = chain_conf.get("final_resize_factor", 100)
+
+    if final_resize_height != 0 and final_resize_height != clip.height:
+        clip = scale_to_1080(clip, round(final_resize_height * clip.width / clip.height), round(final_resize_height))
+    elif final_resize_factor != 100:
+        clip = vs.core.resize.Spline36(clip, width=clip.width * final_resize_factor / 100, height=clip.height * final_resize_factor / 100)
+
+    if len(models) > 0:
+        fmt_out = fmt_in
+        if fmt_in not in [vs.YUV410P8, vs.YUV411P8, vs.YUV420P8, vs.YUV422P8, vs.YUV444P8, vs.YUV420P10, vs.YUV422P10,
+                          vs.YUV444P10]:
+            fmt_out = vs.YUV420P10
+
+        clip = vs.core.resize.Spline36(clip, format=fmt_out, matrix_s=colorspace, range=1 if colorlv == 0 else None)
 
     if chain_conf['rife']:
-        clip = rife_cuda.rife(clip, clip.width, clip.height, container_fps)
-        current_logger_steps.append(f"Applied RIFE Interpolation;    New Video FPS: {container_fps * 2:.3f}")
+        # TODO rife nvidia or rife other
+        clip = rife_cuda.rife(
+            clip,
+            model=chain_conf['rife_model'],
+            fps_in=float(container_fps),
+            fps_num=chain_conf['rife_factor_numerator'],
+            fps_den=chain_conf['rife_factor_denominator'],
+            t_tta=chain_conf['rife_ensemble'],
+            scene_detect_threshold=chain_conf['rife_scene_detect_threshold'],
+            lt_d2k=True,
+            tensorrt=backend.lower() == 'tensorrt'
+        )
+        current_logger_steps.append(f"Applied RIFE Interpolation;    New Video FPS: {float(container_fps) * 2:.3f}")
 
     clip.set_output()
 
 
-def run_animejanai_upscale(clip, backend, model_conf, num_streams):
+def run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams):
 
     if model_conf['resize_height_before_upscale'] != 0 and model_conf['resize_height_before_upscale'] != clip.height:
         clip = scale_to_1080(clip, model_conf['resize_height_before_upscale'] * 16 / 9,
                              model_conf['resize_height_before_upscale'])
         current_logger_steps.append(f"Applied Resize Height Before Upscale: {model_conf['resize_height_before_upscale']}px;    New Video Resolution: {clip.width}x{clip.height}")
-    elif clip.height > 1080:
-        clip = scale_to_1080(clip)
-        current_logger_steps.append(f"Applied Resize to Video Larger than 1080p;    New Video Resolution: {clip.width}x{clip.height}")
 
     # upscale 2x
-    return upscale2x(clip, backend, model_conf['name'], num_streams)
+    return upscale2x(clip, backend, model_conf['name'], num_streams, trt_settings)
 
 
 # keybinding: 1-9
@@ -214,10 +251,10 @@ def run_animejanai_with_keybinding(clip, container_fps, keybinding):
         #raise ValueError(chain_conf['min_px'] <= clip.width * clip.height <= chain_conf['max_px'])
         if 'chain_' not in chain_key:
             continue
-        try:
-            print(chain_conf['min_px'])
-        except:
-            raise ValueError(f"{section_key} {config}")
+        # try:
+            # print(chain_conf['min_px'])
+        # except:
+        #     raise ValueError(f"{section_key} {config}")
         if chain_conf['min_px'] <= clip.width * clip.height <= chain_conf['max_px'] and \
                 chain_conf['min_fps'] <= container_fps <= chain_conf['max_fps']:
             logger.debug(f'run_animejanai slot {keybinding} {chain_key}')
@@ -228,7 +265,7 @@ def run_animejanai_with_keybinding(clip, container_fps, keybinding):
             write_current_log()
             return
 
-    current_logger_info.append(f"No Chains Activated")
+    current_logger_info.append("No Chains Activated")
     write_current_log()
     clip.set_output()
 
@@ -239,6 +276,7 @@ def init():
     current_logger_steps = []
     write_current_log_empty()
     config = animejanai_config.read_config()
+
     if config['global']['logging']:
         init_logger()
 
