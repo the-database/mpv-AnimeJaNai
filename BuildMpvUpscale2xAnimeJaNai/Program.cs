@@ -185,14 +185,14 @@ void InstallAnimeJaNaiCore()
 
 void Cleanup()
 {
-    List<string> dirs = ["doc", "vs-temp-dl"];
+    List<string> dirs = ["doc", "vs-temp-dl", "Scripts", "sdk", "wheel"];
 
     foreach (string dir in dirs)
     {
         var targetDir = Path.Combine(installDirectory, dir);
         if (Directory.Exists(targetDir))
         {
-            Directory.Delete(dir, true);
+            Directory.Delete(targetDir, true);
         }
     }
 }
