@@ -183,6 +183,20 @@ void InstallAnimeJaNaiCore()
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
 
+void Cleanup()
+{
+    List<string> dirs = ["doc", "vs-temp-dl"];
+
+    foreach (string dir in dirs)
+    {
+        var targetDir = Path.Combine(installDirectory, dir);
+        if (Directory.Exists(targetDir))
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+}
+
 void ExtractZip(string archivePath, string outFolder, ProgressChanged progressChanged)
 {
 
@@ -316,6 +330,7 @@ async Task Main()
     await InstallMpvnet();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();
+    Cleanup();
 }
 
 await Main();
