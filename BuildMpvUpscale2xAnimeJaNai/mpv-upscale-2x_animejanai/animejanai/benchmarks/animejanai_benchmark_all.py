@@ -18,12 +18,13 @@ def get_chain_conf(conf, px):
 
 
 def get_engine(chain_conf):
-    matches = [re.search(r'_([a-zA-Z]*Compact)[_-]', m['name']) for m in chain_conf['models']]
+    matches = [re.search(r'_([a-zA-Z]*Compact)[_-]*', m['name']) for m in chain_conf['models']]
     return '+'.join([f'2x_{m.group(1)}' if m is not None else chain_conf['models'][i]['name'] for i, m in enumerate(matches)])
 
 
 def printtable(table):
-    with open('benchmark.txt', 'w') as f:
+    benchmark_file_path = os.path.abspath("benchmark.txt")
+    with open(benchmark_file_path, 'w') as f:
         columns = ['480x360', '640x480', '768x576', '1280x720', '1920x1080']
         keys = ['(2x_Compact)',
                 '(2x_UltraCompact)',
@@ -46,6 +47,7 @@ def printtable(table):
                 except KeyError:
                     newrow.append('')
             f.write('|'+('4x ' if '+' in key else '2x ')+key+'|'+'|'.join(newrow)+'\n')
+    print(f"Saved benchmarks to: {benchmark_file_path}")
 
 
 slots = range(10, 18)
