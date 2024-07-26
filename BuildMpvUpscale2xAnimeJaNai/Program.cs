@@ -4,11 +4,14 @@ using ICSharpCode.SharpZipLib.Zip;
 using SevenZipExtractor;
 using System.Diagnostics;
 using System.Management.Automation;
+using System.Reflection;
 using System.Text;
 using static Downloader;
 
-var animejanaiDirectory = Path.GetFullPath(@".\mpv-upscale-2x_animejanai");
-var installDirectory = Path.GetFullPath(@".\mpv-upscale-2x_animejanai-v3");
+// Get the path of the currently executing assembly
+var assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
+var installDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai-v3");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vapourSynthVersion = "R69";
 
@@ -122,9 +125,17 @@ async Task InstallVsmlrt()
     Console.WriteLine("Downloading vs-mlrt...");
     var downloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v14.test3/vsmlrt-windows-x64-cuda.v14.test3.7z";
     var targetPath = Path.GetFullPath("vsmlrt.7z");
-    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+
+    double lastProgress = -1;
+    int updateThreshold = 5;
+
+    await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
-        Console.WriteLine($"Downloading vs-mlrt ({progress}%)...");
+        if (progress >= lastProgress + updateThreshold)
+        {
+            Console.WriteLine($"Downloading vs-mlrt ({progress}%)...");
+            lastProgress = progress;
+        }
     });
 
     Console.WriteLine("Extracting vs-mlrt (this may take several minutes)...");
@@ -167,7 +178,7 @@ async Task InstallYtDlp()
     });
 }
 
-async Task InstallAnimeJaNaiCore()
+void InstallAnimeJaNaiCore()
 {
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
@@ -198,7 +209,7 @@ void ExtractZip(string archivePath, string outFolder, ProgressChanged progressCh
             // Manipulate the output filename here as desired.
             var fullZipToPath = Path.Combine(outFolder, entryFileName);
             var directoryName = Path.GetDirectoryName(fullZipToPath);
-            if (directoryName.Length > 0)
+            if (directoryName?.Length > 0)
             {
                 Directory.CreateDirectory(directoryName);
             }
@@ -304,7 +315,7 @@ async Task Main()
     await InstallVsmlrt();
     await InstallMpvnet();
     await InstallYtDlp();
-    await InstallAnimeJaNaiCore();
+    InstallAnimeJaNaiCore();
 }
 
 await Main();
