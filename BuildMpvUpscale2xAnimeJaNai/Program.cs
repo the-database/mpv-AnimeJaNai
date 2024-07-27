@@ -86,7 +86,7 @@ async Task InstallPythonDependencies()
 
 async Task InstallPythonVapourSynthPlugins()
 {
-    string[] dependencies = { "ffms2" };
+    string[] dependencies = { "ffms2", "akarin" };
 
     var cmd = $@".\python.exe vsrepo.py -p update && .\python.exe vsrepo.py -p install {string.Join(" ", dependencies)}";
 

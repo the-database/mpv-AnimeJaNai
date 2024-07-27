@@ -27,7 +27,7 @@ vsmlrt = None
 def rife(
         input: vs.VideoNode,
         lt_d2k: bool = False,
-        model: typing.Literal[46, 4131, 414, 4141] = 414,
+        model: int = 414,
         ext_proc: bool = True,
         t_tta: bool = False,
         fps_in: float = 23.976,
@@ -47,8 +47,6 @@ def rife(
         raise vs.Error(f"模块 {func_name} 的子参数 input 的值无效")
     if not isinstance(lt_d2k, bool):
         raise vs.Error(f"模块 {func_name} 的子参数 lt_d2k 的值无效")
-    if model not in [46, 4131, 414, 4141]:
-        raise vs.Error(f"模块 {func_name} 的子参数 model 的值无效")
     if not isinstance(ext_proc, bool):
         raise vs.Error(f"模块 {func_name} 的子参数 ext_proc 的值无效")
     if not isinstance(t_tta, bool):
@@ -86,13 +84,16 @@ def rife(
 
     plg_dir = os.path.dirname(core.trt.Version()["path"]).decode()
     mdl_pname = "rife/" if ext_proc else "rife_v2/"
+
+    mdl_str = str(model)
+    mdl_fname_parts = [f"rife_v4.{mdl_str[1]}"]
+    if len(mdl_str) == 4 and mdl_str[-1] == "1":
+      mdl_fname_parts.append("lite")
     if t_tta:
-        mdl_fname = \
-            ["rife_v4.6_ensemble", "rife_v4.13_lite_ensemble", "rife_v4.14_ensemble", "rife_v4.14_lite_ensemble"][
-                [46, 4131, 414, 4141].index(model)]
-    else:
-        mdl_fname = ["rife_v4.6", "rife_v4.13_lite", "rife_v4.14", "rife_v4.14_lite"][
-            [46, 4131, 414, 4141].index(model)]
+      mdl_fname_parts.append("ensemble")
+
+    mdl_fname = "_".join(mdl_fname_parts)
+
     mdl_pth = plg_dir + "/models/" + mdl_pname + mdl_fname + ".onnx"
     if not os.path.exists(mdl_pth):
         raise vs.Error(f"{func_name}: Model not found: {mdl_pth}")

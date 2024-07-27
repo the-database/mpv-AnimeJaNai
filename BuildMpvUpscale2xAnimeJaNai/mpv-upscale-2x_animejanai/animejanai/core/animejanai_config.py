@@ -55,11 +55,11 @@ def read_config_by_chain(flat_conf, section, chain, num_models):
         'max_fps': max_fps,
         'models': [read_config_by_chain_model(flat_conf, section, chain, i) for i in range(1, num_models + 1)],
         'rife': parse_bool(flat_conf[section].get(f'chain_{chain}_rife', 'no')),
+        'rife_factor_numerator': int(float(flat_conf[section].get(f'chain_{chain}_rife_factor_numerator', 1))),
+        'rife_factor_denominator': int(float(flat_conf[section].get(f'chain_{chain}_rife_factor_denominator', 1))),
         'rife_model': int(float(flat_conf[section].get(f'chain_{chain}_rife_model', 414))),
         'rife_ensemble': parse_bool(flat_conf[section].get(f'chain_{chain}_rife_ensemble', 'no')),
         'rife_scene_detect_threshold': float(flat_conf[section].get(f'chain_{chain}_rife_scene_detect_threshold', 0.150)),
-        'final_resize_height': float(flat_conf[section].get(f'chain_{chain}_final_resize_height', 0)),
-        'final_resize_factor': float(flat_conf[section].get(f'chain_{chain}_final_resize_factor', 100)),
     }
 
 

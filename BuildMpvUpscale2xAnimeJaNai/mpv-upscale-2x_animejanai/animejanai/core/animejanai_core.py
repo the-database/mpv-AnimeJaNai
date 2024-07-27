@@ -215,7 +215,7 @@ def run_animejanai(clip, container_fps, chain_conf, backend):
             lt_d2k=True,
             tensorrt=backend.lower() == 'tensorrt'
         )
-        current_logger_steps.append(f"Applied RIFE Interpolation;    New Video FPS: {float(container_fps) * 2:.3f}")
+        current_logger_steps.append(f"Applied RIFE v{chain_conf['rife_model']} Interpolation {chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}x;    New Video FPS: {float(container_fps) * chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}")
 
     clip.set_output()
 
