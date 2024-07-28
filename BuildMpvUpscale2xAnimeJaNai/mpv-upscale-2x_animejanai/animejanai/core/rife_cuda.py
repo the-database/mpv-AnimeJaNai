@@ -86,7 +86,11 @@ def rife(
     mdl_pname = "rife/" if ext_proc else "rife_v2/"
 
     mdl_str = str(model)
-    mdl_fname_parts = [f"rife_v4.{mdl_str[1]}"]
+    if len(mdl_str == 2)
+      dec = mdl_str[1]
+    else:
+      dec = mdl_str[1:3]
+    mdl_fname_parts = [f"rife_v{mdl_str[0]}.{dec}"]
     if len(mdl_str) == 4 and mdl_str[-1] == "1":
       mdl_fname_parts.append("lite")
     if t_tta:
