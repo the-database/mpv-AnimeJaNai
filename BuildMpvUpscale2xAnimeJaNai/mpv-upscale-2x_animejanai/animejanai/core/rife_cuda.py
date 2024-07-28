@@ -86,7 +86,7 @@ def rife(
     mdl_pname = "rife/" if ext_proc else "rife_v2/"
 
     mdl_str = str(model)
-    if len(mdl_str == 2)
+    if len(mdl_str == 2):
       dec = mdl_str[1]
     else:
       dec = mdl_str[1:3]
