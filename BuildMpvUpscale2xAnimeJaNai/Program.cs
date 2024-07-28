@@ -85,7 +85,7 @@ async Task InstallPythonDependencies()
 
 async Task InstallPythonVapourSynthPlugins()
 {
-    string[] dependencies = { "ffms2", "akarin" };
+    string[] dependencies = { "ffms2" };
 
     var cmd = $@".\python.exe vsrepo.py -p update && .\python.exe vsrepo.py -p install {string.Join(" ", dependencies)}";
 
@@ -117,6 +117,27 @@ async Task InstallVapourSynthMiscFilters()
         );
     }
     Directory.Delete(targetExtractPath, true);
+    File.Delete(targetPath);
+}
+
+async Task InstallVapourSynthAkarin()
+{
+    Console.WriteLine("Downloading VapourSynth Akarin...");
+    var downloadUrl = "https://github.com/AkarinVS/vapoursynth-plugin/releases/download/v0.96/akarin-release-lexpr-amd64-v0.96g3.7z";
+    var targetPath = Path.GetFullPath("akarin.7z");
+    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    {
+        Console.WriteLine($"Downloading VapourSynth Akarin ({progress}%)...");
+    });
+
+    Console.WriteLine("Extracting VapourSynth Akarin...");
+    var targetExtractPath = Path.Combine(vapourSynthPluginsPath);
+    Directory.CreateDirectory(targetExtractPath);
+
+    using (ArchiveFile archiveFile = new(targetPath))
+    {
+        archiveFile.Extract(targetExtractPath);
+    }
     File.Delete(targetPath);
 }
 
@@ -377,6 +398,7 @@ async Task Main()
     await InstallPythonDependencies();
     await InstallPythonVapourSynthPlugins();
     await InstallVapourSynthMiscFilters();
+    await InstallVapourSynthAkarin();
     await InstallVsmlrt();
     await InstallRife();
     await InstallMpvnet();
