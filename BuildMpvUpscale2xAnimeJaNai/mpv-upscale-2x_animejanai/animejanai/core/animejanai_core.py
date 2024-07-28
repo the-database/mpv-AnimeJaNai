@@ -227,6 +227,10 @@ def run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams)
                              model_conf['resize_height_before_upscale'])
         current_logger_steps.append(f"Applied Resize Height Before Upscale: {model_conf['resize_height_before_upscale']}px;    New Video Resolution: {clip.width}x{clip.height}")
 
+    elif clip.height > 1080:
+        clip = scale_to_1080(clip)
+        current_logger_steps.append(f"Applied Resize to Video Larger than 1080p;    New Video Resolution: {clip.width}x{clip.height}")
+
     # upscale 2x
     return upscale2x(clip, backend, model_conf['name'], num_streams, trt_settings)
 
