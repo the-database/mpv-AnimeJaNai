@@ -4,12 +4,11 @@ using ICSharpCode.SharpZipLib.Zip;
 using SevenZipExtractor;
 using System.Diagnostics;
 using System.Management.Automation;
-using System.Reflection;
 using System.Text;
 using static Downloader;
 
 // Get the path of the currently executing assembly
-var assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+var assemblyDirectory = AppContext.BaseDirectory;
 var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
 var installDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai-v3");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
