@@ -7,7 +7,7 @@ using System.Management.Automation;
 using System.Text;
 using static Downloader;
 
-if (args.Length < 2)
+if (args.Length < 1)
 {
     throw new ArgumentException("Version is required.");
 }
@@ -15,7 +15,7 @@ if (args.Length < 2)
 // Get the path of the currently executing assembly
 var assemblyDirectory = AppContext.BaseDirectory;
 var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
-var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[1]}");
+var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
 var vapourSynthVersion = "R69";
