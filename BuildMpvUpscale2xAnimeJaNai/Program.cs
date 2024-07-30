@@ -10,7 +10,7 @@ using static Downloader;
 // Get the path of the currently executing assembly
 var assemblyDirectory = AppContext.BaseDirectory;
 var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
-var installDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai-v3");
+var installDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai-v3.0.1");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
 var vapourSynthVersion = "R69";
