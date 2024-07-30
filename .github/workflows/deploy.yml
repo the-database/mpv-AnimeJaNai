@@ -30,7 +30,7 @@ jobs:
       run: choco install 7zip -y
 
     - name: Create 7zip archive of the artifact
-      run: 7z a -t7z -mx=9 mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z ./publish/mpv-upscale-2x_animejanai-v3
+      run: 7z a -t7z -mx=9 mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z ./publish/mpv-upscale-2x_animejanai-v${{ github.event.inputs.release_version }}
 
     - name: Create GitHub Release
       uses: ncipollo/release-action@v1
