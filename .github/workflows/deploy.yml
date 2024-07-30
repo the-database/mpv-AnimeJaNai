@@ -24,7 +24,7 @@ jobs:
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
 
     - name: Run the console app
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe ${{ github.event.inputs.release_version }}
 
     - name: Install 7zip
       run: choco install 7zip -y
