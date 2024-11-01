@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Management.Automation;
 using System.Text;
 using static Downloader;
+// TODO install numpy, onnx
 
 if (args.Length < 1)
 {
@@ -18,7 +19,7 @@ var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animej
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
-var vapourSynthVersion = "R69";
+var vapourSynthVersion = "R70";
 
 async Task InstallPortableVapourSynth()
 {
@@ -81,7 +82,7 @@ void FixPythonPth()
 
 async Task InstallPythonDependencies()
 {
-    string[] dependencies = { "packaging" };
+    string[] dependencies = { "packaging", "numpy", "onnx" };
 
     var cmd = $@".\python.exe -m pip install {string.Join(" ", dependencies)}";
 
@@ -149,7 +150,7 @@ async Task InstallVapourSynthAkarin()
 async Task InstallVsmlrt()
 {
     Console.WriteLine("Downloading vs-mlrt...");
-    var downloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v14.test3/vsmlrt-windows-x64-cuda.v14.test3.7z";
+    var downloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.5/vsmlrt-windows-x64-cuda.v15.5.7z";
     var targetPath = Path.GetFullPath("vsmlrt.7z");
 
     double lastProgress = -1;
@@ -198,6 +199,13 @@ async Task InstallRife()
         "rife_v4.18.7z",
         "rife_v4.19.7z",
         "rife_v4.20.7z",
+        "rife_v4.21.7z",
+        "rife_v4.22.7z",
+        "rife_v4.22_lite.7z",
+        "rife_v4.23.7z",
+        "rife_v4.24.7z",
+        "rife_v4.25.7z",
+        "rife_v4.26.7z",
     ];
 
     var downloadUrlBase = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/";
@@ -221,7 +229,7 @@ async Task InstallRife()
 
 async Task InstallMpvnet()
 {
-    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.1.1-beta/mpv.net-v7.1.1.1-beta-portable-x64.zip";
+    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.1.3-beta/mpv.net-v7.1.1.3-beta-portable-x64.zip";
     var targetPath = Path.GetFullPath("mpvnet.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {

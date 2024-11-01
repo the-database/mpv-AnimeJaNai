@@ -2,7 +2,7 @@
   "profiles": {
     "BuildMpvUpscale2xAnimeJaNai": {
       "commandName": "Project",
-      "commandLineArgs": "3.1.0"
+      "commandLineArgs": "3.2.0"
     }
   }
 }
