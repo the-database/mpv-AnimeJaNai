@@ -73,7 +73,8 @@ The 2x_AnimeJaNai_V2 ONNX models can be used on a PC with any graphics card to r
 
 ## Related Projects
 - [MangaJaNai](https://github.com/the-database/mangajanai): Upscale manga with ESRGAN models
-- [AnimeJaNaiConverterGui](https://github.com/the-database/AnimeJaNaiConverterGui): Windows GUI for upscaling with extremely fast performance
+- [VideoJaNai](https://github.com/the-database/VideoJaNai): Windows GUI for upscaling videos with extremely fast performance
+- [traiNNer-redux](https://github.com/the-database/traiNNer-redux): Software for training upscaling models
 
 ## Acknowledgements
 - [Upscale Wiki](https://upscale.wiki/wiki/Main_Page) and associated Discord server
