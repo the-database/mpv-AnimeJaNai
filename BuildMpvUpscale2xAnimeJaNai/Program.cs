@@ -150,7 +150,7 @@ async Task InstallVapourSynthAkarin()
 async Task InstallVsmlrt()
 {
     Console.WriteLine("Downloading vs-mlrt...");
-    var downloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.5/vsmlrt-windows-x64-cuda.v15.5.7z";
+    var downloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.7/vsmlrt-windows-x64-cuda.v15.7.7z";
     var targetPath = Path.GetFullPath("vsmlrt.7z");
 
     double lastProgress = -1;
