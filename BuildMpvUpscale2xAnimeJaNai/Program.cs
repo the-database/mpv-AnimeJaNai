@@ -150,32 +150,68 @@ async Task InstallVapourSynthAkarin()
 async Task InstallVsmlrt()
 {
     Console.WriteLine("Downloading vs-mlrt...");
-    var downloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.7/vsmlrt-windows-x64-cuda.v15.7.7z";
-    var targetPath = Path.GetFullPath("vsmlrt.7z");
+    var baseDownloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.8/";
+    var fileNames = new[] { "vsmlrt-windows-x64-cuda.v15.8.7z.001", "vsmlrt-windows-x64-cuda.v15.8.7z.002" };
+    var targetPaths = fileNames.Select(f => Path.GetFullPath(f)).ToArray();
 
     double lastProgress = -1;
     int updateThreshold = 5;
 
-    await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    for (int i = 0; i < fileNames.Length; i++)
     {
-        if (progress >= lastProgress + updateThreshold)
-        {
-            Console.WriteLine($"Downloading vs-mlrt ({progress}%)...");
-            lastProgress = progress;
-        }
-    });
+        string downloadUrl = baseDownloadUrl + fileNames[i];
+        string targetPath = targetPaths[i];
 
-    Console.WriteLine("Extracting vs-mlrt (this may take several minutes)...");
-    using (ArchiveFile archiveFile = new(targetPath))
-    {
-        var targetDirectory = Path.Join(vapourSynthPluginsPath);
-        Directory.CreateDirectory(targetDirectory);
-        archiveFile.Extract(targetDirectory);
-        File.Move(Path.Combine(targetDirectory, "vsmlrt.py"), Path.Combine(installDirectory, "vsmlrt.py"));
+        await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+        {
+            if (progress >= lastProgress + updateThreshold)
+            {
+                Console.WriteLine($"Downloading {fileNames[i]} ({progress}%)...");
+                lastProgress = progress;
+            }
+        });
     }
 
-    File.Delete(targetPath);
+    Console.WriteLine("Extracting vs-mlrt (this may take several minutes)...");
+    var targetDirectory = Path.Join(vapourSynthPluginsPath);
+    Directory.CreateDirectory(targetDirectory);
+
+    string sevenZipPath = Path.Combine(installDirectory, "7z.exe");
+    string archivePath = targetPaths[0];
+
+    var process = new Process()
+    {
+        StartInfo = new ProcessStartInfo
+        {
+            FileName = sevenZipPath,
+            Arguments = $"x \"{archivePath}\" -o\"{targetDirectory}\" -y",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }
+    };
+
+    process.Start();
+    string output = await process.StandardOutput.ReadToEndAsync();
+    string error = await process.StandardError.ReadToEndAsync();
+    await process.WaitForExitAsync();
+
+    if (process.ExitCode != 0)
+    {
+        Console.WriteLine($"7-Zip extraction failed: {error}");
+        return;
+    }
+
+    Console.WriteLine("Extraction complete.");
+    File.Move(Path.Combine(targetDirectory, "vsmlrt.py"), Path.Combine(installDirectory, "vsmlrt.py"));
+
+    foreach (var targetPath in targetPaths)
+    {
+        File.Delete(targetPath);
+    }
 }
+
 
 async Task InstallRife()
 {
