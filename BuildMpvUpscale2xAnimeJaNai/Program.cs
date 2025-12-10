@@ -19,7 +19,7 @@ var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animej
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
-var vapourSynthVersion = "R70";
+var vapourSynthVersion = "R73";
 
 async Task InstallPortableVapourSynth()
 {
@@ -150,8 +150,8 @@ async Task InstallVapourSynthAkarin()
 async Task InstallVsmlrt()
 {
     Console.WriteLine("Downloading vs-mlrt...");
-    var baseDownloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.8/";
-    var fileNames = new[] { "vsmlrt-windows-x64-cuda.v15.8.7z.001", "vsmlrt-windows-x64-cuda.v15.8.7z.002" };
+    var baseDownloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.14/";
+    var fileNames = new[] { "vsmlrt-windows-x64-cuda.v15.14.7z.001", "vsmlrt-windows-x64-cuda.v15.14.7z.002" };
     var targetPaths = fileNames.Select(f => Path.GetFullPath(f)).ToArray();
 
     double lastProgress = -1;
