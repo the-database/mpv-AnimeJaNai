@@ -265,7 +265,7 @@ async Task InstallRife()
 
 async Task InstallMpvnet()
 {
-    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.1.3-beta/mpv.net-v7.1.1.3-beta-portable-x64.zip";
+    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.1.5-beta/mpv.net-v7.1.1.5-beta-portable-x64.zip";
     var targetPath = Path.GetFullPath("mpvnet.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
