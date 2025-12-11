@@ -76,7 +76,7 @@ async Task InstallPortableVapourSynth()
 
 void FixPythonPth()
 {
-    using StreamWriter writer = new(Path.Join(installDirectory, "python312._pth"), true);
+    using StreamWriter writer = new(Path.Join(installDirectory, "python313._pth"), true);
     writer.WriteLine("./animejanai/core\n");
 }
 
