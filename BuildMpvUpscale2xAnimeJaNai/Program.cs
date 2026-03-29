@@ -150,8 +150,8 @@ async Task InstallVapourSynthAkarin()
 async Task InstallVsmlrt()
 {
     Console.WriteLine("Downloading vs-mlrt...");
-    var baseDownloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.14/";
-    var fileNames = new[] { "vsmlrt-windows-x64-cuda.v15.14.7z.001", "vsmlrt-windows-x64-cuda.v15.14.7z.002" };
+    var baseDownloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.16/";
+    var fileNames = new[] { "vsmlrt-windows-x64-cuda.v15.16.7z.001", "vsmlrt-windows-x64-cuda.v15.16.7z.002" };
     var targetPaths = fileNames.Select(f => Path.GetFullPath(f)).ToArray();
 
     double lastProgress = -1;
@@ -242,6 +242,7 @@ async Task InstallRife()
         "rife_v4.24.7z",
         "rife_v4.25.7z",
         "rife_v4.26.7z",
+        "rife_v4.26_heavy.7z",
     ];
 
     var downloadUrlBase = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/";
@@ -265,7 +266,7 @@ async Task InstallRife()
 
 async Task InstallMpvnet()
 {
-    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.1.5-beta/mpv.net-v7.1.1.5-beta-portable-x64.zip";
+    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.2.0/mpv.net-v7.1.2.0-portable-x64.zip";
     var targetPath = Path.GetFullPath("mpvnet.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
