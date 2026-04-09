@@ -117,9 +117,12 @@ def upscale2x(clip, backend, engine_name, num_streams, trt_settings=None):
             fp16=True,
             network_path=network_path)
 
-    trt_settings = "--fp16 --minShapes=input:1x3x8x8 --optShapes=input:1x3x1080x1920 --maxShapes=input:1x3x1080x1920 --inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT --skipInference"
+    # TensorRT — substitute video resolution with actual clip dimensions
+    if trt_settings is not None:
+        trt_settings = trt_settings.replace("%video_resolution%", f"1x3x{clip.height}x{clip.width}")
+    else:
+        trt_settings = f"--fp16 --minShapes=input:1x3x8x8 --optShapes=input:1x3x{clip.height}x{clip.width} --maxShapes=input:1x3x{clip.height}x{clip.width} --inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT --skipInference"
 
-    # TensorRT
     return upscale2x_trt(clip, engine_name, num_streams, trt_settings)
 
 
@@ -142,9 +145,7 @@ def upscale2x_trt(clip, engine_name, num_streams, trt_settings):
 def run_animejanai(clip, container_fps, chain_conf, backend):
     logger.debug(f"chain_conf {chain_conf}")
     models = chain_conf.get('models', [])
-    trt_settings = chain_conf.get("tensorrt_engine_settings")
-    if trt_settings is not None:
-        trt_settings = trt_settings.replace("%video_resolution%", f"1x3x{clip.height}x{clip.width}")
+    trt_settings = config['global'].get("trt_engine_settings")
     colorspace = "709"
     colorlv = 1
     try:
