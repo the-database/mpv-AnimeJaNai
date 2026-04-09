@@ -28,13 +28,7 @@ def printtable(table):
         columns = ['480x360', '640x480', '768x576', '1280x720', '1920x1080']
         keys = ['(2x_Compact)',
                 '(2x_UltraCompact)',
-                '(2x_SuperUltraCompact)',
-                '(2x_Compact+2x_Compact)',
-                '(2x_Compact+2x_UltraCompact)',
-                '(2x_Compact+2x_SuperUltraCompact)',
-                '(2x_UltraCompact+2x_SuperUltraCompact)',
-                '(2x_UltraCompact+2x_UltraCompact)',
-                '(2x_SuperUltraCompact+2x_SuperUltraCompact)']
+                '(2x_SuperUltraCompact)']
 
         f.write('||' + '|'.join(columns) + '|\n')
         f.write('|-|' + '|'.join(['-' for _ in columns]) + '|\n')
@@ -46,11 +40,11 @@ def printtable(table):
                     newrow.append(value[col][4])
                 except KeyError:
                     newrow.append('')
-            f.write('|'+('4x ' if '+' in key else '2x ')+key+'|'+'|'.join(newrow)+'\n')
+            f.write('|2x '+key+'|'+'|'.join(newrow)+'\n')
     print(f"Saved benchmarks to: {benchmark_file_path}")
 
 
-slots = range(1010, 1019)
+slots = [1010, 1011, 1012]
 mpv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"..\..")
 config = animejanai_config.read_config()
 
