@@ -93,7 +93,7 @@ def read_config_by_chain_model(flat_conf, section, chain, model):
 
 
 def read_config():
-    parser = configparser.ConfigParser()
+    parser = configparser.ConfigParser(interpolation=None)
     flat_conf = {}
     conf = {
         "slot_1001": {

@@ -17,27 +17,20 @@ if (args.Length < 1)
 var assemblyDirectory = AppContext.BaseDirectory;
 var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
-string vapourSynthPluginsPath = "";
-string vsmlrtModelsPath = "";
-var vapourSynthVersion = "R74";
+var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
+var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
+var vapourSynthVersion = "R73";
 
 async Task InstallPortableVapourSynth()
 {
-    // Download Portable VapourSynth zip (contains PS1 installer inside)
+    // Download Python Installer
     Console.WriteLine("Downloading Portable VapourSynth Installer...");
-    var downloadUrl = $"https://github.com/vapoursynth/vapoursynth/releases/download/{vapourSynthVersion}/Install-Portable-VapourSynth-{vapourSynthVersion}.zip";
-    var zipPath = Path.GetFullPath("installvs.zip");
-    await Downloader.DownloadFileAsync(downloadUrl, zipPath, (progress) =>
+    var downloadUrl = $"https://github.com/vapoursynth/vapoursynth/releases/download/{vapourSynthVersion}/Install-Portable-VapourSynth-{vapourSynthVersion}.ps1";
+    var targetPath = Path.GetFullPath("installvs.ps1");
+    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
         Console.WriteLine($"Downloading Portable VapourSynth Installer ({progress}%)...");
     });
-
-    // Extract PS1 from zip
-    Console.WriteLine("Extracting Portable VapourSynth Installer...");
-    var extractDir = Path.GetFullPath("installvs_temp");
-    Directory.CreateDirectory(extractDir);
-    ExtractZip(zipPath, extractDir, _ => { });
-    var ps1Path = Path.Combine(extractDir, $"Install-Portable-VapourSynth-{vapourSynthVersion}.ps1");
 
     // Install Python
     Console.WriteLine("Installing Embedded Python with Portable VapourSynth...");
@@ -47,7 +40,7 @@ async Task InstallPortableVapourSynth()
         powerShell.AddScript("Set-ExecutionPolicy RemoteSigned -Scope Process -Force");
         powerShell.AddScript("Import-Module Microsoft.PowerShell.Archive");
 
-        var scriptContents = File.ReadAllText(ps1Path);
+        var scriptContents = File.ReadAllText(targetPath);
 
         powerShell.AddScript(scriptContents);
         powerShell.AddParameter("Unattended");
@@ -78,8 +71,7 @@ async Task InstallPortableVapourSynth()
         }
     }
 
-    Directory.Delete(extractDir, true);
-    File.Delete(zipPath);
+    File.Delete(targetPath);
 }
 
 void FixPythonPth()
@@ -92,30 +84,9 @@ void FixPythonPth()
     }
 }
 
-async Task<string> GetVapourSynthPluginDir()
-{
-    var process = new Process()
-    {
-        StartInfo = new ProcessStartInfo
-        {
-            FileName = Path.Combine(installDirectory, "python.exe"),
-            Arguments = "-c \"import vapoursynth; print(vapoursynth.get_plugin_dir())\"",
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WorkingDirectory = installDirectory,
-        }
-    };
-    process.Start();
-    var output = (await process.StandardOutput.ReadToEndAsync()).Trim();
-    await process.WaitForExitAsync();
-    Console.WriteLine($"VapourSynth plugin directory: {output}");
-    return output;
-}
-
 async Task InstallPythonDependencies()
 {
-    string[] dependencies = { "packaging", "numpy", "onnx", "vsrepo" };
+    string[] dependencies = { "packaging", "numpy", "onnx" };
 
     var cmd = $@".\python.exe -m pip install {string.Join(" ", dependencies)}";
 
@@ -126,7 +97,7 @@ async Task InstallPythonVapourSynthPlugins()
 {
     string[] dependencies = { "ffms2" };
 
-    var cmd = $@".\python.exe -m vsrepo -p update && .\python.exe -m vsrepo -p install {string.Join(" ", dependencies)}";
+    var cmd = $@".\python.exe vsrepo.py -p update && .\python.exe vsrepo.py -p install {string.Join(" ", dependencies)}";
 
     await RunInstallCommand(cmd);
 }
@@ -479,8 +450,6 @@ async Task Main()
     await InstallPortableVapourSynth();
     FixPythonPth();
     await InstallPythonDependencies();
-    vapourSynthPluginsPath = await GetVapourSynthPluginDir();
-    vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
     await InstallPythonVapourSynthPlugins();
     await InstallVapourSynthMiscFilters();
     await InstallVapourSynthAkarin();

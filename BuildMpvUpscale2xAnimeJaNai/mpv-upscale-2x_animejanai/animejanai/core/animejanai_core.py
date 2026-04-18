@@ -14,7 +14,8 @@ TOTAL_NUM_STREAMS = 4
 core = vs.core
 core.num_threads = 4  # can influence ram usage
 
-plugin_path = os.path.join(vs.get_plugin_dir(), "vsmlrt-cuda")
+plugin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           r"..\..\vs-plugins\vsmlrt-cuda")
 model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            r"..\onnx")
 
