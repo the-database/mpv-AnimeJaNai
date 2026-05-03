@@ -82,8 +82,13 @@ def create_custom_engine(onnx_name, trt_settings):
 
     logger.debug(' '.join(commands))
 
-    subprocess.run(commands,
-                   cwd=plugin_path)
+    result = subprocess.run(commands, cwd=plugin_path)
+    if result.returncode != 0:
+        # Surface trtexec failures so upscale2x_trt's existence check below isn't fooled by a half-written engine file.
+        raise RuntimeError(
+            f"trtexec failed (exit {result.returncode}) building engine for {onnx_name}; "
+            f"check animejanai.log and your trt_engine_settings."
+        )
 
 
 def scale_to_1080(clip, w=1920, h=1080):
@@ -142,6 +147,19 @@ def upscale2x_trt(clip, engine_name, num_streams, trt_settings):
     )
 
 
+def _resize_and_upscale(clip, fmt, colorspace, resize_factor_before_upscale,
+                        backend, model_conf, trt_settings, num_streams):
+    clip = vs.core.resize.Spline36(clip, format=fmt, matrix_in_s=colorspace,
+                                   width=clip.width * resize_factor_before_upscale / 100,
+                                   height=clip.height * resize_factor_before_upscale / 100)
+    if resize_factor_before_upscale != 100:
+        current_logger_steps.append(
+            f'Applied Resize Factor Before Upscale: {resize_factor_before_upscale}%;    '
+            f'New Video Resolution: {clip.width}x{clip.height}'
+        )
+    return run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams)
+
+
 def run_animejanai(clip, container_fps, chain_conf, backend):
     logger.debug(f"chain_conf {chain_conf}")
     models = chain_conf.get('models', [])
@@ -166,24 +184,14 @@ def run_animejanai(clip, container_fps, chain_conf, backend):
 
             num_streams = max(1, TOTAL_NUM_STREAMS // len(models))
 
+            # Try fp16 (RGBH) first; fall back to fp32 (RGBS) if the GPU/driver rejects half-precision resize.
             try:
-                clip = vs.core.resize.Spline36(clip, format=vs.RGBH, matrix_in_s=colorspace,
-                                              width=clip.width * resize_factor_before_upscale / 100,
-                                              height=clip.height * resize_factor_before_upscale / 100)
-                if resize_factor_before_upscale != 100:
-                    current_logger_steps.append(f'Applied Resize Factor Before Upscale: {resize_factor_before_upscale}%;    New Video Resolution: {clip.width}x{clip.height}')
-
-                clip = run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams)
-
+                clip = _resize_and_upscale(clip, vs.RGBH, colorspace, resize_factor_before_upscale,
+                                           backend, model_conf, trt_settings, num_streams)
             except Exception as e:
-                clip = vs.core.resize.Spline36(clip, format=vs.RGBS, matrix_in_s=colorspace,
-                                              width=clip.width * resize_factor_before_upscale / 100,
-                                              height=clip.height * resize_factor_before_upscale / 100)
-
-                if resize_factor_before_upscale != 100:
-                    current_logger_steps.append(f'Applied Resize Factor Before Upscale: {resize_factor_before_upscale}%;    New Video Resolution: {clip.width}x{clip.height}')
-
-                clip = run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams)
+                logger.debug(f"RGBH path failed ({e!r}); retrying with RGBS")
+                clip = _resize_and_upscale(clip, vs.RGBS, colorspace, resize_factor_before_upscale,
+                                           backend, model_conf, trt_settings, num_streams)
 
             current_logger_steps.append(f"Applied Model: {model_conf['name']};    New Video Resolution: {clip.width}x{clip.height}")
 
@@ -204,7 +212,6 @@ def run_animejanai(clip, container_fps, chain_conf, backend):
         clip = vs.core.resize.Spline36(clip, format=fmt_out, matrix_s=colorspace, range=1 if colorlv == 0 else None)
 
     if chain_conf['rife']:
-        # TODO rife nvidia or rife other
         clip = rife_cuda.rife(
             clip,
             model=chain_conf['rife_model'],
@@ -239,7 +246,7 @@ def run_animejanai_upscale(clip, backend, model_conf, trt_settings, num_streams)
 # keybinding: 1-9
 def run_animejanai_with_keybinding(clip, container_fps, keybinding):
 
-    init()  # testing
+    init()  # reload config so animejanai.conf edits apply without an mpv restart
 
     section_key = f'slot_{keybinding}'
 

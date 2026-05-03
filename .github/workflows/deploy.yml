@@ -18,7 +18,7 @@ jobs:
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.x'  # Adjust the .NET version as needed
+        dotnet-version: '10.x'  # Must match <TargetFramework> in BuildMpvUpscale2xAnimeJaNai.csproj
 
     - name: Publish .NET Core app
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish

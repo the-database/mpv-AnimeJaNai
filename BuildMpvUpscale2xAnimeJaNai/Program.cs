@@ -6,7 +6,44 @@ using System.Diagnostics;
 using System.Management.Automation;
 using System.Text;
 using static Downloader;
-// TODO install numpy, onnx
+
+// Third-party component versions. Bump these together when cutting a release.
+const string VapourSynthVersion   = "R73";
+const string VsMlrtVersion        = "v15.16";       // appears in URL path AND in archive filenames
+const string AkarinTag            = "v0.96";        // GitHub release tag
+const string AkarinFileVersion    = "v0.96g3";      // version embedded in the archive filename
+const string MiscFiltersTag       = "R2";           // GitHub release tag (URL is uppercase, archive filename uses lowercase)
+const string MpvNetVersion        = "v7.1.2.0";
+
+string[] rifeModels = [
+    "rife_v4.7.7z",
+    "rife_v4.8.7z",
+    "rife_v4.9.7z",
+    "rife_v4.10.7z",
+    "rife_v4.11.7z",
+    "rife_v4.12.7z",
+    "rife_v4.12_lite.7z",
+    "rife_v4.13.7z",
+    "rife_v4.13_lite.7z",
+    "rife_v4.14.7z",
+    "rife_v4.14_lite.7z",
+    "rife_v4.15.7z",
+    "rife_v4.15_lite.7z",
+    "rife_v4.16_lite.7z",
+    "rife_v4.17.7z",
+    "rife_v4.17_lite.7z",
+    "rife_v4.18.7z",
+    "rife_v4.19.7z",
+    "rife_v4.20.7z",
+    "rife_v4.21.7z",
+    "rife_v4.22.7z",
+    "rife_v4.22_lite.7z",
+    "rife_v4.23.7z",
+    "rife_v4.24.7z",
+    "rife_v4.25.7z",
+    "rife_v4.26.7z",
+    "rife_v4.26_heavy.7z",
+];
 
 if (args.Length < 1)
 {
@@ -19,13 +56,12 @@ var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animej
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
-var vapourSynthVersion = "R73";
 
 async Task InstallPortableVapourSynth()
 {
     // Download Python Installer
     Console.WriteLine("Downloading Portable VapourSynth Installer...");
-    var downloadUrl = $"https://github.com/vapoursynth/vapoursynth/releases/download/{vapourSynthVersion}/Install-Portable-VapourSynth-{vapourSynthVersion}.ps1";
+    var downloadUrl = $"https://github.com/vapoursynth/vapoursynth/releases/download/{VapourSynthVersion}/Install-Portable-VapourSynth-{VapourSynthVersion}.ps1";
     var targetPath = Path.GetFullPath("installvs.ps1");
     await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
@@ -105,7 +141,7 @@ async Task InstallPythonVapourSynthPlugins()
 async Task InstallVapourSynthMiscFilters()
 {
     Console.WriteLine("Downloading VapourSynth Misc Filters...");
-    var downloadUrl = "https://github.com/vapoursynth/vs-miscfilters-obsolete/releases/download/R2/miscfilters-r2.7z";
+    var downloadUrl = $"https://github.com/vapoursynth/vs-miscfilters-obsolete/releases/download/{MiscFiltersTag}/miscfilters-{MiscFiltersTag.ToLowerInvariant()}.7z";
     var targetPath = Path.GetFullPath("miscfilters.7z");
     await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
@@ -133,7 +169,7 @@ async Task InstallVapourSynthMiscFilters()
 async Task InstallVapourSynthAkarin()
 {
     Console.WriteLine("Downloading VapourSynth Akarin...");
-    var downloadUrl = "https://github.com/AkarinVS/vapoursynth-plugin/releases/download/v0.96/akarin-release-lexpr-amd64-v0.96g3.7z";
+    var downloadUrl = $"https://github.com/AkarinVS/vapoursynth-plugin/releases/download/{AkarinTag}/akarin-release-lexpr-amd64-{AkarinFileVersion}.7z";
     var targetPath = Path.GetFullPath("akarin.7z");
     await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
@@ -154,8 +190,12 @@ async Task InstallVapourSynthAkarin()
 async Task InstallVsmlrt()
 {
     Console.WriteLine("Downloading vs-mlrt...");
-    var baseDownloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.16/";
-    var fileNames = new[] { "vsmlrt-windows-x64-cuda.v15.16.7z.001", "vsmlrt-windows-x64-cuda.v15.16.7z.002" };
+    var baseDownloadUrl = $"https://github.com/AmusementClub/vs-mlrt/releases/download/{VsMlrtVersion}/";
+    var fileNames = new[]
+    {
+        $"vsmlrt-windows-x64-cuda.{VsMlrtVersion}.7z.001",
+        $"vsmlrt-windows-x64-cuda.{VsMlrtVersion}.7z.002",
+    };
     var targetPaths = fileNames.Select(f => Path.GetFullPath(f)).ToArray();
 
     double lastProgress = -1;
@@ -219,39 +259,9 @@ async Task InstallVsmlrt()
 
 async Task InstallRife()
 {
-    List<string> models = [
-        "rife_v4.7.7z",
-        "rife_v4.8.7z",
-        "rife_v4.9.7z",
-        "rife_v4.10.7z",
-        "rife_v4.11.7z",
-        "rife_v4.12.7z",
-        "rife_v4.12_lite.7z",
-        "rife_v4.13.7z",
-        "rife_v4.13_lite.7z",
-        "rife_v4.14.7z",
-        "rife_v4.14_lite.7z",
-        "rife_v4.15.7z",
-        "rife_v4.15_lite.7z",
-        "rife_v4.16_lite.7z",
-        "rife_v4.17.7z",
-        "rife_v4.17_lite.7z",
-        "rife_v4.18.7z",
-        "rife_v4.19.7z",
-        "rife_v4.20.7z",
-        "rife_v4.21.7z",
-        "rife_v4.22.7z",
-        "rife_v4.22_lite.7z",
-        "rife_v4.23.7z",
-        "rife_v4.24.7z",
-        "rife_v4.25.7z",
-        "rife_v4.26.7z",
-        "rife_v4.26_heavy.7z",
-    ];
-
     var downloadUrlBase = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/";
 
-    foreach (var model in models)
+    foreach (var model in rifeModels)
     {
         var downloadUrl = downloadUrlBase + model;
         var targetPath = Path.GetFullPath(model);
@@ -270,7 +280,7 @@ async Task InstallRife()
 
 async Task InstallMpvnet()
 {
-    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.2.0/mpv.net-v7.1.2.0-portable-x64.zip";
+    var downloadUrl = $"https://github.com/mpvnet-player/mpv.net/releases/download/{MpvNetVersion}/mpv.net-{MpvNetVersion}-portable-x64.zip";
     var targetPath = Path.GetFullPath("mpvnet.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
@@ -314,11 +324,14 @@ void Cleanup()
         }
     }
 
-    foreach (var dir in Directory.GetDirectories(vsmlrtModelsPath))
+    if (Directory.Exists(vsmlrtModelsPath))
     {
-        if (Path.GetFileName(dir) != "rife")
+        foreach (var dir in Directory.GetDirectories(vsmlrtModelsPath))
         {
-            Directory.Delete(dir, true);
+            if (Path.GetFileName(dir) != "rife")
+            {
+                Directory.Delete(dir, true);
+            }
         }
     }
 }

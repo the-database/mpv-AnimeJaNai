@@ -60,7 +60,7 @@ Overall, the V3 models yield significantly more natural and faithful results com
 
 ### 2x_AnimeJaNai SD V1 Models
 
-2x_AnimeJaNai SD V1 models are in developmnent. The latest release of mpv-upscale-2x_animejanai includes an early beta model for 2x_AnimeJaNai SD V1. While the 2xAnimeJaNai HD models can also work well for some SD sources, those models were specifically trained to upscale HD anime and don't always work well for SD sources. The SD models are designed to upscale SD anime to appear as if the anime was mastered in HD resolution. With sufficient hardware, these models can be stacked with the HD models to upscale SD anime to 4k resolution. 
+2x_AnimeJaNai SD V1 models are in development. The latest release of mpv-upscale-2x_animejanai includes an early beta model for 2x_AnimeJaNai SD V1. While the 2xAnimeJaNai HD models can also work well for some SD sources, those models were specifically trained to upscale HD anime and don't always work well for SD sources. The SD models are designed to upscale SD anime to appear as if the anime was mastered in HD resolution. With sufficient hardware, these models can be stacked with the HD models to upscale SD anime to 4k resolution. 
 
 ## Benchmarks
 [Benchmarks](https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Benchmarks) for various hardware configurations tested against various upscaling configurations are available on the wiki. 
