@@ -51,6 +51,8 @@ local self_write_target = nil    -- value of our most recent self-write awaiting
 local last_activity_time = 0     -- mp.get_time() of most recent seek-related activity
 local ignore_initial_seek = false -- suppress on_seeking during mpv's post-load positioning pulse
 local initial_seek_timer = nil   -- fallback that clears the flag if no seeking event arrives
+local self_seek_in_progress = false -- we issued a seek-0 to force a re-render; ignore its events
+local self_seek_clear_timer = nil  -- fallback timer that clears self_seek_in_progress
 local enabled = true
 
 -- How long after file-loaded to keep ignoring `seeking` property pulses. Long
@@ -84,6 +86,12 @@ local schedule_restore
 -- the current time so the debounce window starts fresh on every activity.
 local function bypass_now()
     if not enabled then return end
+    -- A real user seek takes precedence over any in-flight self-seek-to-rerender.
+    if self_seek_clear_timer then
+        self_seek_clear_timer:kill()
+        self_seek_clear_timer = nil
+    end
+    self_seek_in_progress = false
     last_activity_time = mp.get_time()
     if saved_vf == nil then
         local cur = mp.get_property("vf", "")
@@ -122,11 +130,41 @@ schedule_restore = function()
         end
         self_set_vf(saved_vf)
         saved_vf = nil
+        -- If paused, mpv won't re-render the current frame after the vf
+        -- change on its own — the displayed frame stays un-upscaled and the
+        -- vapoursynth filter doesn't initialise until a frame is requested
+        -- (i.e. when play resumes), causing visible lag at play time.
+        -- Force a re-render of the current frame through the restored chain
+        -- so init happens NOW, during pause.
+        if mp.get_property_native("pause") == true then
+            self_seek_in_progress = true
+            if self_seek_clear_timer then self_seek_clear_timer:kill() end
+            -- Fallback: clear the marker even if no seeking events fire
+            -- (defensive; mpv normally emits seeking true/false for an exact seek).
+            self_seek_clear_timer = mp.add_timeout(0.3, function()
+                self_seek_clear_timer = nil
+                self_seek_in_progress = false
+            end)
+            mp.commandv("seek", "0", "exact")
+        end
     end)
 end
 
 local function on_seeking(_, seeking)
     if not enabled then return end
+
+    -- Ignore the seeking events from our own seek-0-to-force-rerender, so
+    -- it doesn't recursively trigger another bypass.
+    if self_seek_in_progress then
+        if not seeking then
+            self_seek_in_progress = false
+            if self_seek_clear_timer then
+                self_seek_clear_timer:kill()
+                self_seek_clear_timer = nil
+            end
+        end
+        return
+    end
 
     -- Skip mpv's internal post-load seek pulse. Keyboard pre-emptive bypass
     -- still works in this window because it doesn't go through this handler.
@@ -194,6 +232,11 @@ local function reset_state()
         initial_seek_timer = nil
     end
     ignore_initial_seek = false
+    if self_seek_clear_timer then
+        self_seek_clear_timer:kill()
+        self_seek_clear_timer = nil
+    end
+    self_seek_in_progress = false
 end
 
 local function on_file_loaded()
