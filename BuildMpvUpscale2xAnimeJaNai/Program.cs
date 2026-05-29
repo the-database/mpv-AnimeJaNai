@@ -15,6 +15,10 @@ const string AkarinFileVersion    = "v0.96g3";      // version embedded in the a
 const string MiscFiltersTag       = "R2";           // GitHub release tag (URL is uppercase, archive filename uses lowercase)
 const string MpvNetVersion        = "v7.1.2.0";
 
+// Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
+const string MpvForkVersion       = "20260527";     // release tag (= build date)
+const string MpvForkGitHash       = "150a4b6dba";   // git short hash in the dev archive filename
+
 string[] rifeModels = [
     "rife_v4.7.7z",
     "rife_v4.8.7z",
@@ -296,6 +300,34 @@ async Task InstallMpvnet()
     File.Delete(targetPath);
 }
 
+async Task InstallCustomLibmpv()
+{
+    Console.WriteLine("Downloading custom libmpv fork...");
+    var downloadUrl = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}/mpv-dev-x86_64-{MpvForkVersion}-git-{MpvForkGitHash}.7z";
+    var targetPath = Path.GetFullPath("mpv-dev.7z");
+    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    {
+        Console.WriteLine($"Downloading custom libmpv fork ({progress}%)...");
+    });
+
+    Console.WriteLine("Extracting custom libmpv fork...");
+    var targetExtractPath = Path.Combine(installDirectory, "temp-libmpv");
+    Directory.CreateDirectory(targetExtractPath);
+
+    using (ArchiveFile archiveFile = new(targetPath))
+    {
+        archiveFile.Extract(targetExtractPath);
+
+        File.Copy(
+            Path.Combine(targetExtractPath, "libmpv-2.dll"),
+            Path.Combine(installDirectory, "libmpv-2.dll"),
+            true // overwrite the stock mpv.net libmpv-2.dll
+        );
+    }
+    Directory.Delete(targetExtractPath, true);
+    File.Delete(targetPath);
+}
+
 async Task InstallYtDlp()
 {
     var downloadUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
@@ -469,6 +501,7 @@ async Task Main()
     await InstallVsmlrt();
     await InstallRife();
     await InstallMpvnet();
+    await InstallCustomLibmpv();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();
     Cleanup();
