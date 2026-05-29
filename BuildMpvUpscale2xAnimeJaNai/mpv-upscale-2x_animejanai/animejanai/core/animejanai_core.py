@@ -11,6 +11,16 @@ import zlib
 # trtexec num_streams
 TOTAL_NUM_STREAMS = 4
 
+# Default (static) TensorRT engine settings, used when a config doesn't specify
+# trt_engine_settings (e.g. older configs created before that option existed). Keep this in
+# sync with the [global] trt_engine_settings in animejanai.conf. Dynamic engines are opt-in:
+# a config must explicitly set trt_engine_settings (with min/opt/max shapes) to get one.
+DEFAULT_TRT_ENGINE_SETTINGS = (
+    "--stronglyTyped --optShapes=input:%video_resolution% "
+    "--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --builderOptimizationLevel=5 "
+    "--tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT --skipInference"
+)
+
 core = vs.core
 core.num_threads = 4  # can influence ram usage
 
@@ -60,10 +70,6 @@ def find_model(model_type, binding):
         if key in config[section_key]:
             return config[section_key][key]
     return None
-
-
-def use_dynamic_engine(width, height):
-    return width <= 1920 and height <= 1080
 
 
 def get_engine_path(onnx_name, trt_settings):
@@ -122,11 +128,12 @@ def upscale2x(clip, backend, engine_name, num_streams, trt_settings=None):
             fp16=True,
             network_path=network_path)
 
-    # TensorRT — substitute video resolution with actual clip dimensions
-    if trt_settings is not None:
-        trt_settings = trt_settings.replace("%video_resolution%", f"1x3x{clip.height}x{clip.width}")
-    else:
-        trt_settings = f"--fp16 --minShapes=input:1x3x8x8 --optShapes=input:1x3x{clip.height}x{clip.width} --maxShapes=input:1x3x{clip.height}x{clip.width} --inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT --skipInference"
+    # TensorRT — default to static engine settings when the config doesn't specify any
+    # (this makes older configs static too). Dynamic engines are opt-in: a config must
+    # explicitly set trt_engine_settings. Then substitute the actual clip dimensions.
+    if trt_settings is None:
+        trt_settings = DEFAULT_TRT_ENGINE_SETTINGS
+    trt_settings = trt_settings.replace("%video_resolution%", f"1x3x{clip.height}x{clip.width}")
 
     return upscale2x_trt(clip, engine_name, num_streams, trt_settings)
 
