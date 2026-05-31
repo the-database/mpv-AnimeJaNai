@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repo does **not** contain the mpv player or the AnimeJaNaiConfEditor. It contains:
 
-1. **`BuildMpvUpscale2xAnimeJaNai/`** — a C# console app whose only job is to download mpv.net, Portable VapourSynth, vs-mlrt (TensorRT/CUDA), RIFE models, yt-dlp, and various VS plugins, then layer the runtime files in `BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/` on top to produce the redistributable `mpv-upscale-2x_animejanai-v<version>/` directory.
-2. **`BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/`** — the *runtime overlay*: the Python/VapourSynth scripts (`animejanai/core/`), ONNX models (`animejanai/onnx/`), per-slot `.vpy` shims (`animejanai/profiles/`), default `animejanai.conf`, mpv config (`portable_config/`), and the prebuilt `AnimeJaNaiConfEditor.exe` (its source lives in a separate repo).
+1. **`BuildMpvUpscale2xAnimeJaNai/`** — a C# console app whose only job is to download mpv.net, Portable VapourSynth, vs-mlrt (TensorRT/CUDA), RIFE models, yt-dlp, AnimeJaNaiConfEditor, and various VS plugins, then layer the runtime files in `BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/` on top to produce the redistributable `mpv-upscale-2x_animejanai-v<version>/` directory.
+2. **`BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/`** — the *runtime overlay*: the Python/VapourSynth scripts (`animejanai/core/`), ONNX models (`animejanai/onnx/`), per-slot `.vpy` shims (`animejanai/profiles/`), default `animejanai.conf`, and mpv config (`portable_config/`). `AnimeJaNaiConfEditor.exe` is **not** in the overlay — it's downloaded at build time from its own repo's release (see below).
 
 A user-facing release is the C# app's output, not anything in source form.
 
@@ -68,7 +68,9 @@ The chain that runs when a user plays a video:
 
 ### `AnimeJaNaiConfEditor.exe`
 
-Prebuilt binary checked in at `animejanai/AnimeJaNaiConfEditor.exe`. Source is in a separate repo. It edits `animejanai.conf` and is launched by mpv via `Ctrl+E`.
+Downloaded at build time by `InstallAnimeJaNaiConfEditor()` in `Program.cs` from a GitHub release of its source repo (`github.com/the-database/AnimeJaNaiConfEditor`), pinned via the `ConfEditorVersion` constant. The release asset `AnimeJaNaiConfEditor-portable-x64.zip` (the `.exe` + native Avalonia DLLs `libSkiaSharp.dll`/`av_libglesv2.dll`/`libHarfBuzzSharp.dll`) is extracted into `animejanai/`, so it ends up next to the overlay's own `animejanai.conf` and `onnx/`. It edits `animejanai.conf` and is launched by mpv via `Ctrl+E`.
+
+To ship a new editor build: run the editor repo's manual `Release` workflow (Actions → Run workflow, enter the version) to cut a release, then bump `ConfEditorVersion` here to match. The binaries are **not** committed to this repo (they're `.gitignore`d as a guard).
 
 ## Conventions
 

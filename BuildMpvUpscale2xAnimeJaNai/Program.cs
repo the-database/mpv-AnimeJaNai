@@ -14,6 +14,7 @@ const string AkarinTag            = "v0.96";        // GitHub release tag
 const string AkarinFileVersion    = "v0.96g3";      // version embedded in the archive filename
 const string MiscFiltersTag       = "R2";           // GitHub release tag (URL is uppercase, archive filename uses lowercase)
 const string MpvNetVersion        = "v7.1.2.0";
+const string ConfEditorVersion    = "0.0.6";        // github.com/the-database/AnimeJaNaiConfEditor release tag
 
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
 const string MpvForkVersion       = "20260527";     // release tag (= build date)
@@ -343,6 +344,28 @@ void InstallAnimeJaNaiCore()
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
 
+async Task InstallAnimeJaNaiConfEditor()
+{
+    Console.WriteLine("Downloading AnimeJaNaiConfEditor...");
+    var downloadUrl = $"https://github.com/the-database/AnimeJaNaiConfEditor/releases/download/{ConfEditorVersion}/AnimeJaNaiConfEditor-portable-x64.zip";
+    var targetPath = Path.GetFullPath("AnimeJaNaiConfEditor-portable-x64.zip");
+    await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    {
+        Console.WriteLine($"Downloading AnimeJaNaiConfEditor ({progress}%)...");
+    });
+
+    Console.WriteLine("Extracting AnimeJaNaiConfEditor...");
+    // The zip is flat (AnimeJaNaiConfEditor.exe + native DLLs at root) and lands directly in
+    // animejanai/, alongside the overlay's own animejanai.conf and onnx/ (which it does not contain).
+    var targetExtractPath = Path.Combine(installDirectory, "animejanai");
+    ExtractZip(targetPath, targetExtractPath, (double progress) =>
+    {
+        Console.WriteLine($"Extracting AnimeJaNaiConfEditor ({progress}%)...");
+    });
+
+    File.Delete(targetPath);
+}
+
 void Cleanup()
 {
     List<string> dirs = ["doc", "vs-temp-dl", "Scripts", "sdk", "wheel"];
@@ -504,6 +527,7 @@ async Task Main()
     await InstallCustomLibmpv();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();
+    await InstallAnimeJaNaiConfEditor();
     Cleanup();
 }
 
