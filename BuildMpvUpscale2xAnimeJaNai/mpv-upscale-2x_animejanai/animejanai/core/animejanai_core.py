@@ -1,5 +1,6 @@
 import vapoursynth as vs
 import os
+import re
 import subprocess
 import logging
 import sys
@@ -37,6 +38,14 @@ current_logger_steps = []
 
 config = {}
 
+# Memoized per-session TensorRT/GPU identity used in the engine cache key (see get_engine_path).
+# Querying the GPU is mildly expensive, and both create_custom_engine and upscale2x_trt must agree
+# within a run, so compute once and cache.
+_trt_version_token = None
+_gpu_tokens = {}
+# Stale-engine cleanup runs once per session (see clean_stale_engines / upscale2x_trt).
+_engines_cleaned = False
+
 
 def init_logger():
     logger.setLevel(logging.DEBUG)
@@ -72,8 +81,95 @@ def find_model(model_type, binding):
     return None
 
 
+def _get_trt_version_token():
+    """Current TensorRT runtime version as 'X.Y.Z', memoized. Folded into the engine cache key so a
+    TensorRT upgrade produces a new engine filename (and a clean rebuild) instead of loading an
+    incompatible cached engine. Parsed the same way as vsmlrt.py's parse_trt_version."""
+    global _trt_version_token
+    if _trt_version_token is None:
+        try:
+            v = int(core.trt.Version()["tensorrt_version"])
+            if v < 10000:
+                major, minor, patch = v // 1000, (v // 100) % 10, v % 100
+            else:
+                major, minor, patch = v // 10000, (v // 100) % 100, v % 100
+            _trt_version_token = f"{major}.{minor}.{patch}"
+        except Exception as e:
+            logger.debug(f"Could not query TensorRT version ({e!r}); using 'unknown'")
+            _trt_version_token = "unknown"
+    return _trt_version_token
+
+
+def _get_gpu_token(device_id=0):
+    """Sanitized name + compute-capability of the build GPU, memoized per device. Folded into the
+    engine cache key so swapping GPUs produces a new engine filename instead of loading an engine
+    built for a different GPU architecture."""
+    if device_id not in _gpu_tokens:
+        try:
+            props = core.trt.DeviceProperties(device_id)
+            name = props["name"]
+            name = name.decode() if isinstance(name, (bytes, bytearray)) else str(name)
+            token = re.sub(r"[^A-Za-z0-9._-]", "", name.replace(" ", "-")) or f"device{device_id}"
+            try:
+                token = f"{token}-sm{props['major']}"
+            except Exception:
+                pass
+            _gpu_tokens[device_id] = token
+        except Exception as e:
+            logger.debug(f"Could not query GPU properties for device {device_id} ({e!r}); using 'unknown'")
+            _gpu_tokens[device_id] = "unknown"
+    return _gpu_tokens[device_id]
+
+
+def _device_id_from_settings(trt_settings):
+    """trtexec builds on device 0 unless --device=N is given; match the cache key to that device."""
+    m = re.search(r"--device[=\s]+(\d+)", trt_settings or "")
+    return int(m.group(1)) if m else 0
+
+
+def _current_engine_suffix(device_id=0):
+    """Readable, parseable tail identifying the current GPU + TensorRT version. Also used by
+    clean_stale_engines to tell live engines from stale ones."""
+    return f".trt-{_get_trt_version_token()}.gpu-{_get_gpu_token(device_id)}.engine"
+
+
 def get_engine_path(onnx_name, trt_settings):
-    return os.path.join(model_path, f"{onnx_name}.{zlib.crc32(trt_settings.encode())}.engine")
+    # {onnx_name}.{crc32(all trt build flags)}.trt-{version}.gpu-{device}.engine
+    # The CRC already covers every trtexec flag (precision, engine type, opt level, shapes, ...);
+    # the trt/gpu tokens cover the two things flags don't: the TensorRT version and the GPU.
+    device_id = _device_id_from_settings(trt_settings)
+    return os.path.join(
+        model_path,
+        f"{onnx_name}.{zlib.crc32(trt_settings.encode())}{_current_engine_suffix(device_id)}"
+    )
+
+
+def clean_stale_engines(device_id=0):
+    """Delete cached TensorRT engines that can never be a cache hit again on this setup: any engine
+    not built for the current TensorRT version AND current GPU. Current-environment engines are kept
+    no matter how rarely they're used - staleness is judged solely by the trt/gpu tokens in the
+    filename, never by age. Legacy-named engines (pre-token scheme) lack the suffix and are removed
+    too, since the new cache key orphans them.
+
+    Note: with an explicit multi-GPU --device=N setup this keys off the current device, so engines
+    deliberately built for a different device may be removed - acceptable given GPU-mismatch cleanup
+    was explicitly opted into."""
+    suffix = _current_engine_suffix(device_id)
+    try:
+        entries = os.listdir(model_path)
+    except OSError as e:
+        logger.debug(f"Could not list engine directory for cleanup ({e!r})")
+        return
+    for name in entries:
+        if not name.endswith(".engine") or name.endswith(suffix):
+            continue
+        try:
+            os.remove(os.path.join(model_path, name))
+            msg = f"Removed stale TensorRT engine (different GPU or TensorRT version): {name}"
+            logger.debug(msg)
+            current_logger_steps.append(msg)
+        except OSError as e:
+            logger.debug(f"Could not remove stale engine {name} ({e!r})")
 
 
 def create_custom_engine(onnx_name, trt_settings):
@@ -139,6 +235,14 @@ def upscale2x(clip, backend, engine_name, num_streams, trt_settings=None):
 
 
 def upscale2x_trt(clip, engine_name, num_streams, trt_settings):
+    global _engines_cleaned
+    if not _engines_cleaned:
+        # Once per session, and only on the TensorRT path (DirectML/ncnn never reach here), now that
+        # the current GPU + TRT version are known. Reusing an engine from a different GPU/TRT version
+        # would error, so drop the now-unusable ones instead of leaving them to accumulate.
+        clean_stale_engines(_device_id_from_settings(trt_settings))
+        _engines_cleaned = True
+
     engine_path = get_engine_path(engine_name, trt_settings)
     if not os.path.isfile(engine_path):
         create_custom_engine(engine_name, trt_settings)

@@ -14,7 +14,7 @@ const string AkarinTag            = "v0.96";        // GitHub release tag
 const string AkarinFileVersion    = "v0.96g3";      // version embedded in the archive filename
 const string MiscFiltersTag       = "R2";           // GitHub release tag (URL is uppercase, archive filename uses lowercase)
 const string MpvNetVersion        = "v7.1.2.0";
-const string ConfEditorVersion    = "0.0.6";        // github.com/the-database/AnimeJaNaiConfEditor release tag
+const string ConfEditorVersion    = "0.0.7";        // github.com/the-database/AnimeJaNaiConfEditor release tag
 
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
 const string MpvForkVersion       = "20260527";     // release tag (= build date)
