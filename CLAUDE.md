@@ -11,6 +11,22 @@ This repo does **not** contain the mpv player or the AnimeJaNaiConfEditor. It co
 
 A user-facing release is the C# app's output, not anything in source form.
 
+## Platform support (read before adding tooling)
+
+The distribution is **Windows-only today** (it bundles mpv.net, a Windows libmpv fork, the
+vsmlrt-cuda Windows binaries, and an embedded Windows Python). **Linux builds are on the roadmap**,
+so when adding or changing build/runtime tooling, avoid baking in Windows-only assumptions where
+keeping it portable is cheap:
+
+- Prefer cross-platform languages/runtimes already in use (.NET cross-compiles to `linux-x64`;
+  VapourSynth/mpv/Lua run on Linux). Do **not** introduce a parallel Windows-only + Linux-only
+  implementation of the same logic (e.g. an `.exe` plus a duplicate `.sh`) — it will drift.
+- Drive platform-specific names/paths (player executable, archive tool, exe suffix, etc.) from data
+  like `manifest.json` rather than hardcoding `mpvnet.exe` / `7z.exe` / `.exe`. The updater
+  (`AnimeJaNaiUpdater/`) already does this as the reference pattern.
+- It's fine to ship Windows-only for now and defer the actual Linux build/packaging — just don't
+  design something that *can't* extend to Linux without a rewrite.
+
 ## Building and releasing
 
 ```powershell

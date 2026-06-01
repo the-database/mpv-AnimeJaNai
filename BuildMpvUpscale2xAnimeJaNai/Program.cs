@@ -357,6 +357,11 @@ void WriteVersionAndManifest()
     var manifest = new
     {
         package_version = version,
+        // Platform-specific names the updater needs. Each platform's builder emits its own values
+        // (a future Linux builder would use e.g. "mpv" / "7zz") so the same updater code works
+        // cross-platform without hardcoding Windows assumptions.
+        player_executable = "mpvnet.exe",
+        archive_tool = "7z.exe",
         // Heavy dependencies. If these are unchanged between releases the updater applies the small
         // overlay; if any differ it falls back to the full package. ConfEditorVersion is omitted on
         // purpose: the editor ships inside the overlay, so it updates without a full download.
@@ -376,6 +381,7 @@ void WriteVersionAndManifest()
         {
             "version.txt",
             "manifest.json",
+            "AnimeJaNaiUpdater.exe",
             "animejanai/core",
             "animejanai/profiles",
             "animejanai/benchmarks",

@@ -16,3 +16,5 @@ BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/core/currentani
 /BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/libHarfBuzzSharp.dll
 /BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/libSkiaSharp.dll
 *.pyc
+/AnimeJaNaiUpdater/bin
+/AnimeJaNaiUpdater/obj
