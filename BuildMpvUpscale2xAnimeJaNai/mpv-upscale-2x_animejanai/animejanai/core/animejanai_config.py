@@ -7,6 +7,44 @@ import math
 bools = {"logging"}
 floats = set()
 
+# Current animejanai.conf schema version. Bump when adding a migration to _migrate_global below.
+# A config with no config_version is treated as version 1 (the pre-versioning schema).
+CONFIG_VERSION = 2
+
+# trt_engine_settings values shipped as the default in past releases. If a user's config still
+# carries one of these verbatim they never customized it, so migration drops the key and lets the
+# current code default (animejanai_core.DEFAULT_TRT_ENGINE_SETTINGS, which is static) govern. A
+# genuinely customized value is left untouched.
+LEGACY_DEFAULT_TRT_ENGINE_SETTINGS = {
+    "--stronglyTyped --optShapes=input:%video_resolution% --inputIOFormats=fp16:chw "
+    "--outputIOFormats=fp16:chw --builderOptimizationLevel=5 "
+    "--tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT --skipInference",
+}
+
+
+def _migrate_global(parser):
+    """Apply in-memory, non-destructive migrations to [global] so playback uses current defaults
+    even when the on-disk animejanai.conf predates them. The conf editor performs the durable
+    rewrite; here we only adjust the parsed values for this run. Keyed on [global] config_version
+    (absent => 1)."""
+    if not parser.has_section("global"):
+        return
+
+    g = parser["global"]
+    try:
+        version = int(g.get("config_version", "1"))
+    except ValueError:
+        version = 1
+
+    # v1 -> v2: stop forcing the old materialized trt_engine_settings default so the static code
+    # default applies, unless the user customized the value.
+    if version < 2:
+        val = g.get("trt_engine_settings")
+        if val is not None and val.strip() in LEGACY_DEFAULT_TRT_ENGINE_SETTINGS:
+            del g["trt_engine_settings"]
+
+    g["config_version"] = str(CONFIG_VERSION)
+
 
 def parse_value(key, value):
     is_bool = key in bools
@@ -293,6 +331,8 @@ def read_config():
     parser.read(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "../animejanai.conf")
     )
+
+    _migrate_global(parser)
 
     all_keys_by_section = {}
 

@@ -5,6 +5,7 @@ using SevenZipExtractor;
 using System.Diagnostics;
 using System.Management.Automation;
 using System.Text;
+using System.Text.Json;
 using static Downloader;
 
 // Third-party component versions. Bump these together when cutting a release.
@@ -344,6 +345,65 @@ void InstallAnimeJaNaiCore()
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
 
+// Writes version.txt + manifest.json into the install root. The updater (AnimeJaNaiUpdater) reads
+// these to know the installed version, decide overlay-vs-full updates (by comparing deps), and know
+// which paths to overwrite (overlay_paths) vs preserve (user_preserve). deploy.yml reads
+// overlay_paths from manifest.json to build the lightweight overlay archive.
+void WriteVersionAndManifest()
+{
+    var version = args[0];
+    File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
+
+    var manifest = new
+    {
+        package_version = version,
+        // Heavy dependencies. If these are unchanged between releases the updater applies the small
+        // overlay; if any differ it falls back to the full package. ConfEditorVersion is omitted on
+        // purpose: the editor ships inside the overlay, so it updates without a full download.
+        deps = new
+        {
+            vapoursynth = VapourSynthVersion,
+            vsmlrt = VsMlrtVersion,
+            akarin = AkarinFileVersion,
+            miscfilters = MiscFiltersTag,
+            mpvnet = MpvNetVersion,
+            mpvfork = $"{MpvForkVersion}-{MpvForkGitHash}",
+            rife = rifeModels,
+        },
+        // Managed program files (relative to install root) that make up the overlay update and are
+        // overwritten on update. Extraction overlays these without deleting extras (e.g. user onnx).
+        overlay_paths = new[]
+        {
+            "version.txt",
+            "manifest.json",
+            "animejanai/core",
+            "animejanai/profiles",
+            "animejanai/benchmarks",
+            "animejanai/onnx",
+            "animejanai/AnimeJaNaiConfEditor.exe",
+            "animejanai/av_libglesv2.dll",
+            "animejanai/libHarfBuzzSharp.dll",
+            "animejanai/libSkiaSharp.dll",
+            "portable_config/scripts",
+            "portable_config/shaders",
+            "portable_config/mpv.conf",
+            "portable_config/input.conf",
+        },
+        // User data never overwritten by an update (full updates preserve these explicitly).
+        user_preserve = new[]
+        {
+            "animejanai/animejanai.conf",
+            "portable_config/mpv-user.conf",
+            "portable_config/saved-props.json",
+            "portable_config/settings.xml",
+            "portable_config/screenshots",
+        },
+    };
+
+    var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+    File.WriteAllText(Path.Combine(installDirectory, "manifest.json"), json);
+}
+
 async Task InstallAnimeJaNaiConfEditor()
 {
     Console.WriteLine("Downloading AnimeJaNaiConfEditor...");
@@ -529,6 +589,7 @@ async Task Main()
     InstallAnimeJaNaiCore();
     await InstallAnimeJaNaiConfEditor();
     Cleanup();
+    WriteVersionAndManifest();
 }
 
 await Main();
