@@ -46,6 +46,27 @@ def _migrate_global(parser):
     g["config_version"] = str(CONFIG_VERSION)
 
 
+def _apply_default_preset(conf, parser):
+    """Switch the built-in default profiles (slots 1001-1003) to the sharp model variants when
+    [global] default_preset=sharp. Standard and sharp HD model filenames differ only by the
+    _HD_V3.1_ vs _HD_V3.1Sharp1_ token; the SD model has no sharp variant and is left alone.
+    Benchmark slots (1010-1011) are intentionally not affected."""
+    preset = "standard"
+    if parser.has_section("global"):
+        preset = parser["global"].get("default_preset", "standard").strip().lower()
+    if preset != "sharp":
+        return
+
+    for slot in ("slot_1001", "slot_1002", "slot_1003"):
+        for key, chain in conf[slot].items():
+            if not key.startswith("chain_"):
+                continue
+            for model in chain.get("models", []):
+                name = model.get("name")
+                if name and "_HD_V3.1_" in name:
+                    model["name"] = name.replace("_HD_V3.1_", "_HD_V3.1Sharp1_")
+
+
 def parse_value(key, value):
     is_bool = key in bools
     is_float = key in floats
@@ -309,6 +330,7 @@ def read_config():
     )
 
     _migrate_global(parser)
+    _apply_default_preset(conf, parser)
 
     all_keys_by_section = {}
 
