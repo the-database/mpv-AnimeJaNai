@@ -400,6 +400,7 @@ void WriteVersionAndManifest()
         {
             "animejanai/animejanai.conf",
             "portable_config/mpv-user.conf",
+            "portable_config/input-user.conf",
             "portable_config/saved-props.json",
             "portable_config/settings.xml",
             "portable_config/screenshots",

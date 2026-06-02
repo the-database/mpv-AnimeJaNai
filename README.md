@@ -50,7 +50,7 @@ Upscaling can be further customized using the AnimeJaNaiConfEditor which can be 
 ![image](https://github.com/the-database/mpv-upscale-2x_animejanai/assets/25811902/76a8db5b-8c67-4b0c-911a-9b02598fb37a)
 
 
-All other mpv settings can be configured by adding them to `mpv-upscale-2x_animejanai/portable_config/mpv-user.conf` (see the [mpv manual](https://mpv.io/manual/stable/) for all options). Put your custom mpv options in `mpv-user.conf` rather than `mpv.conf` — `mpv-user.conf` is applied last (so it overrides the defaults) and is never overwritten when you update, so your settings survive upgrades. Keybindings can be customized in `mpv-upscale-2x_animejanai/portable_config/input.conf`. 
+All other mpv settings can be configured by adding them to `mpv-upscale-2x_animejanai/portable_config/mpv-user.conf` (see the [mpv manual](https://mpv.io/manual/stable/) for all options). Put your custom mpv options in `mpv-user.conf` rather than `mpv.conf` — `mpv-user.conf` is applied last (so it overrides the defaults) and is never overwritten when you update, so your settings survive upgrades. Likewise, add custom keybindings to `mpv-upscale-2x_animejanai/portable_config/input-user.conf` (same syntax as `input.conf`); they override the shipped bindings and are also preserved across updates. 
 
 By default, screenshots can be taken with the `s` key and are stored in `mpv-upscale-2x_animejanai/portable_config/screenshots`. 
 
