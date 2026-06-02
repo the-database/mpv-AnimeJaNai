@@ -47,19 +47,23 @@ def _migrate_global(parser):
 
 
 def _apply_default_preset(conf, parser):
-    """Switch the built-in default profiles (slots 1001-1003) to the sharp model variants when
-    [global] default_preset=sharp. Standard and sharp HD model filenames differ only by the
-    _HD_V3.1_ vs _HD_V3.1Sharp1_ token; the SD model has no sharp variant and is left alone.
+    """Per-profile standard/sharp selection for the built-in default profiles. Each profile has its
+    own [global] key (absent => standard); when set to sharp, that profile's HD models are swapped
+    from _HD_V3.1_ to _HD_V3.1Sharp1_ (the SD model has no sharp variant and is left alone).
     Benchmark slots (1010-1011) are intentionally not affected."""
-    preset = "standard"
-    if parser.has_section("global"):
-        preset = parser["global"].get("default_preset", "standard").strip().lower()
-    if preset != "sharp":
+    if not parser.has_section("global"):
         return
-
-    for slot in ("slot_1001", "slot_1002", "slot_1003"):
-        for key, chain in conf[slot].items():
-            if not key.startswith("chain_"):
+    g = parser["global"]
+    profile_preset_keys = {
+        "slot_1001": "quality_preset",
+        "slot_1002": "balanced_preset",
+        "slot_1003": "performance_preset",
+    }
+    for slot, key in profile_preset_keys.items():
+        if g.get(key, "standard").strip().lower() != "sharp":
+            continue
+        for ckey, chain in conf[slot].items():
+            if not ckey.startswith("chain_"):
                 continue
             for model in chain.get("models", []):
                 name = model.get("name")

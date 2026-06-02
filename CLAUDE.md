@@ -77,7 +77,7 @@ The chain that runs when a user plays a video:
 
 - Hardcodes the built-in slots (`1001`–`1003`, `1010`–`1011`) as Python dicts.
 - Parses the user's `.conf` with `configparser`, then *flattens* keys of the form `chain_<n>_model_<m>_<field>` into nested `{slot: {chain_n: {models: [...], ...}}}` dicts. Any new chain/model field must be read explicitly in `read_config_by_chain` / `read_config_by_chain_model` — there is no generic schema.
-- Applies `[global]` migrations/overrides via `_migrate_global` (schema `config_version`, default-fingerprinting) and `_apply_default_preset`. The latter honors `[global] default_preset = standard | sharp` (absent ⇒ standard): when `sharp`, it swaps the HD models in the built-in slots `1001`–`1003` from `…_HD_V3.1_…` to `…_HD_V3.1Sharp1_…`. The AnimeJaNaiConfEditor writes this key (Standard/Sharp toggle); keep the two in sync.
+- Applies `[global]` migrations/overrides via `_migrate_global` (schema `config_version`, default-fingerprinting) and `_apply_default_preset`. The latter is per-profile: `[global] quality_preset` / `balanced_preset` / `performance_preset` (`standard | sharp`, absent ⇒ standard) independently switch the HD models in built-in slots `1001`/`1002`/`1003` from `…_HD_V3.1_…` to `…_HD_V3.1Sharp1_…`. The AnimeJaNaiConfEditor writes these keys (per-profile Standard/Sharp toggle); keep the two in sync.
 
 ### Stats overlay
 
