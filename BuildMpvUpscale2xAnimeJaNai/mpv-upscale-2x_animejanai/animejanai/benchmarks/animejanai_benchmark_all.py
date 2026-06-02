@@ -44,7 +44,7 @@ def printtable(table):
     print(f"Saved benchmarks to: {benchmark_file_path}")
 
 
-slots = [1010, 1011, 1012]
+slots = [1010, 1011]
 mpv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"..\..")
 config = animejanai_config.read_config()
 

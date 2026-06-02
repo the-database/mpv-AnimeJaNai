@@ -17,7 +17,7 @@ When playing a video for the first time, a TensorRT engine file will be created 
 
 To confirm upscaling status, press `ctrl+J` to view upscaling stats. This shows the current profile, and the currently running upscaling models if any. 
 
-The player is preconfigured to upscale with 2x_AnimeJaNai models, and makes 3 upscaling profiles available by default. The available profiles are described in more detail below. Any of these profiles can be selected on the fly using the keybinding listed below. 
+The player is preconfigured to upscale with the 2x_AnimeJaNai V3.1 models, and makes 3 upscaling profiles available by default. The available profiles are described in more detail below. Any of these profiles can be selected on the fly using the keybinding listed below. 
 
 |Profile | Description | Keybinding | Minimum recommended GPU for upscaling 1080p to 4k |
 |-|-|-|-|

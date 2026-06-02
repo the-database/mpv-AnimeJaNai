@@ -144,7 +144,7 @@ def read_config():
                 "min_resolution": "1280x720",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_Compact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -176,7 +176,7 @@ def read_config():
                 "min_resolution": "0x0",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_SuperUltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -195,7 +195,7 @@ def read_config():
                 "min_resolution": "1280x720",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_UltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -230,7 +230,7 @@ def read_config():
                 "min_resolution": "1280x720",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_SuperUltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -265,7 +265,7 @@ def read_config():
                 "min_resolution": "0x0",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_Compact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -289,31 +289,7 @@ def read_config():
                 "min_resolution": "0x0",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_UltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
-                        "resize_factor_before_upscale": 100.0,
-                        "resize_height_before_upscale": 0.0,
-                    }
-                ],
-                "rife": False,
-                "rife_ensemble": False,
-                "rife_factor_denominator": 1,
-                "rife_factor_numerator": 1,
-                "rife_model": 414,
-                "rife_scene_detect_threshold": 0.15,
-            },
-            "profile_name": "New Profile",
-        },
-        "slot_1012": {
-            "chain_1": {
-                "max_fps": float("inf"),
-                "max_px": float("inf"),
-                "max_resolution": "infxinf",
-                "min_fps": 0.0,
-                "min_px": 0.0,
-                "min_resolution": "0x0",
-                "models": [
-                    {
-                        "name": "2x_AnimeJaNai_HD_V3_SuperUltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
