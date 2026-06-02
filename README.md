@@ -17,7 +17,7 @@ When playing a video for the first time, a TensorRT engine file will be created 
 
 To confirm upscaling status, press `ctrl+J` to view upscaling stats. This shows the current profile, and the currently running upscaling models if any. 
 
-The player is preconfigured to upscale with 2x_AnimeJaNai models, and makes 3 upscaling profiles available by default. The available profiles are described in more detail below. Any of these profiles can be selected on the fly using the keybinding listed below. 
+The player is preconfigured to upscale with the 2x_AnimeJaNai V3.1 models, and makes 3 upscaling profiles available by default. The available profiles are described in more detail below. Any of these profiles can be selected on the fly using the keybinding listed below. 
 
 |Profile | Description | Keybinding | Minimum recommended GPU for upscaling 1080p to 4k |
 |-|-|-|-|
@@ -27,6 +27,22 @@ The player is preconfigured to upscale with 2x_AnimeJaNai models, and makes 3 up
 
 The default upscaling profile is the Balanced profile which is recommended for users running an NVIDIA RTX 3080 or higher. 
 
+## Updating
+
+mpv-upscale-2x_animejanai checks for updates on startup. When a newer version is available, an
+on-screen message appears; press `Ctrl+U` (or use the *AnimeJaNai > Install Update* menu) to install
+it. mpv closes, the update is applied in place, and mpv reopens automatically.
+
+Your customizations are preserved across updates: your profiles (`animejanai.conf`), your mpv
+settings in `mpv-user.conf`, and any ONNX models you added to `animejanai/onnx/` are never
+overwritten. Most updates are small because the large GPU runtime is only re-downloaded when it
+actually changes. (Your previous `input.conf` is backed up to `input.conf.bak-<version>` before the
+shipped keybindings are refreshed.)
+
+> Note for users upgrading from a version before this updater existed: download the
+> [latest release](https://github.com/the-database/mpv-upscale-2x_animejanai/releases) once
+> manually; from then on updates are handled in place.
+
 ## Customizing Profiles and Other Settings
 
 Upscaling can be further customized using the AnimeJaNaiConfEditor which can be launched by pressing `ctrl+E` from mpvnet. The editor allows the setup of up to 9 custom slots and also the use of custom chains, conditional settings based on video resolution and framerate, downscaling to improve performance, and more. The default upscaling profile can also be set using the conf editor. 
@@ -34,7 +50,7 @@ Upscaling can be further customized using the AnimeJaNaiConfEditor which can be 
 ![image](https://github.com/the-database/mpv-upscale-2x_animejanai/assets/25811902/76a8db5b-8c67-4b0c-911a-9b02598fb37a)
 
 
-All other mpv settings can be configured by editing `mpv-upscale-2x_animejanai/portable_config/mpv.conf` (see the [mpv manual](https://mpv.io/manual/stable/) for all options) for mpv options or `mpv-upscale-2x_animejanai/portable_config/input.conf` for mpv keybindings. 
+All other mpv settings can be configured by adding them to `mpv-upscale-2x_animejanai/portable_config/mpv-user.conf` (see the [mpv manual](https://mpv.io/manual/stable/) for all options). Put your custom mpv options in `mpv-user.conf` rather than `mpv.conf` — `mpv-user.conf` is applied last (so it overrides the defaults) and is never overwritten when you update, so your settings survive upgrades. Likewise, add custom keybindings to `mpv-upscale-2x_animejanai/portable_config/input-user.conf` (same syntax as `input.conf`); they override the shipped bindings and are also preserved across updates. 
 
 By default, screenshots can be taken with the `s` key and are stored in `mpv-upscale-2x_animejanai/portable_config/screenshots`. 
 
@@ -60,7 +76,7 @@ Overall, the V3 models yield significantly more natural and faithful results com
 
 ### 2x_AnimeJaNai SD V1 Models
 
-2x_AnimeJaNai SD V1 models are in developmnent. The latest release of mpv-upscale-2x_animejanai includes an early beta model for 2x_AnimeJaNai SD V1. While the 2xAnimeJaNai HD models can also work well for some SD sources, those models were specifically trained to upscale HD anime and don't always work well for SD sources. The SD models are designed to upscale SD anime to appear as if the anime was mastered in HD resolution. With sufficient hardware, these models can be stacked with the HD models to upscale SD anime to 4k resolution. 
+2x_AnimeJaNai SD V1 models are in development. The latest release of mpv-upscale-2x_animejanai includes an early beta model for 2x_AnimeJaNai SD V1. While the 2xAnimeJaNai HD models can also work well for some SD sources, those models were specifically trained to upscale HD anime and don't always work well for SD sources. The SD models are designed to upscale SD anime to appear as if the anime was mastered in HD resolution. With sufficient hardware, these models can be stacked with the HD models to upscale SD anime to 4k resolution. 
 
 ## Benchmarks
 [Benchmarks](https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Benchmarks) for various hardware configurations tested against various upscaling configurations are available on the wiki. 

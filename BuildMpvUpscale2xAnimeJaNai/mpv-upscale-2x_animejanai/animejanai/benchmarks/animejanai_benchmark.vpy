@@ -3,12 +3,12 @@ import vapoursynth as vs
 import animejanai_core
 
 # Instructions for running this benchmarking tool
-# 1. Edit the path of the source video below, from ./video.mkv to the path of
-#    the video you want to benchmark upscaling on
-# 2. Set the slot below, to a value between 1-9 to select the slot, configured in animejanai.conf,
-#    that you want to benchmark
-# 3. Run the following command from the main mpv directory:
-#     .\VSPipe.exe --start 0 --end 2000 ./portable_config/shaders/animejanai_benchmark.vpy -p .
+# 1. Pass the source video and slot number as VSPipe args (--arg video_path=... --arg slot=...).
+# 2. The slot must match a slot configured in animejanai.conf (1-9 for user slots,
+#    or 1010/1011/1012 for the built-in Compact/UltraCompact/SuperUltraCompact templates).
+# 3. Run the following from the main mpv directory:
+#     .\VSPipe.exe --arg video_path=.\video.mkv --arg slot=1010 --start 0 --end 2000 .\animejanai\benchmarks\animejanai_benchmark.vpy -p .
+# Or use animejanai_benchmark_all.py to sweep the bundled benchmark videos automatically.
 
 required_args = {'slot', 'video_path'}
 

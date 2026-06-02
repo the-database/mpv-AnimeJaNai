@@ -7,6 +7,69 @@ import math
 bools = {"logging"}
 floats = set()
 
+# Current animejanai.conf schema version. Bump when adding a migration to _migrate_global below.
+# A config with no config_version is treated as version 1 (the pre-versioning schema).
+CONFIG_VERSION = 2
+
+# trt_engine_settings values shipped as the default in past releases. If a user's config still
+# carries one of these verbatim they never customized it, so migration drops the key and lets the
+# current code default (animejanai_core.DEFAULT_TRT_ENGINE_SETTINGS, which is static) govern. A
+# genuinely customized value is left untouched.
+LEGACY_DEFAULT_TRT_ENGINE_SETTINGS = {
+    "--stronglyTyped --optShapes=input:%video_resolution% --inputIOFormats=fp16:chw "
+    "--outputIOFormats=fp16:chw --builderOptimizationLevel=5 "
+    "--tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT --skipInference",
+}
+
+
+def _migrate_global(parser):
+    """Apply in-memory, non-destructive migrations to [global] so playback uses current defaults
+    even when the on-disk animejanai.conf predates them. The conf editor performs the durable
+    rewrite; here we only adjust the parsed values for this run. Keyed on [global] config_version
+    (absent => 1)."""
+    if not parser.has_section("global"):
+        return
+
+    g = parser["global"]
+    try:
+        version = int(g.get("config_version", "1"))
+    except ValueError:
+        version = 1
+
+    # v1 -> v2: stop forcing the old materialized trt_engine_settings default so the static code
+    # default applies, unless the user customized the value.
+    if version < 2:
+        val = g.get("trt_engine_settings")
+        if val is not None and val.strip() in LEGACY_DEFAULT_TRT_ENGINE_SETTINGS:
+            del g["trt_engine_settings"]
+
+    g["config_version"] = str(CONFIG_VERSION)
+
+
+def _apply_default_preset(conf, parser):
+    """Per-profile standard/sharp selection for the built-in default profiles. Each profile has its
+    own [global] key (absent => standard); when set to sharp, that profile's HD models are swapped
+    from _HD_V3.1_ to _HD_V3.1Sharp1_ (the SD model has no sharp variant and is left alone).
+    Benchmark slots (1010-1011) are intentionally not affected."""
+    if not parser.has_section("global"):
+        return
+    g = parser["global"]
+    profile_preset_keys = {
+        "slot_1001": "quality_preset",
+        "slot_1002": "balanced_preset",
+        "slot_1003": "performance_preset",
+    }
+    for slot, key in profile_preset_keys.items():
+        if g.get(key, "standard").strip().lower() != "sharp":
+            continue
+        for ckey, chain in conf[slot].items():
+            if not ckey.startswith("chain_"):
+                continue
+            for model in chain.get("models", []):
+                name = model.get("name")
+                if name and "_HD_V3.1_" in name:
+                    model["name"] = name.replace("_HD_V3.1_", "_HD_V3.1Sharp1_")
+
 
 def parse_value(key, value):
     is_bool = key in bools
@@ -93,7 +156,7 @@ def read_config_by_chain_model(flat_conf, section, chain, model):
 
 
 def read_config():
-    parser = configparser.ConfigParser()
+    parser = configparser.ConfigParser(interpolation=None)
     flat_conf = {}
     conf = {
         "slot_1001": {
@@ -106,7 +169,7 @@ def read_config():
                 "min_resolution": "1280x720",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_Compact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -138,7 +201,7 @@ def read_config():
                 "min_resolution": "0x0",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_SuperUltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -157,7 +220,7 @@ def read_config():
                 "min_resolution": "1280x720",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_UltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -192,7 +255,7 @@ def read_config():
                 "min_resolution": "1280x720",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_SuperUltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -227,7 +290,7 @@ def read_config():
                 "min_resolution": "0x0",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_Compact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -251,31 +314,7 @@ def read_config():
                 "min_resolution": "0x0",
                 "models": [
                     {
-                        "name": "2x_AnimeJaNai_HD_V3_UltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
-                        "resize_factor_before_upscale": 100.0,
-                        "resize_height_before_upscale": 0.0,
-                    }
-                ],
-                "rife": False,
-                "rife_ensemble": False,
-                "rife_factor_denominator": 1,
-                "rife_factor_numerator": 1,
-                "rife_model": 414,
-                "rife_scene_detect_threshold": 0.15,
-            },
-            "profile_name": "New Profile",
-        },
-        "slot_1012": {
-            "chain_1": {
-                "max_fps": float("inf"),
-                "max_px": float("inf"),
-                "max_resolution": "infxinf",
-                "min_fps": 0.0,
-                "min_px": 0.0,
-                "min_resolution": "0x0",
-                "models": [
-                    {
-                        "name": "2x_AnimeJaNai_HD_V3_SuperUltraCompact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo",
+                        "name": "2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16",
                         "resize_factor_before_upscale": 100.0,
                         "resize_height_before_upscale": 0.0,
                     }
@@ -293,6 +332,9 @@ def read_config():
     parser.read(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "../animejanai.conf")
     )
+
+    _migrate_global(parser)
+    _apply_default_preset(conf, parser)
 
     all_keys_by_section = {}
 

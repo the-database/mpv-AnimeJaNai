@@ -5,8 +5,51 @@ using SevenZipExtractor;
 using System.Diagnostics;
 using System.Management.Automation;
 using System.Text;
+using System.Text.Json;
 using static Downloader;
-// TODO install numpy, onnx
+
+// Third-party component versions. Bump these together when cutting a release.
+const string VapourSynthVersion   = "R73";
+const string VsMlrtVersion        = "v15.16";       // appears in URL path AND in archive filenames
+const string AkarinTag            = "v0.96";        // GitHub release tag
+const string AkarinFileVersion    = "v0.96g3";      // version embedded in the archive filename
+const string MiscFiltersTag       = "R2";           // GitHub release tag (URL is uppercase, archive filename uses lowercase)
+const string MpvNetVersion        = "v7.1.2.0";
+const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/AnimeJaNaiConfEditor release tag
+
+// Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
+const string MpvForkVersion       = "20260527";     // release tag (= build date)
+const string MpvForkGitHash       = "150a4b6dba";   // git short hash in the dev archive filename
+
+string[] rifeModels = [
+    "rife_v4.7.7z",
+    "rife_v4.8.7z",
+    "rife_v4.9.7z",
+    "rife_v4.10.7z",
+    "rife_v4.11.7z",
+    "rife_v4.12.7z",
+    "rife_v4.12_lite.7z",
+    "rife_v4.13.7z",
+    "rife_v4.13_lite.7z",
+    "rife_v4.14.7z",
+    "rife_v4.14_lite.7z",
+    "rife_v4.15.7z",
+    "rife_v4.15_lite.7z",
+    "rife_v4.16_lite.7z",
+    "rife_v4.17.7z",
+    "rife_v4.17_lite.7z",
+    "rife_v4.18.7z",
+    "rife_v4.19.7z",
+    "rife_v4.20.7z",
+    "rife_v4.21.7z",
+    "rife_v4.22.7z",
+    "rife_v4.22_lite.7z",
+    "rife_v4.23.7z",
+    "rife_v4.24.7z",
+    "rife_v4.25.7z",
+    "rife_v4.26.7z",
+    "rife_v4.26_heavy.7z",
+];
 
 if (args.Length < 1)
 {
@@ -19,20 +62,19 @@ var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animej
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
 var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
 var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
-var vapourSynthVersion = "R73";
 
 async Task InstallPortableVapourSynth()
 {
     // Download Python Installer
     Console.WriteLine("Downloading Portable VapourSynth Installer...");
-    var downloadUrl = $"https://github.com/vapoursynth/vapoursynth/releases/download/{vapourSynthVersion}/Install-Portable-VapourSynth-{vapourSynthVersion}.ps1";
+    var downloadUrl = $"https://github.com/vapoursynth/vapoursynth/releases/download/{VapourSynthVersion}/Install-Portable-VapourSynth-{VapourSynthVersion}.ps1";
     var targetPath = Path.GetFullPath("installvs.ps1");
     await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
         Console.WriteLine($"Downloading Portable VapourSynth Installer ({progress}%)...");
     });
 
-    // Install Python 
+    // Install Python
     Console.WriteLine("Installing Embedded Python with Portable VapourSynth...");
 
     using (PowerShell powerShell = PowerShell.Create())
@@ -76,8 +118,12 @@ async Task InstallPortableVapourSynth()
 
 void FixPythonPth()
 {
-    using StreamWriter writer = new(Path.Join(installDirectory, "python313._pth"), true);
-    writer.WriteLine("./animejanai/core\n");
+    var pthFile = Directory.GetFiles(installDirectory, "python3*._pth").FirstOrDefault();
+    if (pthFile != null)
+    {
+        using StreamWriter writer = new(pthFile, true);
+        writer.WriteLine("./animejanai/core\n");
+    }
 }
 
 async Task InstallPythonDependencies()
@@ -101,7 +147,7 @@ async Task InstallPythonVapourSynthPlugins()
 async Task InstallVapourSynthMiscFilters()
 {
     Console.WriteLine("Downloading VapourSynth Misc Filters...");
-    var downloadUrl = "https://github.com/vapoursynth/vs-miscfilters-obsolete/releases/download/R2/miscfilters-r2.7z";
+    var downloadUrl = $"https://github.com/vapoursynth/vs-miscfilters-obsolete/releases/download/{MiscFiltersTag}/miscfilters-{MiscFiltersTag.ToLowerInvariant()}.7z";
     var targetPath = Path.GetFullPath("miscfilters.7z");
     await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
@@ -129,7 +175,7 @@ async Task InstallVapourSynthMiscFilters()
 async Task InstallVapourSynthAkarin()
 {
     Console.WriteLine("Downloading VapourSynth Akarin...");
-    var downloadUrl = "https://github.com/AkarinVS/vapoursynth-plugin/releases/download/v0.96/akarin-release-lexpr-amd64-v0.96g3.7z";
+    var downloadUrl = $"https://github.com/AkarinVS/vapoursynth-plugin/releases/download/{AkarinTag}/akarin-release-lexpr-amd64-{AkarinFileVersion}.7z";
     var targetPath = Path.GetFullPath("akarin.7z");
     await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
@@ -150,8 +196,12 @@ async Task InstallVapourSynthAkarin()
 async Task InstallVsmlrt()
 {
     Console.WriteLine("Downloading vs-mlrt...");
-    var baseDownloadUrl = "https://github.com/AmusementClub/vs-mlrt/releases/download/v15.16/";
-    var fileNames = new[] { "vsmlrt-windows-x64-cuda.v15.16.7z.001", "vsmlrt-windows-x64-cuda.v15.16.7z.002" };
+    var baseDownloadUrl = $"https://github.com/AmusementClub/vs-mlrt/releases/download/{VsMlrtVersion}/";
+    var fileNames = new[]
+    {
+        $"vsmlrt-windows-x64-cuda.{VsMlrtVersion}.7z.001",
+        $"vsmlrt-windows-x64-cuda.{VsMlrtVersion}.7z.002",
+    };
     var targetPaths = fileNames.Select(f => Path.GetFullPath(f)).ToArray();
 
     double lastProgress = -1;
@@ -215,39 +265,9 @@ async Task InstallVsmlrt()
 
 async Task InstallRife()
 {
-    List<string> models = [
-        "rife_v4.7.7z",
-        "rife_v4.8.7z",
-        "rife_v4.9.7z",
-        "rife_v4.10.7z",
-        "rife_v4.11.7z",
-        "rife_v4.12.7z",
-        "rife_v4.12_lite.7z",
-        "rife_v4.13.7z",
-        "rife_v4.13_lite.7z",
-        "rife_v4.14.7z",
-        "rife_v4.14_lite.7z",
-        "rife_v4.15.7z",
-        "rife_v4.15_lite.7z",
-        "rife_v4.16_lite.7z",
-        "rife_v4.17.7z",
-        "rife_v4.17_lite.7z",
-        "rife_v4.18.7z",
-        "rife_v4.19.7z",
-        "rife_v4.20.7z",
-        "rife_v4.21.7z",
-        "rife_v4.22.7z",
-        "rife_v4.22_lite.7z",
-        "rife_v4.23.7z",
-        "rife_v4.24.7z",
-        "rife_v4.25.7z",
-        "rife_v4.26.7z",
-        "rife_v4.26_heavy.7z",
-    ];
-
     var downloadUrlBase = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/";
 
-    foreach (var model in models)
+    foreach (var model in rifeModels)
     {
         var downloadUrl = downloadUrlBase + model;
         var targetPath = Path.GetFullPath(model);
@@ -266,7 +286,7 @@ async Task InstallRife()
 
 async Task InstallMpvnet()
 {
-    var downloadUrl = "https://github.com/mpvnet-player/mpv.net/releases/download/v7.1.2.0/mpv.net-v7.1.2.0-portable-x64.zip";
+    var downloadUrl = $"https://github.com/mpvnet-player/mpv.net/releases/download/{MpvNetVersion}/mpv.net-{MpvNetVersion}-portable-x64.zip";
     var targetPath = Path.GetFullPath("mpvnet.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
@@ -279,6 +299,34 @@ async Task InstallMpvnet()
         Console.WriteLine($"Extracting mpv.net ({progress}%)...");
     });
 
+    File.Delete(targetPath);
+}
+
+async Task InstallCustomLibmpv()
+{
+    Console.WriteLine("Downloading custom libmpv fork...");
+    var downloadUrl = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}/mpv-dev-x86_64-{MpvForkVersion}-git-{MpvForkGitHash}.7z";
+    var targetPath = Path.GetFullPath("mpv-dev.7z");
+    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    {
+        Console.WriteLine($"Downloading custom libmpv fork ({progress}%)...");
+    });
+
+    Console.WriteLine("Extracting custom libmpv fork...");
+    var targetExtractPath = Path.Combine(installDirectory, "temp-libmpv");
+    Directory.CreateDirectory(targetExtractPath);
+
+    using (ArchiveFile archiveFile = new(targetPath))
+    {
+        archiveFile.Extract(targetExtractPath);
+
+        File.Copy(
+            Path.Combine(targetExtractPath, "libmpv-2.dll"),
+            Path.Combine(installDirectory, "libmpv-2.dll"),
+            true // overwrite the stock mpv.net libmpv-2.dll
+        );
+    }
+    Directory.Delete(targetExtractPath, true);
     File.Delete(targetPath);
 }
 
@@ -297,6 +345,94 @@ void InstallAnimeJaNaiCore()
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
 
+// Writes version.txt + manifest.json into the install root. The updater (AnimeJaNaiUpdater) reads
+// these to know the installed version, decide overlay-vs-full updates (by comparing deps), and know
+// which paths to overwrite (overlay_paths) vs preserve (user_preserve). deploy.yml reads
+// overlay_paths from manifest.json to build the lightweight overlay archive.
+void WriteVersionAndManifest()
+{
+    var version = args[0];
+    File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
+
+    var manifest = new
+    {
+        package_version = version,
+        // Platform-specific names the updater needs. Each platform's builder emits its own values
+        // (a future Linux builder would use e.g. "mpv" / "7zz") so the same updater code works
+        // cross-platform without hardcoding Windows assumptions.
+        player_executable = "mpvnet.exe",
+        archive_tool = "7z.exe",
+        // Heavy dependencies. If these are unchanged between releases the updater applies the small
+        // overlay; if any differ it falls back to the full package. ConfEditorVersion is omitted on
+        // purpose: the editor ships inside the overlay, so it updates without a full download.
+        deps = new
+        {
+            vapoursynth = VapourSynthVersion,
+            vsmlrt = VsMlrtVersion,
+            akarin = AkarinFileVersion,
+            miscfilters = MiscFiltersTag,
+            mpvnet = MpvNetVersion,
+            mpvfork = $"{MpvForkVersion}-{MpvForkGitHash}",
+            rife = rifeModels,
+        },
+        // Managed program files (relative to install root) that make up the overlay update and are
+        // overwritten on update. Extraction overlays these without deleting extras (e.g. user onnx).
+        overlay_paths = new[]
+        {
+            "version.txt",
+            "manifest.json",
+            "AnimeJaNaiUpdater.exe",
+            "animejanai/core",
+            "animejanai/profiles",
+            "animejanai/benchmarks",
+            "animejanai/onnx",
+            "animejanai/AnimeJaNaiConfEditor.exe",
+            "animejanai/av_libglesv2.dll",
+            "animejanai/libHarfBuzzSharp.dll",
+            "animejanai/libSkiaSharp.dll",
+            "portable_config/scripts",
+            "portable_config/shaders",
+            "portable_config/mpv.conf",
+            "portable_config/input.conf",
+        },
+        // User data never overwritten by an update (full updates preserve these explicitly).
+        user_preserve = new[]
+        {
+            "animejanai/animejanai.conf",
+            "portable_config/mpv-user.conf",
+            "portable_config/input-user.conf",
+            "portable_config/saved-props.json",
+            "portable_config/settings.xml",
+            "portable_config/screenshots",
+        },
+    };
+
+    var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+    File.WriteAllText(Path.Combine(installDirectory, "manifest.json"), json);
+}
+
+async Task InstallAnimeJaNaiConfEditor()
+{
+    Console.WriteLine("Downloading AnimeJaNaiConfEditor...");
+    var downloadUrl = $"https://github.com/the-database/AnimeJaNaiConfEditor/releases/download/{ConfEditorVersion}/AnimeJaNaiConfEditor-portable-x64.zip";
+    var targetPath = Path.GetFullPath("AnimeJaNaiConfEditor-portable-x64.zip");
+    await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    {
+        Console.WriteLine($"Downloading AnimeJaNaiConfEditor ({progress}%)...");
+    });
+
+    Console.WriteLine("Extracting AnimeJaNaiConfEditor...");
+    // The zip is flat (AnimeJaNaiConfEditor.exe + native DLLs at root) and lands directly in
+    // animejanai/, alongside the overlay's own animejanai.conf and onnx/ (which it does not contain).
+    var targetExtractPath = Path.Combine(installDirectory, "animejanai");
+    ExtractZip(targetPath, targetExtractPath, (double progress) =>
+    {
+        Console.WriteLine($"Extracting AnimeJaNaiConfEditor ({progress}%)...");
+    });
+
+    File.Delete(targetPath);
+}
+
 void Cleanup()
 {
     List<string> dirs = ["doc", "vs-temp-dl", "Scripts", "sdk", "wheel"];
@@ -310,11 +446,14 @@ void Cleanup()
         }
     }
 
-    foreach (var dir in Directory.GetDirectories(vsmlrtModelsPath))
+    if (Directory.Exists(vsmlrtModelsPath))
     {
-        if (Path.GetFileName(dir) != "rife")
+        foreach (var dir in Directory.GetDirectories(vsmlrtModelsPath))
         {
-            Directory.Delete(dir, true);
+            if (Path.GetFileName(dir) != "rife")
+            {
+                Directory.Delete(dir, true);
+            }
         }
     }
 }
@@ -452,9 +591,12 @@ async Task Main()
     await InstallVsmlrt();
     await InstallRife();
     await InstallMpvnet();
+    await InstallCustomLibmpv();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();
+    await InstallAnimeJaNaiConfEditor();
     Cleanup();
+    WriteVersionAndManifest();
 }
 
 await Main();

@@ -117,7 +117,7 @@ def rife(
     colorlv = 1
     try:
         colorlv = getattr(input.get_frame(0).props, "_ColorRange", 0)
-    except:
+    except Exception:
         pass
     fmt_in = input.format.id
     fps_factor = fps_num / fps_den
@@ -154,7 +154,7 @@ def rife(
         cut1 = core.resize.Bilinear(clip=cut0, format=vs.RGBH, matrix_in_s="709")
         return rife_cut(cut1, ext_proc, w_tmp, h_tmp, tensorrt, t_tta, fps_num, fps_den, scale_model, model, gpu_t,
                         ws_size, st_eng, lt_d2k, gpu, fps_factor, colorlv, fps_in, fmt_in)
-    except:
+    except Exception:
         cut1 = core.resize.Bilinear(clip=cut0, format=vs.RGBS, matrix_in_s="709")
         return rife_cut(cut1, ext_proc, w_tmp, h_tmp, tensorrt, t_tta, fps_num, fps_den, scale_model, model, gpu_t,
                         ws_size, st_eng, lt_d2k, gpu, fps_factor, colorlv, fps_in, fmt_in)
