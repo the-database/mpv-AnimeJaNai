@@ -205,6 +205,16 @@ def run_animejanai(clip, container_fps, chain_conf, backend):
 
     if chain_conf['rife']:
         # TODO rife nvidia or rife other
+        target_w = clip.width
+        target_h = clip.height
+        pad_w = ((target_w + 63) // 64 * 64) - target_w
+        pad_h = ((target_h + 63) // 64 * 64) - target_h
+        if pad_w or pad_h:
+            # We split the padding to keep the image centered
+            clip = vs.core.std.AddBorders(clip, 
+                                          left=pad_w//2, right=pad_w - (pad_w//2), 
+                                          top=pad_h//2, bottom=pad_h - (pad_h//2))
+        
         clip = rife_cuda.rife(
             clip,
             model=chain_conf['rife_model'],
@@ -216,7 +226,13 @@ def run_animejanai(clip, container_fps, chain_conf, backend):
             lt_d2k=True,
             tensorrt=backend.lower() == 'tensorrt'
         )
-        current_logger_steps.append(f"Applied RIFE v{chain_conf['rife_model']} Interpolation {chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}x;    New Video FPS: {float(container_fps) * chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}")
+        if pad_w or pad_h:
+            clip = vs.core.std.Crop(clip, 
+                                    left=pad_w//2, right=pad_w - (pad_w//2), 
+                                    top=pad_h//2, bottom=pad_h - (pad_h//2))
+            current_logger_steps.append(f"Padded to {target_w + pad_w}x{target_h + pad_h}, applied RIFE v{chain_conf['rife_model']} Interpolation {chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}x, cropped back to {target_w}x{target_h};    New Video FPS: {float(container_fps) * chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}")
+        else:
+            current_logger_steps.append(f"Applied RIFE v{chain_conf['rife_model']} Interpolation {chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}x;    New Video FPS: {float(container_fps) * chain_conf['rife_factor_numerator'] / chain_conf['rife_factor_denominator']:.3f}")
 
     clip.set_output()
 
