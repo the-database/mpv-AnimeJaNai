@@ -14,7 +14,7 @@ function show_animejanai_stats()
         if mp.get_property("vf") == "" then
             message = "Upscaling is disabled"
         else
-            local data_file_path = (mp.command_native({'expand-path', "~~/../animejanai/core/currentanimejanai.log"}))
+            local data_file_path = (mp.command_native({'expand-path', "~~/../animejanai/currentanimejanai.log"}))
             message = read_file(data_file_path)
 
             if message == "" then
