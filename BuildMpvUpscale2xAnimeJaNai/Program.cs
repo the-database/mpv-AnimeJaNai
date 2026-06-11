@@ -1,23 +1,32 @@
-﻿// See https://aka.ms/new-console-template for more information
+// Package builder for the native-filter mpv-upscale-2x_animejanai.
+//
+// The package has no VapourSynth, Python, or vs-mlrt plugins: upscaling and
+// RIFE run inside the mpv fork's vf_animejanai filter, which loads aji.dll
+// (github.com/the-database/animejanai-inference). Everything NVIDIA lives in
+// one self-contained animejanai/inference/ directory (the filter resolves
+// the shim's dependencies from its own directory).
 using ICSharpCode.SharpZipLib.Core;
 using ICSharpCode.SharpZipLib.Zip;
 using SevenZipExtractor;
 using System.Diagnostics;
-using System.Management.Automation;
 using System.Text;
 using System.Text.Json;
 using static Downloader;
 
 // Third-party component versions. Bump these together when cutting a release.
-const string VapourSynthVersion   = "R73";
-const string VsMlrtVersion        = "v15.16";       // appears in URL path AND in archive filenames
-const string AkarinTag            = "v0.96";        // GitHub release tag
-const string AkarinFileVersion    = "v0.96g3";      // version embedded in the archive filename
-const string MiscFiltersTag       = "R2";           // GitHub release tag (URL is uppercase, archive filename uses lowercase)
+// The inference runtime (TensorRT + trtexec) is reused from the vs-mlrt cuda
+// release archives: publicly downloadable, license-precedented, and trtexec
+// is version-matched to nvinfer by construction. aji.dll must be built
+// against the SAME TensorRT major.minor (v15.16 == TensorRT 10.16).
+const string VsMlrtCudaVersion    = "v15.16";
+const string AjiVersion           = "v0.1.0";       // github.com/the-database/animejanai-inference release tag
+const string SevenZipVersion      = "2409";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
 const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/AnimeJaNaiConfEditor release tag
 
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
+// TODO: bump to the first build containing vf_animejanai (merge the
+// vf-animejanai branch into the fork's master first).
 const string MpvForkVersion       = "20260527";     // release tag (= build date)
 const string MpvForkGitHash       = "150a4b6dba";   // git short hash in the dev archive filename
 
@@ -51,156 +60,65 @@ string[] rifeModels = [
     "rife_v4.26_heavy.7z",
 ];
 
+// TensorRT runtime files taken from the vs-mlrt cuda archive's vsmlrt-cuda/
+// directory. Everything else in there (cuDNN, cuBLAS, onnxruntime, the lean
+// and dispatch runtimes) serves backends/options the native filter does not
+// use; engine builds run with --tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT.
+string[] inferenceRuntimeFiles = [
+    "nvinfer_10.dll",
+    "nvinfer_plugin_10.dll",
+    "nvonnxparser_10.dll",
+    "trtexec.exe",
+];
+string[] inferenceRuntimePrefixes = [
+    "cudart64_",
+    "nvinfer_builder_resource_",
+];
+
 if (args.Length < 1)
 {
     throw new ArgumentException("Version is required.");
 }
 
-// Get the path of the currently executing assembly
 var assemblyDirectory = AppContext.BaseDirectory;
 var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
-var vapourSynthPluginsPath = Path.Combine(installDirectory, "vs-plugins");
-var vsmlrtModelsPath = Path.Combine(vapourSynthPluginsPath, "models");
+var inferencePath = Path.Combine(installDirectory, "animejanai", "inference");
+var onnxPath = Path.Combine(installDirectory, "animejanai", "onnx");
 
-async Task InstallPortableVapourSynth()
+// Standalone 7-Zip console (7za.exe): used here to extract the multi-part
+// vs-mlrt archive, and shipped at the install root for the updater
+// (manifest archive_tool).
+async Task InstallSevenZip()
 {
-    // Download Python Installer
-    Console.WriteLine("Downloading Portable VapourSynth Installer...");
-    var downloadUrl = $"https://github.com/vapoursynth/vapoursynth/releases/download/{VapourSynthVersion}/Install-Portable-VapourSynth-{VapourSynthVersion}.ps1";
-    var targetPath = Path.GetFullPath("installvs.ps1");
-    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    Console.WriteLine("Downloading 7-Zip standalone console...");
+    var downloadUrl = $"https://www.7-zip.org/a/7z{SevenZipVersion}-extra.7z";
+    var targetPath = Path.GetFullPath("7z-extra.7z");
+    await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
-        Console.WriteLine($"Downloading Portable VapourSynth Installer ({progress}%)...");
+        Console.WriteLine($"Downloading 7-Zip ({progress}%)...");
     });
 
-    // Install Python
-    Console.WriteLine("Installing Embedded Python with Portable VapourSynth...");
-
-    using (PowerShell powerShell = PowerShell.Create())
-    {
-        powerShell.AddScript("Set-ExecutionPolicy RemoteSigned -Scope Process -Force");
-        powerShell.AddScript("Import-Module Microsoft.PowerShell.Archive");
-
-        var scriptContents = File.ReadAllText(targetPath);
-
-        powerShell.AddScript(scriptContents);
-        powerShell.AddParameter("Unattended");
-        powerShell.AddParameter("TargetFolder", installDirectory);
-
-        PSDataCollection<PSObject> outputCollection = [];
-        outputCollection.DataAdded += (sender, e) =>
-        {
-            Console.WriteLine(outputCollection[e.Index].ToString());
-        };
-
-        try
-        {
-            IAsyncResult asyncResult = powerShell.BeginInvoke<PSObject, PSObject>(null, outputCollection);
-            powerShell.EndInvoke(asyncResult);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"An error occurred: {ex.Message}");
-        }
-
-        if (powerShell.Streams.Error.Count > 0)
-        {
-            foreach (var error in powerShell.Streams.Error)
-            {
-                Debug.WriteLine($"Error: {error}");
-            }
-        }
-    }
-
-    File.Delete(targetPath);
-}
-
-void FixPythonPth()
-{
-    var pthFile = Directory.GetFiles(installDirectory, "python3*._pth").FirstOrDefault();
-    if (pthFile != null)
-    {
-        using StreamWriter writer = new(pthFile, true);
-        writer.WriteLine("./animejanai/core\n");
-    }
-}
-
-async Task InstallPythonDependencies()
-{
-    string[] dependencies = { "packaging", "numpy", "onnx" };
-
-    var cmd = $@".\python.exe -m pip install {string.Join(" ", dependencies)}";
-
-    await RunInstallCommand(cmd);
-}
-
-async Task InstallPythonVapourSynthPlugins()
-{
-    string[] dependencies = { "ffms2" };
-
-    var cmd = $@".\python.exe vsrepo.py -p update && .\python.exe vsrepo.py -p install {string.Join(" ", dependencies)}";
-
-    await RunInstallCommand(cmd);
-}
-
-async Task InstallVapourSynthMiscFilters()
-{
-    Console.WriteLine("Downloading VapourSynth Misc Filters...");
-    var downloadUrl = $"https://github.com/vapoursynth/vs-miscfilters-obsolete/releases/download/{MiscFiltersTag}/miscfilters-{MiscFiltersTag.ToLowerInvariant()}.7z";
-    var targetPath = Path.GetFullPath("miscfilters.7z");
-    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
-    {
-        Console.WriteLine($"Downloading VapourSynth Misc Filters ({progress}%)...");
-    });
-
-    Console.WriteLine("Extracting VapourSynth Misc Filters...");
-    var targetExtractPath = Path.Combine(vapourSynthPluginsPath, "temp");
+    var targetExtractPath = Path.GetFullPath("7z-extra-temp");
     Directory.CreateDirectory(targetExtractPath);
-
     using (ArchiveFile archiveFile = new(targetPath))
     {
         archiveFile.Extract(targetExtractPath);
-
-        File.Copy(
-            Path.Combine(targetExtractPath, "win64", "MiscFilters.dll"),
-            Path.Combine(vapourSynthPluginsPath, "MiscFilters.dll"),
-            true
-        );
     }
+    File.Copy(Path.Combine(targetExtractPath, "x64", "7za.exe"),
+              Path.Combine(installDirectory, "7za.exe"), true);
     Directory.Delete(targetExtractPath, true);
     File.Delete(targetPath);
 }
 
-async Task InstallVapourSynthAkarin()
+async Task InstallInferenceRuntime()
 {
-    Console.WriteLine("Downloading VapourSynth Akarin...");
-    var downloadUrl = $"https://github.com/AkarinVS/vapoursynth-plugin/releases/download/{AkarinTag}/akarin-release-lexpr-amd64-{AkarinFileVersion}.7z";
-    var targetPath = Path.GetFullPath("akarin.7z");
-    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
-    {
-        Console.WriteLine($"Downloading VapourSynth Akarin ({progress}%)...");
-    });
-
-    Console.WriteLine("Extracting VapourSynth Akarin...");
-    var targetExtractPath = Path.Combine(vapourSynthPluginsPath);
-    Directory.CreateDirectory(targetExtractPath);
-
-    using (ArchiveFile archiveFile = new(targetPath))
-    {
-        archiveFile.Extract(targetExtractPath);
-    }
-    File.Delete(targetPath);
-}
-
-async Task InstallVsmlrt()
-{
-    Console.WriteLine("Downloading vs-mlrt...");
-    var baseDownloadUrl = $"https://github.com/AmusementClub/vs-mlrt/releases/download/{VsMlrtVersion}/";
+    Console.WriteLine("Downloading TensorRT runtime (from the vs-mlrt cuda release)...");
+    var baseDownloadUrl = $"https://github.com/AmusementClub/vs-mlrt/releases/download/{VsMlrtCudaVersion}/";
     var fileNames = new[]
     {
-        $"vsmlrt-windows-x64-cuda.{VsMlrtVersion}.7z.001",
-        $"vsmlrt-windows-x64-cuda.{VsMlrtVersion}.7z.002",
+        $"vsmlrt-windows-x64-cuda.{VsMlrtCudaVersion}.7z.001",
+        $"vsmlrt-windows-x64-cuda.{VsMlrtCudaVersion}.7z.002",
     };
     var targetPaths = fileNames.Select(f => Path.GetFullPath(f)).ToArray();
 
@@ -222,46 +140,66 @@ async Task InstallVsmlrt()
         });
     }
 
-    Console.WriteLine("Extracting vs-mlrt (this may take several minutes)...");
-    var targetDirectory = Path.Join(vapourSynthPluginsPath);
-    Directory.CreateDirectory(targetDirectory);
+    Console.WriteLine("Extracting TensorRT runtime (this may take several minutes)...");
+    var tempDirectory = Path.GetFullPath("vsmlrt-temp");
+    Directory.CreateDirectory(tempDirectory);
 
-    string sevenZipPath = Path.Combine(installDirectory, "7z.exe");
-    string archivePath = targetPaths[0];
+    // Only vsmlrt-cuda/ is needed (a flat directory); extracting just that
+    // subtree also skips the plugin DLLs (vstrt/vsort/...) entirely.
+    await RunProcess(Path.Combine(installDirectory, "7za.exe"),
+                     $"x \"{targetPaths[0]}\" -o\"{tempDirectory}\" \"vsmlrt-cuda\\*\" -r- -y");
 
-    var process = new Process()
+    Directory.CreateDirectory(inferencePath);
+    var cudaDirectory = Path.Combine(tempDirectory, "vsmlrt-cuda");
+    foreach (var file in Directory.GetFiles(cudaDirectory))
     {
-        StartInfo = new ProcessStartInfo
+        var name = Path.GetFileName(file);
+        bool keep = inferenceRuntimeFiles.Contains(name) ||
+                    inferenceRuntimePrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase)) ||
+                    name.Contains("LICENSE", StringComparison.OrdinalIgnoreCase);
+        if (keep)
         {
-            FileName = sevenZipPath,
-            Arguments = $"x \"{archivePath}\" -o\"{targetDirectory}\" -y",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
+            File.Copy(file, Path.Combine(inferencePath, name), true);
         }
-    };
-
-    process.Start();
-    string output = await process.StandardOutput.ReadToEndAsync();
-    string error = await process.StandardError.ReadToEndAsync();
-    await process.WaitForExitAsync();
-
-    if (process.ExitCode != 0)
-    {
-        Console.WriteLine($"7-Zip extraction failed: {error}");
-        return;
     }
 
-    Console.WriteLine("Extraction complete.");
-    File.Move(Path.Combine(targetDirectory, "vsmlrt.py"), Path.Combine(installDirectory, "vsmlrt.py"));
-
+    Directory.Delete(tempDirectory, true);
     foreach (var targetPath in targetPaths)
     {
         File.Delete(targetPath);
     }
 }
 
+async Task InstallAji()
+{
+    Directory.CreateDirectory(inferencePath);
+
+    // Dev override: point AJI_LOCAL_ZIP at a locally built archive.
+    var localZip = Environment.GetEnvironmentVariable("AJI_LOCAL_ZIP");
+    string targetPath;
+    if (!string.IsNullOrEmpty(localZip))
+    {
+        Console.WriteLine($"Using local aji build: {localZip}");
+        targetPath = localZip;
+    }
+    else
+    {
+        Console.WriteLine("Downloading aji (native inference shim)...");
+        var downloadUrl = $"https://github.com/the-database/animejanai-inference/releases/download/{AjiVersion}/aji-windows-x64.zip";
+        targetPath = Path.GetFullPath("aji-windows-x64.zip");
+        await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+        {
+            Console.WriteLine($"Downloading aji ({progress}%)...");
+        });
+    }
+
+    ExtractZip(targetPath, inferencePath, (double progress) => { });
+
+    if (string.IsNullOrEmpty(localZip))
+    {
+        File.Delete(targetPath);
+    }
+}
 
 async Task InstallRife()
 {
@@ -275,9 +213,9 @@ async Task InstallRife()
 
         using (ArchiveFile archiveFile = new(targetPath))
         {
-            Directory.CreateDirectory(vsmlrtModelsPath);
-            archiveFile.Extract(vsmlrtModelsPath);
-            var onnxFiles = Directory.GetFiles(Path.Combine(vsmlrtModelsPath, "rife"));
+            // archives contain rife/<model>.onnx -> lands in onnx/rife/
+            Directory.CreateDirectory(onnxPath);
+            archiveFile.Extract(onnxPath);
         }
 
         File.Delete(targetPath);
@@ -293,7 +231,7 @@ async Task InstallMpvnet()
         Console.WriteLine($"Downloading mpv.net ({progress}%)...");
     });
 
-    Console.WriteLine("Extracting mpv.net models...");
+    Console.WriteLine("Extracting mpv.net...");
     ExtractZip(targetPath, installDirectory, (double progress) =>
     {
         Console.WriteLine($"Extracting mpv.net ({progress}%)...");
@@ -345,72 +283,6 @@ void InstallAnimeJaNaiCore()
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
 
-// Writes version.txt + manifest.json into the install root. The updater (AnimeJaNaiUpdater) reads
-// these to know the installed version, decide overlay-vs-full updates (by comparing deps), and know
-// which paths to overwrite (overlay_paths) vs preserve (user_preserve). deploy.yml reads
-// overlay_paths from manifest.json to build the lightweight overlay archive.
-void WriteVersionAndManifest()
-{
-    var version = args[0];
-    File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
-
-    var manifest = new
-    {
-        package_version = version,
-        // Platform-specific names the updater needs. Each platform's builder emits its own values
-        // (a future Linux builder would use e.g. "mpv" / "7zz") so the same updater code works
-        // cross-platform without hardcoding Windows assumptions.
-        player_executable = "mpvnet.exe",
-        archive_tool = "7z.exe",
-        // Heavy dependencies. If these are unchanged between releases the updater applies the small
-        // overlay; if any differ it falls back to the full package. ConfEditorVersion is omitted on
-        // purpose: the editor ships inside the overlay, so it updates without a full download.
-        deps = new
-        {
-            vapoursynth = VapourSynthVersion,
-            vsmlrt = VsMlrtVersion,
-            akarin = AkarinFileVersion,
-            miscfilters = MiscFiltersTag,
-            mpvnet = MpvNetVersion,
-            mpvfork = $"{MpvForkVersion}-{MpvForkGitHash}",
-            rife = rifeModels,
-        },
-        // Managed program files (relative to install root) that make up the overlay update and are
-        // overwritten on update. Extraction overlays these without deleting extras (e.g. user onnx).
-        overlay_paths = new[]
-        {
-            "version.txt",
-            "manifest.json",
-            "AnimeJaNaiUpdater.exe",
-            "animejanai/core",
-            "animejanai/profiles",
-            "animejanai/benchmarks",
-            "animejanai/onnx",
-            "animejanai/AnimeJaNaiConfEditor.exe",
-            "animejanai/av_libglesv2.dll",
-            "animejanai/libHarfBuzzSharp.dll",
-            "animejanai/libSkiaSharp.dll",
-            "portable_config/scripts",
-            "portable_config/shaders",
-            "portable_config/mpv.conf",
-            "portable_config/input.conf",
-        },
-        // User data never overwritten by an update (full updates preserve these explicitly).
-        user_preserve = new[]
-        {
-            "animejanai/animejanai.conf",
-            "portable_config/mpv-user.conf",
-            "portable_config/input-user.conf",
-            "portable_config/saved-props.json",
-            "portable_config/settings.xml",
-            "portable_config/screenshots",
-        },
-    };
-
-    var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
-    File.WriteAllText(Path.Combine(installDirectory, "manifest.json"), json);
-}
-
 async Task InstallAnimeJaNaiConfEditor()
 {
     Console.WriteLine("Downloading AnimeJaNaiConfEditor...");
@@ -433,29 +305,96 @@ async Task InstallAnimeJaNaiConfEditor()
     File.Delete(targetPath);
 }
 
-void Cleanup()
+// The TensorRT SLA requires this attribution when redistributing the
+// runtime; keep it next to the redistributed files.
+void WriteThirdPartyNotices()
 {
-    List<string> dirs = ["doc", "vs-temp-dl", "Scripts", "sdk", "wheel"];
+    var notice = """
+        Third-party components in this directory
+        ========================================
 
-    foreach (var dir in dirs)
-    {
-        var targetDir = Path.Combine(installDirectory, dir);
-        if (Directory.Exists(targetDir))
-        {
-            Directory.Delete(targetDir, true);
-        }
-    }
+        NVIDIA TensorRT runtime (nvinfer_10.dll, nvinfer_plugin_10.dll,
+        nvonnxparser_10.dll, nvinfer_builder_resource_*.dll, trtexec.exe)
+        and NVIDIA CUDA runtime (cudart64_*.dll), redistributed under the
+        NVIDIA TensorRT Software License Agreement and CUDA Toolkit EULA:
 
-    if (Directory.Exists(vsmlrtModelsPath))
+            This software contains source code provided by NVIDIA Corporation.
+
+        These files are obtained from the vs-mlrt project's release archives
+        (https://github.com/AmusementClub/vs-mlrt), which redistributes them
+        under the same terms.
+
+        aji.dll / aji_harness.exe / aji_kernel_test.exe:
+        https://github.com/the-database/animejanai-inference
+        """;
+    File.WriteAllText(Path.Combine(inferencePath, "THIRD_PARTY_NOTICES.txt"), notice);
+}
+
+// Writes version.txt + manifest.json into the install root. The updater (AnimeJaNaiUpdater) reads
+// these to know the installed version, decide overlay-vs-full updates (by comparing deps), and know
+// which paths to overwrite (overlay_paths) vs preserve (user_preserve). deploy.yml reads
+// overlay_paths from manifest.json to build the lightweight overlay archive.
+void WriteVersionAndManifest()
+{
+    var version = args[0];
+    File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
+
+    var manifest = new
     {
-        foreach (var dir in Directory.GetDirectories(vsmlrtModelsPath))
+        package_version = version,
+        // Platform-specific names the updater needs. Each platform's builder emits its own values
+        // (a future Linux builder would use e.g. "mpv" / "7zz") so the same updater code works
+        // cross-platform without hardcoding Windows assumptions.
+        player_executable = "mpvnet.exe",
+        archive_tool = "7za.exe",
+        // Heavy dependencies. If these are unchanged between releases the updater applies the small
+        // overlay; if any differ it falls back to the full package. ConfEditorVersion is omitted on
+        // purpose: the editor ships inside the overlay, so it updates without a full download.
+        deps = new
         {
-            if (Path.GetFileName(dir) != "rife")
-            {
-                Directory.Delete(dir, true);
-            }
-        }
-    }
+            mpvnet = MpvNetVersion,
+            mpvfork = $"{MpvForkVersion}-{MpvForkGitHash}",
+            inference_runtime = VsMlrtCudaVersion,
+            sevenzip = SevenZipVersion,
+            rife = rifeModels,
+        },
+        // Managed program files (relative to install root) that make up the overlay update and are
+        // overwritten on update. Extraction overlays these without deleting extras (e.g. user onnx).
+        // aji.dll and its tools are small and update often, so they ride the overlay; the TensorRT
+        // runtime files in the same directory are deps-versioned and only change on full updates.
+        overlay_paths = new[]
+        {
+            "version.txt",
+            "manifest.json",
+            "AnimeJaNaiUpdater.exe",
+            "animejanai/onnx",
+            "animejanai/inference/aji.dll",
+            "animejanai/inference/aji_harness.exe",
+            "animejanai/inference/aji_kernel_test.exe",
+            "animejanai/AnimeJaNaiConfEditor.exe",
+            "animejanai/av_libglesv2.dll",
+            "animejanai/libHarfBuzzSharp.dll",
+            "animejanai/libSkiaSharp.dll",
+            "portable_config/scripts",
+            "portable_config/shaders",
+            "portable_config/mpv.conf",
+            "portable_config/input.conf",
+        },
+        // User data never overwritten by an update (full updates preserve these explicitly).
+        user_preserve = new[]
+        {
+            "animejanai/animejanai.conf",
+            "animejanai/currentanimejanai.log",
+            "portable_config/mpv-user.conf",
+            "portable_config/input-user.conf",
+            "portable_config/saved-props.json",
+            "portable_config/settings.xml",
+            "portable_config/screenshots",
+        },
+    };
+
+    var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+    File.WriteAllText(Path.Combine(installDirectory, "manifest.json"), json);
 }
 
 void ExtractZip(string archivePath, string outFolder, ProgressChanged progressChanged)
@@ -475,13 +414,7 @@ void ExtractZip(string archivePath, string outFolder, ProgressChanged progressCh
                 continue;
             }
             String entryFileName = zipEntry.Name;
-            // to remove the folder from the entry:
-            //entryFileName = Path.GetFileName(entryFileName);
-            // Optionally match entrynames against a selection list here
-            // to skip as desired.
-            // The unpacked length is available in the zipEntry.Size property.
 
-            // Manipulate the output filename here as desired.
             var fullZipToPath = Path.Combine(outFolder, entryFileName);
             var directoryName = Path.GetDirectoryName(fullZipToPath);
             if (directoryName?.Length > 0)
@@ -489,12 +422,8 @@ void ExtractZip(string archivePath, string outFolder, ProgressChanged progressCh
                 Directory.CreateDirectory(directoryName);
             }
 
-            // 4K is optimum
             var buffer = new byte[4096];
 
-            // Unzip file in buffered chunks. This is just as fast as unpacking
-            // to a buffer the full size of the file, but does not waste memory.
-            // The "using" will close the stream even if an exception occurs.
             using (var zipStream = zf.GetInputStream(zipEntry))
             using (Stream fsOutput = File.Create(fullZipToPath))
             {
@@ -507,55 +436,34 @@ void ExtractZip(string archivePath, string outFolder, ProgressChanged progressCh
     }
 }
 
-async Task<string[]> RunInstallCommand(string cmd)
+async Task RunProcess(string fileName, string arguments)
 {
-    Debug.WriteLine(cmd);
+    Debug.WriteLine($"{fileName} {arguments}");
 
-    // Create a new process to run the CMD command
-    using (var process = new Process())
+    var process = new Process()
     {
-        process.StartInfo.FileName = "cmd.exe";
-        process.StartInfo.Arguments = @$"/C {cmd}";
-        process.StartInfo.RedirectStandardOutput = true;
-        process.StartInfo.RedirectStandardError = true;
-        process.StartInfo.UseShellExecute = false;
-        process.StartInfo.CreateNoWindow = true;
-        process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
-        process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
-        process.StartInfo.WorkingDirectory = installDirectory;
-
-        var result = string.Empty;
-
-        // Create a StreamWriter to write the output to a log file
-        try
+        StartInfo = new ProcessStartInfo
         {
-            //using var outputFile = new StreamWriter("error.log", append: true);
-            process.ErrorDataReceived += (sender, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    Console.WriteLine(e.Data);
-                }
-            };
-
-            process.OutputDataReceived += (sender, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    result = e.Data;
-                    Console.WriteLine(e.Data);
-                }
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine(); // Start asynchronous reading of the output
-            await process.WaitForExitAsync();
+            FileName = fileName,
+            Arguments = arguments,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         }
-        catch (IOException) { }
-    }
+    };
 
-    return [];
+    process.Start();
+    string output = await process.StandardOutput.ReadToEndAsync();
+    string error = await process.StandardError.ReadToEndAsync();
+    await process.WaitForExitAsync();
+
+    if (process.ExitCode != 0)
+    {
+        throw new Exception($"{fileName} failed (exit {process.ExitCode}): {error}");
+    }
 }
 
 void CopyDirectory(string srcDir, string targetDir)
@@ -582,20 +490,16 @@ async Task Main()
         Directory.Delete(installDirectory, true);
     }
     Directory.CreateDirectory(installDirectory);
-    await InstallPortableVapourSynth();
-    FixPythonPth();
-    await InstallPythonDependencies();
-    await InstallPythonVapourSynthPlugins();
-    await InstallVapourSynthMiscFilters();
-    await InstallVapourSynthAkarin();
-    await InstallVsmlrt();
+    await InstallSevenZip();
+    await InstallInferenceRuntime();
+    await InstallAji();
     await InstallRife();
     await InstallMpvnet();
     await InstallCustomLibmpv();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();
     await InstallAnimeJaNaiConfEditor();
-    Cleanup();
+    WriteThirdPartyNotices();
     WriteVersionAndManifest();
 }
 
