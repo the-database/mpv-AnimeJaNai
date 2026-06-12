@@ -20,7 +20,7 @@ using static Downloader;
 // against the SAME TensorRT major.minor (v15.16 == TensorRT 10.16).
 const string VsMlrtCudaVersion    = "v15.16";
 const string AjiVersion           = "v0.1.0";       // github.com/the-database/animejanai-inference release tag
-const string SevenZipVersion      = "2409";         // 7-zip "extra" standalone console version
+const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
 const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/AnimeJaNaiConfEditor release tag
 

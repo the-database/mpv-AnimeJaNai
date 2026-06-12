@@ -31,6 +31,8 @@ local stats_path = mp.command_native({'expand-path', o.stats_path})
 local building = false
 local we_paused = false
 local started_at = 0
+local build_name = "?"
+local build_res = "?"
 
 local function read_stats()
     local f = io.open(stats_path, "r")
@@ -70,37 +72,35 @@ mp.add_periodic_timer(o.poll_interval, function()
             we_paused = false
         end
         if failed then
-            mp.osd_message(
-                "AnimeJaNai setup didn't finish — playing without " ..
-                "upscaling for now.\nIt will try again next time " ..
-                "(details: the .build.log file next to the model).", 10)
+            local log_path = s and s:match("%(see ([^%)]+)%)") or
+                             "the .build.log file next to the model"
+            mp.osd_message(string.format(
+                "AnimeJaNai: Building TensorRT engine for %s for %s " ..
+                "failed. Upscaling is disabled. (details: %s).",
+                build_name, build_res, log_path), 10)
         else
             mp.osd_message(string.format(
-                "AnimeJaNai is ready \226\128\148 resuming.\n" ..
-                "Videos at this size now start instantly. (setup took %ds)",
-                math.floor(mp.get_time() - started_at)), 5)
+                "AnimeJaNai: Building TensorRT engine for %s for %s " ..
+                "completed successfully. Upscaling is active.",
+                build_name, build_res), 5)
         end
     end
 
     if building then
-        local elapsed = math.floor(mp.get_time() - started_at)
-        local lines = {
-            "AnimeJaNai: one-time setup for your GPU \226\128\148 " ..
-                "optimizing the upscaler for this video size (" ..
-                elapsed .. "s, usually about a minute)",
-        }
-        if we_paused then
-            lines[#lines + 1] =
-                "Paused during setup for best results \226\128\148 " ..
-                "playback resumes automatically."
-            lines[#lines + 1] =
-                "(Press SPACE to watch without upscaling meanwhile. " ..
-                "Quitting is safe \226\128\148 setup redoes next time.)"
-        else
-            lines[#lines + 1] =
-                "Playing without upscaling until setup finishes."
+        local n, r = s:match(
+            "Building TensorRT engine for ([^%s]+) for ([^%s]+)")
+        if n then
+            build_name = n
+            build_res = r
         end
-        mp.osd_message(table.concat(lines, "\n"), o.poll_interval + 0.5)
+        local elapsed = math.floor(mp.get_time() - started_at)
+        local second = we_paused and "Playback will resume on completion."
+                                  or "Upscaling will activate on completion."
+        mp.osd_message(string.format(
+            "AnimeJaNai: Building TensorRT engine for %s for %s " ..
+            "(%ds, usually about a minute)\n%s",
+            build_name, build_res, elapsed, second),
+            o.poll_interval + 0.5)
         -- while paused no frames flow, so the filter would never notice the
         -- finished build; this no-op command wakes it so it polls
         mp.commandv("vf-command", "aji", "poll", "1")
