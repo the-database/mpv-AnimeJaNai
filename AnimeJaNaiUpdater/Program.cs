@@ -548,6 +548,10 @@ static (bool HasNvidia, string Sm, string GpuName) DetectGpu()
     }
 }
 
+// Hardware-matched packs only. RIFE is a user choice, not a recommendation:
+// it is preselected on installs that have never managed components (fresh or
+// legacy-full), and once the user has made any component decision their
+// choice stands - no nagging after a deliberate removal.
 List<string> RecommendedPacks(PackIndex index, bool hasNvidia, string sm)
 {
     var rec = new List<string>();
@@ -558,12 +562,14 @@ List<string> RecommendedPacks(PackIndex index, bool hasNvidia, string sm)
         // (JIT-compiles for newer GPUs than this TensorRT knows)
         rec.Add(index.Packs.Any(p => p.Name == $"trt-{sm}") ? $"trt-{sm}" : "trt-ptx");
     }
-    if (index.Packs.Any(p => p.Name == "rife"))
-    {
-        rec.Add("rife"); // interpolation is a headline feature; opt out by removing
-    }
     return rec;
 }
+
+bool ComponentsNeverManaged() => !File.Exists(Path.Combine(installDir, "components.json"));
+
+bool PreselectPack(Pack pack, Dictionary<string, string> installed, List<string> rec) =>
+    installed.ContainsKey(pack.Name) || rec.Contains(pack.Name) ||
+    (pack.Name == "rife" && ComponentsNeverManaged());
 
 async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
 {
@@ -585,6 +591,7 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
                 bytes = p.Bytes,
                 installed = installed.ContainsKey(p.Name),
                 recommended = rec.Contains(p.Name),
+                preselect = PreselectPack(p, installed, rec),
             }),
         }));
         return;
@@ -602,7 +609,9 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
     foreach (var pack in index.Packs)
     {
         string state = installed.ContainsKey(pack.Name) ? "installed" :
-                       rec.Contains(pack.Name) ? "RECOMMENDED" : "available";
+                       rec.Contains(pack.Name) ? "RECOMMENDED" :
+                       PreselectPack(pack, installed, rec) ? "default on new installs" :
+                       "available";
         Console.WriteLine($"  {pack.Name,-14} {pack.Bytes / 1048576,6} MB  {state}");
     }
 }
@@ -688,7 +697,9 @@ async Task<int> AutoComponentsAsync()
     var (hasNvidia, sm, gpu) = DetectGpu();
     var rec = RecommendedPacks(index, hasNvidia, sm);
     var installed = ReadInstalledComponents(index);
-    var missing = rec.Where(r => !installed.ContainsKey(r)).ToList();
+    var missing = index.Packs
+        .Where(p => PreselectPack(p, installed, rec) && !installed.ContainsKey(p.Name))
+        .Select(p => p.Name).ToList();
     if (missing.Count == 0)
     {
         Console.WriteLine("Everything the detected hardware needs is already installed.");
