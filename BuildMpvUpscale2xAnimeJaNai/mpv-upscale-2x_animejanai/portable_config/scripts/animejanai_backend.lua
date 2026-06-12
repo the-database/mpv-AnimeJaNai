@@ -1,13 +1,19 @@
--- Aligns mpv's hardware decoding with the configured inference backend.
+-- Aligns mpv's hardware decoding AND render API with the configured
+-- inference backend.
 --
 -- The native filter consumes the decoder's GPU frames directly, and the
 -- frame type must match the backend selected in animejanai.conf:
---   TensorRT  -> CUDA frames  (hwdec=nvdec)
---   DirectML  -> D3D11 frames (hwdec=d3d11va)
+--   TensorRT  -> CUDA frames  (hwdec=nvdec, Vulkan VO: mpv's only CUDA
+--                render interop is CUDA<->Vulkan)
+--   DirectML  -> D3D11 frames (hwdec=d3d11va, D3D11 VO: mpv has no
+--                D3D11->Vulkan interop, so a Vulkan VO would hw-download
+--                every output frame)
 -- (backend=ncnn is retired and treated as DirectML by the shim.)
 --
--- Runs at startup, before the first file loads, so the first play
--- already decodes on the right path.
+-- mpv.conf carries the TensorRT defaults (hwdec=nvdec,
+-- gpu-api=vulkan,auto); this script overrides both for DirectML. Runs
+-- at startup, before the first file loads, so the first play already
+-- decodes and renders on the right path.
 
 local mp = require 'mp'
 local msg = require 'mp.msg'
@@ -41,6 +47,8 @@ local backend = (read_backend() or 'TensorRT'):lower()
 local hwdec = 'nvdec'
 if backend == 'directml' or backend == 'ncnn' then
     hwdec = 'd3d11va'
+    mp.set_property('gpu-api', 'd3d11')
 end
 mp.set_property('hwdec', hwdec)
-msg.info(string.format('backend %s -> hwdec=%s', backend, hwdec))
+msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
+                       hwdec == 'd3d11va' and ', gpu-api=d3d11' or ''))
