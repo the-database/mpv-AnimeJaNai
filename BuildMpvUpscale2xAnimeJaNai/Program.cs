@@ -29,40 +29,11 @@ const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/A
 // engineering, so 1.24.x is the ORT ceiling until the WinML migration.
 const string OrtDmlVersion        = "1.24.4";       // Microsoft.ML.OnnxRuntime.DirectML (NuGet)
 const string DirectMLVersion      = "1.15.4";       // Microsoft.AI.DirectML (NuGet)
+const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inference release tag (fp16 conversions)
 
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
 const string MpvForkVersion       = "20260611";     // release tag (= build date)
 const string MpvForkGitHash       = "ac1ce81871";   // git short hash in the dev archive filename
-
-string[] rifeModels = [
-    "rife_v4.7.7z",
-    "rife_v4.8.7z",
-    "rife_v4.9.7z",
-    "rife_v4.10.7z",
-    "rife_v4.11.7z",
-    "rife_v4.12.7z",
-    "rife_v4.12_lite.7z",
-    "rife_v4.13.7z",
-    "rife_v4.13_lite.7z",
-    "rife_v4.14.7z",
-    "rife_v4.14_lite.7z",
-    "rife_v4.15.7z",
-    "rife_v4.15_lite.7z",
-    "rife_v4.16_lite.7z",
-    "rife_v4.17.7z",
-    "rife_v4.17_lite.7z",
-    "rife_v4.18.7z",
-    "rife_v4.19.7z",
-    "rife_v4.20.7z",
-    "rife_v4.21.7z",
-    "rife_v4.22.7z",
-    "rife_v4.22_lite.7z",
-    "rife_v4.23.7z",
-    "rife_v4.24.7z",
-    "rife_v4.25.7z",
-    "rife_v4.26.7z",
-    "rife_v4.26_heavy.7z",
-];
 
 // TensorRT runtime files taken from the vs-mlrt cuda archive's vsmlrt-cuda/
 // directory. Everything else in there (cuDNN, cuBLAS, onnxruntime, the lean
@@ -248,33 +219,28 @@ async Task InstallOrtDml()
 
 async Task InstallRife()
 {
-    var downloadUrlBase = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/";
-
-    foreach (var model in rifeModels)
+    // fp16 conversions of vs-mlrt's rife v1 (video_player) models — one
+    // model set for both backends (DirectML runs them faster than fp32
+    // at reference-class quality; TensorRT 11's strong typing requires
+    // fp16 onnx). Converted by animejanai-inference's
+    // tools/convert_rife_fp16.py (GridSample grid math kept fp32) and
+    // hosted as a single release asset. Lives outside onnx/ so the
+    // heavy, deps-versioned models stay out of the overlay archive.
+    Console.WriteLine("Downloading RIFE fp16 models...");
+    var downloadUrl = "https://github.com/the-database/animejanai-inference/" +
+                      $"releases/download/{RifeModelsVersion}/rife-fp16-1.7z";
+    var targetPath = Path.GetFullPath("rife-fp16.7z");
+    await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
-        var downloadUrl = downloadUrlBase + model;
-        var targetPath = Path.GetFullPath(model);
-        await DownloadFileAsync(downloadUrl, targetPath, _ => { });
+        Console.WriteLine($"Downloading RIFE fp16 models ({progress}%)...");
+    });
 
-        // Archives contain both rife/ (implementation 1, what the native
-        // filter uses) and rife_v2/; extract to a temp dir and keep only
-        // the rife/ models. Lives outside onnx/ so the heavy, deps-
-        // versioned models stay out of the overlay archive.
-        var tempDirectory = Path.GetFullPath("rife-temp");
-        using (ArchiveFile archiveFile = new(targetPath))
-        {
-            Directory.CreateDirectory(tempDirectory);
-            archiveFile.Extract(tempDirectory);
-        }
-        Directory.CreateDirectory(rifePath);
-        foreach (var file in Directory.GetFiles(Path.Combine(tempDirectory, "rife")))
-        {
-            File.Copy(file, Path.Combine(rifePath, Path.GetFileName(file)), true);
-        }
-        Directory.Delete(tempDirectory, true);
-
-        File.Delete(targetPath);
+    Directory.CreateDirectory(rifePath);
+    using (ArchiveFile archiveFile = new(targetPath))
+    {
+        archiveFile.Extract(rifePath);
     }
+    File.Delete(targetPath);
 }
 
 async Task InstallMpvnet()
@@ -422,7 +388,7 @@ void WriteVersionAndManifest()
             inference_runtime = VsMlrtCudaVersion,
             ort_dml = $"{OrtDmlVersion}+{DirectMLVersion}",
             sevenzip = SevenZipVersion,
-            rife = rifeModels,
+            rife = RifeModelsVersion,
         },
         // Managed program files (relative to install root) that make up the overlay update and are
         // overwritten on update. Extraction overlays these without deleting extras (e.g. user onnx).
