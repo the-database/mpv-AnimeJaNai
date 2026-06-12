@@ -27,8 +27,8 @@ const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/A
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
 // TODO: bump to the first build containing vf_animejanai (merge the
 // vf-animejanai branch into the fork's master first).
-const string MpvForkVersion       = "20260527";     // release tag (= build date)
-const string MpvForkGitHash       = "150a4b6dba";   // git short hash in the dev archive filename
+const string MpvForkVersion       = "20260611";     // release tag (= build date)
+const string MpvForkGitHash       = "ac1ce81871";   // git short hash in the dev archive filename
 
 string[] rifeModels = [
     "rife_v4.7.7z",
