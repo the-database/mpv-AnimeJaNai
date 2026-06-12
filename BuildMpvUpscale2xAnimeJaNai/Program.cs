@@ -24,6 +24,12 @@ const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone 
 const string MpvNetVersion        = "v7.1.2.0";
 const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/AnimeJaNaiConfEditor release tag
 
+// DirectML backend runtime (backend=DirectML in animejanai.conf). These are
+// the last DirectML-flavored releases: Microsoft moved DML to sustained
+// engineering, so 1.24.x is the ORT ceiling until the WinML migration.
+const string OrtDmlVersion        = "1.24.4";       // Microsoft.ML.OnnxRuntime.DirectML (NuGet)
+const string DirectMLVersion      = "1.15.4";       // Microsoft.AI.DirectML (NuGet)
+
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
 const string MpvForkVersion       = "20260611";     // release tag (= build date)
 const string MpvForkGitHash       = "ac1ce81871";   // git short hash in the dev archive filename
@@ -200,6 +206,46 @@ async Task InstallAji()
     }
 }
 
+// ONNX Runtime + DirectML for the DirectML backend. The .nupkg files are
+// plain zips; only the x64 runtime DLLs (and the DirectML license, which the
+// redistribution terms require keeping intact) go into the package. Load
+// order at runtime is handled by aji_dml.dll (DirectML.dll before
+// onnxruntime.dll, both from this directory).
+async Task InstallOrtDml()
+{
+    Directory.CreateDirectory(inferencePath);
+    var packages = new (string Name, string Version, string[] CopyFromTo)[]
+    {
+        ("Microsoft.ML.OnnxRuntime.DirectML", OrtDmlVersion, new[]
+        {
+            "runtimes/win-x64/native/onnxruntime.dll", "onnxruntime.dll",
+        }),
+        ("Microsoft.AI.DirectML", DirectMLVersion, new[]
+        {
+            "bin/x64-win/DirectML.dll", "DirectML.dll",
+            "LICENSE.txt", "DirectML_LICENSE.txt",
+        }),
+    };
+    foreach (var (name, version, copies) in packages)
+    {
+        Console.WriteLine($"Downloading {name} {version}...");
+        var downloadUrl = $"https://www.nuget.org/api/v2/package/{name}/{version}";
+        var targetPath = Path.GetFullPath($"{name}.{version}.nupkg");
+        await DownloadFileAsync(downloadUrl, targetPath, _ => { });
+
+        var tempDirectory = Path.GetFullPath($"{name}-temp");
+        ExtractZip(targetPath, tempDirectory, _ => { });
+        for (var i = 0; i < copies.Length; i += 2)
+        {
+            var src = Path.Combine(tempDirectory,
+                                   copies[i].Replace('/', Path.DirectorySeparatorChar));
+            File.Copy(src, Path.Combine(inferencePath, copies[i + 1]), true);
+        }
+        Directory.Delete(tempDirectory, true);
+        File.Delete(targetPath);
+    }
+}
+
 async Task InstallRife()
 {
     var downloadUrlBase = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/";
@@ -333,7 +379,17 @@ void WriteThirdPartyNotices()
         (https://github.com/AmusementClub/vs-mlrt), which redistributes them
         under the same terms.
 
-        aji.dll / aji_harness.exe / aji_kernel_test.exe:
+        ONNX Runtime (onnxruntime.dll), (c) Microsoft Corporation,
+        redistributed under the MIT license
+        (https://github.com/microsoft/onnxruntime/blob/main/LICENSE).
+
+        DirectML (DirectML.dll), (c) Microsoft Corporation, redistributed
+        as the DirectML Redistributable Package under the Microsoft
+        Software License Terms shipped alongside it as
+        DirectML_LICENSE.txt (use on Windows and Xbox only).
+
+        aji.dll / aji_trt.dll / aji_dml.dll / aji_harness.exe /
+        aji_harness_dml.exe / aji_kernel_test.exe:
         https://github.com/the-database/animejanai-inference
         """;
     File.WriteAllText(Path.Combine(inferencePath, "THIRD_PARTY_NOTICES.txt"), notice);
@@ -364,6 +420,7 @@ void WriteVersionAndManifest()
             mpvnet = MpvNetVersion,
             mpvfork = $"{MpvForkVersion}-{MpvForkGitHash}",
             inference_runtime = VsMlrtCudaVersion,
+            ort_dml = $"{OrtDmlVersion}+{DirectMLVersion}",
             sevenzip = SevenZipVersion,
             rife = rifeModels,
         },
@@ -378,7 +435,10 @@ void WriteVersionAndManifest()
             "AnimeJaNaiUpdater.exe",
             "animejanai/onnx",
             "animejanai/inference/aji.dll",
+            "animejanai/inference/aji_trt.dll",
+            "animejanai/inference/aji_dml.dll",
             "animejanai/inference/aji_harness.exe",
+            "animejanai/inference/aji_harness_dml.exe",
             "animejanai/inference/aji_kernel_test.exe",
             "animejanai/AnimeJaNaiConfEditor.exe",
             "animejanai/av_libglesv2.dll",
@@ -502,6 +562,7 @@ async Task Main()
     await InstallSevenZip();
     await InstallInferenceRuntime();
     await InstallAji();
+    await InstallOrtDml();
     await InstallRife();
     await InstallMpvnet();
     await InstallCustomLibmpv();
