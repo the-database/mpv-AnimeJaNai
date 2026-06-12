@@ -24,7 +24,9 @@ jobs:
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
 
     - name: Run the console app
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe ${{ github.event.inputs.release_version }}
+      # --packs also emits component-*.7z + packs.json (publish/packs-v<ver>/) for the
+      # AnimeJaNai Manager (updater --components/--install/--remove/--auto).
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe ${{ github.event.inputs.release_version }} --packs
 
     - name: Build updater and add it to the package
       shell: pwsh
@@ -60,5 +62,5 @@ jobs:
         name: ${{ github.event.inputs.release_version }}
         draft: true
         prerelease: false
-        artifacts: "mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z.*,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}.7z,manifest.json"
+        artifacts: "mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z.*,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}.7z,manifest.json,publish/packs-v${{ github.event.inputs.release_version }}/component-*.7z,publish/packs-v${{ github.event.inputs.release_version }}/packs.json"
         token: ${{ secrets.GITHUB_TOKEN }}

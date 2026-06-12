@@ -60,6 +60,16 @@ if (args.Length < 1)
 var assemblyDirectory = AppContext.BaseDirectory;
 var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animejanai");
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
+
+// --packs-only [dir]: emit component packs from an already-built install tree
+// (default: the version-derived directory above) and exit, skipping the build.
+int packsOnlyIndex = Array.IndexOf(args, "--packs-only");
+if (packsOnlyIndex >= 0 && packsOnlyIndex + 1 < args.Length &&
+    Directory.Exists(args[packsOnlyIndex + 1]))
+{
+    installDirectory = Path.GetFullPath(args[packsOnlyIndex + 1]);
+}
+
 var inferencePath = Path.Combine(installDirectory, "animejanai", "inference");
 var onnxPath = Path.Combine(installDirectory, "animejanai", "onnx");
 var rifePath = Path.Combine(installDirectory, "animejanai", "rife");
@@ -539,6 +549,115 @@ async Task Main()
     await InstallAnimeJaNaiConfEditor();
     WriteThirdPartyNotices();
     WriteVersionAndManifest();
+    if (args.Contains("--packs"))
+    {
+        await EmitComponentPacks();
+    }
 }
 
-await Main();
+// Component packs: subsets of the freshly built install tree, emitted as
+// rooted 7z archives + a packs.json index. The AnimeJaNai Manager (the
+// updater's component modes) downloads these from the release so a slim
+// install can add - and a full install can shed - the heavy, hardware-
+// specific pieces: the TensorRT runtime, per-GPU-generation builder
+// resources, and the RIFE models. Archive paths are relative to the
+// install root, so extraction over an install IS installation.
+async Task EmitComponentPacks()
+{
+    Console.WriteLine("Emitting component packs...");
+    var version = args[0];
+    var packsDir = Path.Combine(assemblyDirectory, $"packs-v{version}");
+    Directory.CreateDirectory(packsDir);
+    var sevenZa = Path.Combine(installDirectory, "7za.exe");
+    if (!File.Exists(sevenZa))
+    {
+        sevenZa = Path.Combine(assemblyDirectory, "7za.exe"); // --packs-only on a partial tree
+    }
+
+    var packs = new List<(string Name, string[] Files)>
+    {
+        ("trt-runtime", Directory.GetFiles(inferencePath)
+            .Where(f =>
+            {
+                var n = Path.GetFileName(f);
+                return (n.StartsWith("nvinfer_") && !n.Contains("builder_resource")) ||
+                       n.StartsWith("nvonnxparser_") || n.StartsWith("cudart64_") ||
+                       n == "trtexec.exe" ||
+                       n.Contains("LICENSE", StringComparison.OrdinalIgnoreCase);
+            })
+            .Select(f => Path.GetRelativePath(installDirectory, f)).ToArray()),
+        ("rife", new[] { Path.GetRelativePath(installDirectory, rifePath) }),
+    };
+    foreach (var f in Directory.GetFiles(inferencePath, "nvinfer_builder_resource_*"))
+    {
+        // nvinfer_builder_resource_sm120_11.dll -> trt-sm120
+        var m = System.Text.RegularExpressions.Regex.Match(
+            Path.GetFileName(f), @"builder_resource_([a-z0-9]+)_");
+        if (m.Success)
+        {
+            packs.Add(($"trt-{m.Groups[1].Value}",
+                       new[] { Path.GetRelativePath(installDirectory, f) }));
+        }
+    }
+
+    var index = new List<object>();
+    foreach (var (name, files) in packs)
+    {
+        if (files.Length == 0 ||
+            !files.Any(f => File.Exists(Path.Combine(installDirectory, f)) ||
+                            Directory.Exists(Path.Combine(installDirectory, f))))
+        {
+            Console.WriteLine($"  component-{name}: nothing to pack in this tree, skipped");
+            continue;
+        }
+        var archive = Path.Combine(packsDir, $"component-{name}.7z");
+        File.Delete(archive);
+        // -spf2: store the relative paths as given (rooted at install dir)
+        var fileArgs = string.Join(' ', files.Select(f => $"\"{f}\""));
+        var psi = new ProcessStartInfo
+        {
+            FileName = sevenZa,
+            Arguments = $"a -spf2 -mx=3 \"{archive}\" {fileArgs}",
+            WorkingDirectory = installDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        using var proc = Process.Start(psi)!;
+        await proc.WaitForExitAsync();
+        if (proc.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"7za failed for pack {name}");
+        }
+        // expand directories to the concrete file list for clean uninstall
+        var allFiles = files.SelectMany(f =>
+        {
+            var abs = Path.Combine(installDirectory, f);
+            return Directory.Exists(abs)
+                ? Directory.GetFiles(abs, "*", SearchOption.AllDirectories)
+                    .Select(x => Path.GetRelativePath(installDirectory, x))
+                : new[] { f };
+        }).Select(f => f.Replace('\\', '/')).ToArray();
+        index.Add(new
+        {
+            name,
+            asset = Path.GetFileName(archive),
+            bytes = new FileInfo(archive).Length,
+            files = allFiles,
+        });
+        Console.WriteLine($"  component-{name}.7z ({new FileInfo(archive).Length / 1048576} MB, {allFiles.Length} files)");
+    }
+    File.WriteAllText(Path.Combine(packsDir, "packs.json"),
+        JsonSerializer.Serialize(new { package_version = version, packs = index },
+            new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine($"Packs written to {packsDir}");
+}
+
+if (packsOnlyIndex >= 0)
+{
+    await EmitComponentPacks();
+}
+else
+{
+    await Main();
+}

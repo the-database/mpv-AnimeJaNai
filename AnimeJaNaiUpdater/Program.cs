@@ -1,11 +1,23 @@
 // AnimeJaNaiUpdater — keeps an installed mpv-upscale-2x_animejanai folder up to date in place,
-// preserving user files. Ships at the install root next to mpvnet.exe.
+// preserving user files, and manages hardware-specific component packs ("AnimeJaNai Manager").
+// Ships at the install root next to mpvnet.exe.
 //
-//   AnimeJaNaiUpdater.exe --check   prints UPDATE_AVAILABLE <ver> | UP_TO_DATE <ver> (for the lua)
-//   AnimeJaNaiUpdater.exe --apply   waits for mpv to close, downloads + applies, relaunches mpv
+//   AnimeJaNaiUpdater.exe --check        prints UPDATE_AVAILABLE <ver> | UP_TO_DATE <ver> (for the lua)
+//   AnimeJaNaiUpdater.exe --apply        waits for mpv to close, downloads + applies, relaunches mpv
+//   AnimeJaNaiUpdater.exe --components   detect GPU, list installed/available packs + recommendation
+//   AnimeJaNaiUpdater.exe --install X    download + install component pack X
+//   AnimeJaNaiUpdater.exe --remove X     delete component pack X's files
+//   AnimeJaNaiUpdater.exe --auto         install everything the detected hardware recommends
 //
 // Update size is tiered: if the latest release's heavy deps match what's installed (compared via
 // manifest.json) only the small overlay archive is fetched; otherwise the full package.
+//
+// Component packs are subsets of the install (TensorRT runtime, per-GPU-generation builder
+// resources, RIFE models), emitted by the package builder as component-<name>.7z + packs.json
+// release assets. Archives are rooted at the install dir, so extraction is installation;
+// packs.json carries each pack's file list, so removal is deletion. Installed state lives in
+// components.json at the install root (inferred from disk for installs that predate it).
+// Dev override: set ANIMEJANAI_PACKS_DIR to a local directory with packs.json + archives.
 
 using System.Diagnostics;
 using System.Text.Json;
@@ -35,8 +47,17 @@ try
             return 0;
         case "--apply":
             return await ApplyAsync();
+        case "--components":
+            await ComponentsAsync(null);
+            return 0;
+        case "--install":
+            return await InstallComponentAsync(args.Length > 1 ? args[1] : "");
+        case "--remove":
+            return RemoveComponent(args.Length > 1 ? args[1] : "");
+        case "--auto":
+            return await AutoComponentsAsync();
         default:
-            Console.WriteLine("Usage: AnimeJaNaiUpdater.exe [--check|--apply]");
+            Console.WriteLine("Usage: AnimeJaNaiUpdater.exe [--check|--apply|--components|--install <pack>|--remove <pack>|--auto]");
             return 2;
     }
 }
@@ -408,5 +429,288 @@ static bool IsNewer(string remote, string local)
     }
 }
 
+// ---- component manager ----------------------------------------------------------------------
+
+async Task<PackIndex> GetPackIndexAsync()
+{
+    string? local = Environment.GetEnvironmentVariable("ANIMEJANAI_PACKS_DIR");
+    string json;
+    List<Asset> assets;
+    if (!string.IsNullOrEmpty(local))
+    {
+        json = File.ReadAllText(Path.Combine(local, "packs.json"));
+        assets = Directory.GetFiles(local, "component-*.7z")
+            .Select(f => new Asset(Path.GetFileName(f), f)).ToList();
+    }
+    else
+    {
+        var release = await GetLatestReleaseAsync();
+        var idx = release.Assets.FirstOrDefault(a => a.Name == "packs.json")
+            ?? throw new InvalidOperationException(
+                "The latest release publishes no component packs (packs.json missing).");
+        using var client = NewClient();
+        json = await client.GetStringAsync(idx.Url);
+        assets = release.Assets;
+    }
+
+    var packs = new List<Pack>();
+    using var doc = JsonDocument.Parse(json);
+    foreach (var e in doc.RootElement.GetProperty("packs").EnumerateArray())
+    {
+        var files = e.GetProperty("files").EnumerateArray()
+            .Select(f => f.GetString() ?? "").Where(f => f.Length > 0).ToList();
+        string asset = e.GetProperty("asset").GetString() ?? "";
+        packs.Add(new Pack(
+            e.GetProperty("name").GetString() ?? "",
+            asset,
+            assets.FirstOrDefault(a => a.Name == asset)?.Url,
+            e.GetProperty("bytes").GetInt64(),
+            files));
+    }
+    return new PackIndex(
+        doc.RootElement.TryGetProperty("package_version", out var v)
+            ? v.GetString() ?? "" : "", packs);
+}
+
+// Installed state: components.json, else inferred from what's on disk so
+// full installs that predate the manager work out of the box.
+Dictionary<string, string> ReadInstalledComponents(PackIndex index)
+{
+    string path = Path.Combine(installDir, "components.json");
+    var installed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (File.Exists(path))
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            foreach (var e in doc.RootElement.GetProperty("installed").EnumerateObject())
+            {
+                installed[e.Name] = e.Value.GetString() ?? "";
+            }
+            return installed;
+        }
+        catch { /* fall through to inference */ }
+    }
+    foreach (var pack in index.Packs)
+    {
+        // a pack counts as installed when all its files exist
+        if (pack.Files.Count > 0 &&
+            pack.Files.All(f => File.Exists(Path.Combine(installDir, f))))
+        {
+            installed[pack.Name] = "(pre-manager install)";
+        }
+    }
+    return installed;
+}
+
+void WriteInstalledComponents(Dictionary<string, string> installed)
+{
+    File.WriteAllText(Path.Combine(installDir, "components.json"),
+        JsonSerializer.Serialize(new { installed },
+            new JsonSerializerOptions { WriteIndented = true }));
+}
+
+string? PackVersionMismatch(PackIndex index)
+{
+    string localVersion = ReadManifestString(localManifest, "package_version", "");
+    return localVersion != "" && index.PackageVersion != "" && localVersion != index.PackageVersion
+        ? $"Installed package is v{localVersion} but the published packs are for v{index.PackageVersion}."
+        : null;
+}
+
+// NVIDIA detection via NVML (ships with the driver); its absence means a
+// non-NVIDIA GPU, which is exactly the DirectML recommendation.
+static (bool HasNvidia, string Sm, string GpuName) DetectGpu()
+{
+    try
+    {
+        if (Nvml.nvmlInit_v2() != 0)
+        {
+            return (false, "", "");
+        }
+        try
+        {
+            if (Nvml.nvmlDeviceGetHandleByIndex_v2(0, out var dev) != 0)
+            {
+                return (false, "", "");
+            }
+            Nvml.nvmlDeviceGetCudaComputeCapability(dev, out int major, out int minor);
+            var name = new byte[96];
+            Nvml.nvmlDeviceGetName(dev, name, (uint)name.Length);
+            string gpu = System.Text.Encoding.ASCII.GetString(name).TrimEnd('\0');
+            return (true, $"sm{major}{minor}", gpu);
+        }
+        finally { Nvml.nvmlShutdown(); }
+    }
+    catch
+    {
+        return (false, "", "");
+    }
+}
+
+List<string> RecommendedPacks(PackIndex index, bool hasNvidia, string sm)
+{
+    var rec = new List<string>();
+    if (hasNvidia)
+    {
+        rec.Add("trt-runtime");
+        // exact generation pack if published, else the PTX fallback pack
+        // (JIT-compiles for newer GPUs than this TensorRT knows)
+        rec.Add(index.Packs.Any(p => p.Name == $"trt-{sm}") ? $"trt-{sm}" : "trt-ptx");
+    }
+    if (index.Packs.Any(p => p.Name == "rife"))
+    {
+        rec.Add("rife"); // interpolation is a headline feature; opt out by removing
+    }
+    return rec;
+}
+
+async Task ComponentsAsync(PackIndex? prefetched)
+{
+    var index = prefetched ?? await GetPackIndexAsync();
+    if (PackVersionMismatch(index) is string warn)
+    {
+        Console.WriteLine(warn);
+        Console.WriteLine();
+    }
+    var installed = ReadInstalledComponents(index);
+    var (hasNvidia, sm, gpu) = DetectGpu();
+    Console.WriteLine(hasNvidia
+        ? $"GPU: {gpu} ({sm}) - TensorRT recommended"
+        : "GPU: no NVIDIA device detected - DirectML (in the core install) covers AMD/Intel");
+    var rec = RecommendedPacks(index, hasNvidia, sm);
+    Console.WriteLine($"Recommended packs: {string.Join(", ", rec)}");
+    Console.WriteLine();
+    foreach (var pack in index.Packs)
+    {
+        string state = installed.ContainsKey(pack.Name) ? "installed" :
+                       rec.Contains(pack.Name) ? "RECOMMENDED" : "available";
+        Console.WriteLine($"  {pack.Name,-14} {pack.Bytes / 1048576,6} MB  {state}");
+    }
+}
+
+async Task<int> InstallComponentAsync(string name)
+{
+    if (string.IsNullOrEmpty(name))
+    {
+        Console.WriteLine("--install needs a pack name (see --components)");
+        return 2;
+    }
+    var index = await GetPackIndexAsync();
+    var pack = index.Packs.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    if (pack is null)
+    {
+        Console.WriteLine($"Unknown pack '{name}'. Available: {string.Join(", ", index.Packs.Select(p => p.Name))}");
+        return 2;
+    }
+    if (pack.Url is null)
+    {
+        Console.WriteLine($"Pack '{name}' has no downloadable asset on the latest release.");
+        return 1;
+    }
+    if (PackVersionMismatch(index) is string warn)
+    {
+        // a pack from a different release can mismatch the installed aji/TensorRT builds
+        Console.WriteLine(warn);
+        Console.WriteLine("Update first (AnimeJaNaiUpdater.exe --apply), then install components.");
+        return 1;
+    }
+
+    string work = Path.Combine(Path.GetTempPath(), "animejanai-packs");
+    Directory.CreateDirectory(work);
+    string archive = Path.Combine(work, pack.Asset);
+    if (pack.Url.Contains("://"))
+    {
+        await DownloadWithProgress(new Asset(pack.Asset, pack.Url), archive);
+    }
+    else
+    {
+        File.Copy(pack.Url, archive, true); // ANIMEJANAI_PACKS_DIR dev path
+    }
+    Console.WriteLine($"Installing {pack.Name}...");
+    Extract(archive, installDir);
+    TryDelete(() => File.Delete(archive));
+
+    var installed = ReadInstalledComponents(index);
+    installed[pack.Name] = index.PackageVersion;
+    WriteInstalledComponents(installed);
+    Console.WriteLine($"{pack.Name} installed.");
+    return 0;
+}
+
+int RemoveComponent(string name)
+{
+    var index = GetPackIndexAsync().GetAwaiter().GetResult();
+    var pack = index.Packs.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    if (pack is null)
+    {
+        Console.WriteLine($"Unknown pack '{name}'. Available: {string.Join(", ", index.Packs.Select(p => p.Name))}");
+        return 2;
+    }
+    int gone = 0;
+    foreach (var f in pack.Files)
+    {
+        string abs = Path.Combine(installDir, f);
+        if (File.Exists(abs))
+        {
+            TryDelete(() => { File.SetAttributes(abs, FileAttributes.Normal); File.Delete(abs); });
+            gone++;
+        }
+    }
+    var installed = ReadInstalledComponents(index);
+    installed.Remove(pack.Name);
+    WriteInstalledComponents(installed);
+    Console.WriteLine($"{pack.Name} removed ({gone} files). Engine caches and models you added are untouched.");
+    return 0;
+}
+
+async Task<int> AutoComponentsAsync()
+{
+    var index = await GetPackIndexAsync();
+    var (hasNvidia, sm, gpu) = DetectGpu();
+    var rec = RecommendedPacks(index, hasNvidia, sm);
+    var installed = ReadInstalledComponents(index);
+    var missing = rec.Where(r => !installed.ContainsKey(r)).ToList();
+    if (missing.Count == 0)
+    {
+        Console.WriteLine("Everything the detected hardware needs is already installed.");
+        await ComponentsAsync(index);
+        return 0;
+    }
+    Console.WriteLine($"Installing for {(hasNvidia ? gpu : "DirectML-class GPU")}: {string.Join(", ", missing)}");
+    foreach (var name in missing)
+    {
+        int rc = await InstallComponentAsync(name);
+        if (rc != 0)
+        {
+            return rc;
+        }
+    }
+    return 0;
+}
+
+static HttpClient NewClient()
+{
+    var client = new HttpClient();
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("AnimeJaNaiUpdater");
+    return client;
+}
+
+static class Nvml
+{
+    [System.Runtime.InteropServices.DllImport("nvml.dll")]
+    public static extern int nvmlInit_v2();
+    [System.Runtime.InteropServices.DllImport("nvml.dll")]
+    public static extern int nvmlShutdown();
+    [System.Runtime.InteropServices.DllImport("nvml.dll")]
+    public static extern int nvmlDeviceGetHandleByIndex_v2(uint index, out IntPtr device);
+    [System.Runtime.InteropServices.DllImport("nvml.dll")]
+    public static extern int nvmlDeviceGetCudaComputeCapability(IntPtr device, out int major, out int minor);
+    [System.Runtime.InteropServices.DllImport("nvml.dll")]
+    public static extern int nvmlDeviceGetName(IntPtr device, byte[] name, uint length);
+}
+
 record Release(string Tag, List<Asset> Assets);
 record Asset(string Name, string Url);
+record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files);
+record PackIndex(string PackageVersion, List<Pack> Packs);
