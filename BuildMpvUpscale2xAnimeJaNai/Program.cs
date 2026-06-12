@@ -16,9 +16,11 @@ using static Downloader;
 // Third-party component versions. Bump these together when cutting a release.
 // The inference runtime (TensorRT + trtexec) is reused from the vs-mlrt cuda
 // release archives: publicly downloadable, license-precedented, and trtexec
-// is version-matched to nvinfer by construction. aji.dll must be built
-// against the SAME TensorRT major.minor (v15.16 == TensorRT 10.16).
-const string VsMlrtCudaVersion    = "v15.16";
+// is version-matched to nvinfer by construction. aji_trt.dll must be built
+// against the SAME TensorRT major.minor (v16.x == TensorRT 11.0).
+// NOTE: v16.test1 is vs-mlrt's TRT 11 PRE-release - recheck for a stable
+// v16 tag before cutting the package release.
+const string VsMlrtCudaVersion    = "v16.test1";
 const string AjiVersion           = "v0.1.0";       // github.com/the-database/animejanai-inference release tag
 const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
@@ -40,9 +42,9 @@ const string MpvForkGitHash       = "ac1ce81871";   // git short hash in the dev
 // and dispatch runtimes) serves backends/options the native filter does not
 // use; engine builds run with --tacticSources=-CUDNN,-CUBLAS,-CUBLAS_LT.
 string[] inferenceRuntimeFiles = [
-    "nvinfer_10.dll",
-    "nvinfer_plugin_10.dll",
-    "nvonnxparser_10.dll",
+    "nvinfer_11.dll",
+    "nvinfer_plugin_11.dll",
+    "nvonnxparser_11.dll",
     "trtexec.exe",
 ];
 string[] inferenceRuntimePrefixes = [
@@ -334,8 +336,8 @@ void WriteThirdPartyNotices()
         Third-party components in this directory
         ========================================
 
-        NVIDIA TensorRT runtime (nvinfer_10.dll, nvinfer_plugin_10.dll,
-        nvonnxparser_10.dll, nvinfer_builder_resource_*.dll, trtexec.exe)
+        NVIDIA TensorRT runtime (nvinfer_11.dll, nvinfer_plugin_11.dll,
+        nvonnxparser_11.dll, nvinfer_builder_resource_*.dll, trtexec.exe)
         and NVIDIA CUDA runtime (cudart64_*.dll), redistributed under the
         NVIDIA TensorRT Software License Agreement and CUDA Toolkit EULA:
 
