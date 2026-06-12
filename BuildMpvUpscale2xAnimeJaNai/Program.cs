@@ -25,8 +25,6 @@ const string MpvNetVersion        = "v7.1.2.0";
 const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/AnimeJaNaiConfEditor release tag
 
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
-// TODO: bump to the first build containing vf_animejanai (merge the
-// vf-animejanai branch into the fork's master first).
 const string MpvForkVersion       = "20260611";     // release tag (= build date)
 const string MpvForkGitHash       = "ac1ce81871";   // git short hash in the dev archive filename
 
@@ -85,6 +83,7 @@ var animejanaiDirectory = Path.Combine(assemblyDirectory, "mpv-upscale-2x_animej
 var installDirectory = Path.Combine(assemblyDirectory, $"mpv-upscale-2x_animejanai-v{args[0]}");
 var inferencePath = Path.Combine(installDirectory, "animejanai", "inference");
 var onnxPath = Path.Combine(installDirectory, "animejanai", "onnx");
+var rifePath = Path.Combine(installDirectory, "animejanai", "rife");
 
 // Standalone 7-Zip console (7za.exe): used here to extract the multi-part
 // vs-mlrt archive, and shipped at the install root for the updater
@@ -211,12 +210,22 @@ async Task InstallRife()
         var targetPath = Path.GetFullPath(model);
         await DownloadFileAsync(downloadUrl, targetPath, _ => { });
 
+        // Archives contain both rife/ (implementation 1, what the native
+        // filter uses) and rife_v2/; extract to a temp dir and keep only
+        // the rife/ models. Lives outside onnx/ so the heavy, deps-
+        // versioned models stay out of the overlay archive.
+        var tempDirectory = Path.GetFullPath("rife-temp");
         using (ArchiveFile archiveFile = new(targetPath))
         {
-            // archives contain rife/<model>.onnx -> lands in onnx/rife/
-            Directory.CreateDirectory(onnxPath);
-            archiveFile.Extract(onnxPath);
+            Directory.CreateDirectory(tempDirectory);
+            archiveFile.Extract(tempDirectory);
         }
+        Directory.CreateDirectory(rifePath);
+        foreach (var file in Directory.GetFiles(Path.Combine(tempDirectory, "rife")))
+        {
+            File.Copy(file, Path.Combine(rifePath, Path.GetFileName(file)), true);
+        }
+        Directory.Delete(tempDirectory, true);
 
         File.Delete(targetPath);
     }
