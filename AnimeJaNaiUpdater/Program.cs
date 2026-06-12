@@ -48,7 +48,7 @@ try
         case "--apply":
             return await ApplyAsync();
         case "--components":
-            await ComponentsAsync(null);
+            await ComponentsAsync(null, args.Contains("--json"));
             return 0;
         case "--install":
             return await InstallComponentAsync(args.Length > 1 ? args[1] : "");
@@ -565,20 +565,38 @@ List<string> RecommendedPacks(PackIndex index, bool hasNvidia, string sm)
     return rec;
 }
 
-async Task ComponentsAsync(PackIndex? prefetched)
+async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
 {
     var index = prefetched ?? await GetPackIndexAsync();
+    var installed = ReadInstalledComponents(index);
+    var (hasNvidia, sm, gpu) = DetectGpu();
+    var rec = RecommendedPacks(index, hasNvidia, sm);
+    if (json)
+    {
+        // consumed by the AnimeJaNai Manager GUI; keep keys stable
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            package_version = index.PackageVersion,
+            version_mismatch = PackVersionMismatch(index),
+            gpu = new { nvidia = hasNvidia, sm, name = gpu },
+            packs = index.Packs.Select(p => new
+            {
+                name = p.Name,
+                bytes = p.Bytes,
+                installed = installed.ContainsKey(p.Name),
+                recommended = rec.Contains(p.Name),
+            }),
+        }));
+        return;
+    }
     if (PackVersionMismatch(index) is string warn)
     {
         Console.WriteLine(warn);
         Console.WriteLine();
     }
-    var installed = ReadInstalledComponents(index);
-    var (hasNvidia, sm, gpu) = DetectGpu();
     Console.WriteLine(hasNvidia
         ? $"GPU: {gpu} ({sm}) - TensorRT recommended"
         : "GPU: no NVIDIA device detected - DirectML (in the core install) covers AMD/Intel");
-    var rec = RecommendedPacks(index, hasNvidia, sm);
     Console.WriteLine($"Recommended packs: {string.Join(", ", rec)}");
     Console.WriteLine();
     foreach (var pack in index.Packs)
@@ -674,7 +692,7 @@ async Task<int> AutoComponentsAsync()
     if (missing.Count == 0)
     {
         Console.WriteLine("Everything the detected hardware needs is already installed.");
-        await ComponentsAsync(index);
+        await ComponentsAsync(index, false);
         return 0;
     }
     Console.WriteLine($"Installing for {(hasNvidia ? gpu : "DirectML-class GPU")}: {string.Join(", ", missing)}");

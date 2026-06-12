@@ -61,8 +61,8 @@ local function check_components(backend, rife_configured)
     if backend == 'tensorrt' then
         if not exists('animejanai/inference/nvinfer_11.dll') then
             hints[#hints + 1] =
-                'TensorRT runtime not installed - run AnimeJaNaiUpdater.exe --auto ' ..
-                'or set backend=DirectML in animejanai.conf'
+                'TensorRT runtime not installed - press Ctrl+E to open ' ..
+                'AnimeJaNai Manager (or run AnimeJaNaiUpdater.exe --auto)'
         else
             -- builder resources are only needed to build new engines; cached
             -- engines still run without them, so this is a soft warning
@@ -79,7 +79,7 @@ local function check_components(backend, rife_configured)
             if not has_builder then
                 hints[#hints + 1] =
                     'No TensorRT kernel pack for this GPU - new engine builds ' ..
-                    'will fail; run AnimeJaNaiUpdater.exe --auto'
+                    'will fail; press Ctrl+E to open AnimeJaNai Manager'
             end
         end
     end
@@ -96,7 +96,7 @@ local function check_components(backend, rife_configured)
         if not has_model then
             hints[#hints + 1] =
                 'RIFE is enabled but the models are not installed - ' ..
-                'run AnimeJaNaiUpdater.exe --install rife'
+                'press Ctrl+E to open AnimeJaNai Manager'
         end
     end
     if #hints == 0 then

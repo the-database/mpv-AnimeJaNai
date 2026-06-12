@@ -24,7 +24,7 @@ const string VsMlrtCudaVersion    = "v16.test1";
 const string AjiVersion           = "v0.1.0";       // github.com/the-database/animejanai-inference release tag
 const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ConfEditorVersion    = "0.0.8";        // github.com/the-database/AnimeJaNaiConfEditor release tag
+const string ManagerVersion       = "0.1.0";        // github.com/the-database/AnimeJaNaiConfEditor release tag (AnimeJaNai Manager)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -316,23 +316,22 @@ void InstallAnimeJaNaiCore()
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
 
-async Task InstallAnimeJaNaiConfEditor()
+async Task InstallAnimeJaNaiManager()
 {
-    Console.WriteLine("Downloading AnimeJaNaiConfEditor...");
-    var downloadUrl = $"https://github.com/the-database/AnimeJaNaiConfEditor/releases/download/{ConfEditorVersion}/AnimeJaNaiConfEditor-portable-x64.zip";
-    var targetPath = Path.GetFullPath("AnimeJaNaiConfEditor-portable-x64.zip");
+    Console.WriteLine("Downloading AnimeJaNai Manager...");
+    var downloadUrl = $"https://github.com/the-database/AnimeJaNaiConfEditor/releases/download/{ManagerVersion}/AnimeJaNaiManager-portable-x64.zip";
+    var targetPath = Path.GetFullPath("AnimeJaNaiManager-portable-x64.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
-        Console.WriteLine($"Downloading AnimeJaNaiConfEditor ({progress}%)...");
+        Console.WriteLine($"Downloading AnimeJaNai Manager ({progress}%)...");
     });
 
-    Console.WriteLine("Extracting AnimeJaNaiConfEditor...");
-    // The zip is flat (AnimeJaNaiConfEditor.exe + native DLLs at root) and lands directly in
-    // animejanai/, alongside the overlay's own animejanai.conf and onnx/ (which it does not contain).
-    var targetExtractPath = Path.Combine(installDirectory, "animejanai");
-    ExtractZip(targetPath, targetExtractPath, (double progress) =>
+    Console.WriteLine("Extracting AnimeJaNai Manager...");
+    // The zip is flat (AnimeJaNaiManager.exe + native DLLs) and lands at the install root,
+    // next to mpvnet.exe, for discoverability. It finds its data in animejanai/.
+    ExtractZip(targetPath, installDirectory, (double progress) =>
     {
-        Console.WriteLine($"Extracting AnimeJaNaiConfEditor ({progress}%)...");
+        Console.WriteLine($"Extracting AnimeJaNai Manager ({progress}%)...");
     });
 
     File.Delete(targetPath);
@@ -391,7 +390,7 @@ void WriteVersionAndManifest()
         player_executable = "mpvnet.exe",
         archive_tool = "7za.exe",
         // Heavy dependencies. If these are unchanged between releases the updater applies the small
-        // overlay; if any differ it falls back to the full package. ConfEditorVersion is omitted on
+        // overlay; if any differ it falls back to the full package. ManagerVersion is omitted on
         // purpose: the editor ships inside the overlay, so it updates without a full download.
         deps = new
         {
@@ -418,10 +417,10 @@ void WriteVersionAndManifest()
             "animejanai/inference/aji_harness.exe",
             "animejanai/inference/aji_harness_dml.exe",
             "animejanai/inference/aji_kernel_test.exe",
-            "animejanai/AnimeJaNaiConfEditor.exe",
-            "animejanai/av_libglesv2.dll",
-            "animejanai/libHarfBuzzSharp.dll",
-            "animejanai/libSkiaSharp.dll",
+            "AnimeJaNaiManager.exe",
+            "av_libglesv2.dll",
+            "libHarfBuzzSharp.dll",
+            "libSkiaSharp.dll",
             "portable_config/scripts",
             "portable_config/shaders",
             "portable_config/mpv.conf",
@@ -546,7 +545,7 @@ async Task Main()
     await InstallCustomLibmpv();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();
-    await InstallAnimeJaNaiConfEditor();
+    await InstallAnimeJaNaiManager();
     WriteThirdPartyNotices();
     WriteVersionAndManifest();
     if (args.Contains("--packs"))
