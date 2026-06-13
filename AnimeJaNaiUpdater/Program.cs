@@ -76,6 +76,7 @@ async Task CheckAsync()
     // Before the network call, so post-update housekeeping happens even offline.
     CleanupLegacy();
     MigrateUserConf();
+    SyncInputConf();
     var release = await GetLatestReleaseAsync();
     string local = ReadLocalVersion();
     if (IsNewer(release.Tag, local))
@@ -221,6 +222,74 @@ void MigrateUserConf()
             : "USER_CONF_RETIRED (no custom settings to migrate)");
     }
     catch { /* migration must never break --check */ }
+}
+
+// input.conf is the user's own file, but mpv's input.conf has no include and
+// mpv.net builds its menu from input.conf's #menu: annotations - so the managed
+// AnimeJaNai keybindings live inside input.conf as a marked block. This refreshes
+// that block from input-animejanai.conf (overwritten on update) while preserving
+// the user's section below the END marker, and one-time migrates the retired
+// input-user.conf into that section. Mirrors the mpv-user.conf retirement.
+void SyncInputConf()
+{
+    try
+    {
+        string pc = Path.Combine(installDir, "portable_config");
+        string inputConf = Path.Combine(pc, "input.conf");
+        string managedSrc = Path.Combine(pc, "input-animejanai.conf");
+        if (!File.Exists(inputConf) || !File.Exists(managedSrc))
+        {
+            return;
+        }
+        string raw = File.ReadAllText(inputConf);
+        string nl = raw.Contains("\r\n") ? "\r\n" : "\n";
+        var lines = raw.Replace("\r\n", "\n").Split('\n').ToList();
+        int begin = lines.FindIndex(l => l.StartsWith("#@ANIMEJANAI-MANAGED-BEGIN"));
+        int end = lines.FindIndex(l => l.StartsWith("#@ANIMEJANAI-MANAGED-END"));
+        if (begin < 0 || end < 0 || end <= begin)
+        {
+            return;  // not the managed-block layout (e.g. a pre-3.4 input.conf); leave it
+        }
+
+        string currentBlock = string.Join("\n", lines.GetRange(begin + 1, end - begin - 1)).Trim('\n');
+        string newBlock = File.ReadAllText(managedSrc).Replace("\r\n", "\n").Trim('\n');
+        var userSection = lines.GetRange(end + 1, lines.Count - end - 1);  // after END marker
+
+        // One-time fold of the retired input-user.conf into the user section.
+        string userConf = Path.Combine(pc, "input-user.conf");
+        bool migrated = false;
+        if (File.Exists(userConf))
+        {
+            var binds = File.ReadAllLines(userConf)
+                .Where(l => l.Trim().Length > 0 && !l.TrimStart().StartsWith("#")).ToList();
+            if (binds.Count > 0)
+            {
+                userSection.Add("");
+                userSection.Add("# Migrated from input-user.conf (retired in 3.4.0):");
+                userSection.AddRange(binds);
+            }
+            try { File.Delete(userConf); } catch { }
+            migrated = true;
+        }
+        // The loader script that applied input-user.conf is no longer needed.
+        try { File.Delete(Path.Combine(pc, "scripts", "animejanai_userinput.lua")); } catch { }
+
+        if (currentBlock == newBlock && !migrated)
+        {
+            return;  // block already current and nothing to migrate
+        }
+
+        var rebuilt = new List<string>();
+        rebuilt.AddRange(lines.GetRange(0, begin + 1));  // header through the BEGIN marker
+        rebuilt.AddRange(newBlock.Split('\n'));
+        rebuilt.Add(lines[end]);                         // the END marker line
+        rebuilt.AddRange(userSection);
+        File.WriteAllText(inputConf, string.Join(nl, rebuilt));
+        Console.WriteLine(migrated
+            ? "INPUT_CONF_SYNCED (managed block refreshed; input-user.conf folded in and retired)"
+            : "INPUT_CONF_SYNCED (managed keybindings block refreshed)");
+    }
+    catch { /* must never break --check */ }
 }
 
 async Task<int> ApplyAsync()

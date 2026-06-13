@@ -319,6 +319,36 @@ void InstallAnimeJaNaiCore()
     CopyDirectory(animejanaiDirectory, installDirectory);
 }
 
+// mpv's input.conf has no `include` (unlike mpv.conf) AND mpv.net builds its
+// right-click menu by parsing input.conf's #menu: annotations - so the managed
+// AnimeJaNai keybindings must physically live in input.conf. To still let users
+// own input.conf (edit it, keep changes across updates) it is generated as a
+// regenerable managed block (sourced from input-animejanai.conf, refreshed by
+// the updater) followed by the user's own section. Bindings below the END
+// marker override the managed ones above (mpv applies later bindings last).
+void GenerateInputConf()
+{
+    var pc = Path.Combine(installDirectory, "portable_config");
+    var managed = File.ReadAllText(Path.Combine(pc, "input-animejanai.conf"))
+        .Replace("\r\n", "\n").TrimEnd('\n');
+    // Markers must match AnimeJaNaiUpdater's regenerator exactly.
+    var conf =
+        "# Your keybindings. Safe to edit - updates never overwrite your section.\n" +
+        "#\n" +
+        "# The block between the markers below is managed by AnimeJaNai and refreshed\n" +
+        "# on every update - do not edit inside it (changes there are replaced). Add\n" +
+        "# your own keybindings UNDER the END marker; they survive updates and override\n" +
+        "# the defaults above (mpv applies later bindings last). Syntax: one\n" +
+        "# \"KEY  command\" per line, same as the managed block.\n" +
+        "\n" +
+        "#@ANIMEJANAI-MANAGED-BEGIN (do not edit this line or the block below)\n" +
+        managed + "\n" +
+        "#@ANIMEJANAI-MANAGED-END (add your keybindings below this line)\n" +
+        "\n" +
+        "# ===== Your keybindings below =====\n";
+    File.WriteAllText(Path.Combine(pc, "input.conf"), conf);
+}
+
 async Task InstallAnimeJaNaiManager()
 {
     Console.WriteLine("Downloading AnimeJaNai Manager...");
@@ -426,24 +456,26 @@ void WriteVersionAndManifest()
             "libSkiaSharp.dll",
             "portable_config/scripts",
             "portable_config/shaders",
-            // The managed defaults file is overwritten on update; the user-facing
-            // mpv.conf (which includes it) is preserved (see user_preserve).
+            // Managed defaults files, overwritten on update. The user-facing
+            // mpv.conf/input.conf (which carry these) are preserved (user_preserve);
+            // for input.conf the updater refreshes its managed block from
+            // input-animejanai.conf while keeping the user's keybindings.
             "portable_config/mpv-animejanai.conf",
-            "portable_config/input.conf",
+            "portable_config/input-animejanai.conf",
         },
         // User data never overwritten by an update (full updates preserve these explicitly).
         user_preserve = new[]
         {
             "animejanai/animejanai.conf",
             "animejanai/currentanimejanai.log",
-            // mpv.conf is the user's file now (it includes mpv-animejanai.conf for
-            // the managed defaults); never overwrite it. Upgrades from <=3.3.x still
-            // get the new mpv.conf because those versions list it under overlay.
+            // mpv.conf and input.conf are the user's own files now (they carry the
+            // managed defaults - mpv.conf via include, input.conf via a managed block
+            // the updater refreshes). Never overwrite them. Upgrades from <=3.3.x
+            // still get the new versions because those releases list them under
+            // overlay; the updater then folds the old mpv-user.conf / input-user.conf
+            // into them and deletes those retired files.
             "portable_config/mpv.conf",
-            // mpv-user.conf is retired (mpv.conf is the user file). Fresh installs
-            // don't ship it; the updater folds any existing one into mpv.conf and
-            // deletes it on first run after an upgrade. Not preserved here.
-            "portable_config/input-user.conf",
+            "portable_config/input.conf",
             "portable_config/saved-props.json",
             "portable_config/settings.xml",
             "portable_config/screenshots",
@@ -556,6 +588,7 @@ async Task Main()
     await InstallCustomLibmpv();
     await InstallYtDlp();
     InstallAnimeJaNaiCore();
+    GenerateInputConf();
     await InstallAnimeJaNaiManager();
     WriteThirdPartyNotices();
     WriteVersionAndManifest();
