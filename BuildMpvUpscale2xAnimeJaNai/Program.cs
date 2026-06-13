@@ -553,18 +553,55 @@ async Task Main()
     WriteVersionAndManifest();
     if (args.Contains("--packs"))
     {
-        await EmitComponentPacks();
+        var packFiles = await EmitComponentPacks();
+        SlimInstallTree(packFiles);
     }
+}
+
+// The released package is the slim core: everything hardware-specific
+// (TensorRT runtime, per-GPU kernel packs, RIFE models) ships only as
+// component packs, installed on demand by the AnimeJaNai Manager (the
+// first-run dialog offers the hardware-matched set in one click). This
+// keeps the one download people grab small; it is still named
+// "full-package" because it is the complete release - and the 3.3.x
+// updater downloads that asset name blindly, after which upgraders get
+// the same Manager first-run flow as new users.
+void SlimInstallTree(List<string> packFiles)
+{
+    Console.WriteLine("Slimming install tree (component packs ship separately)...");
+    long removed = 0;
+    foreach (var rel in packFiles)
+    {
+        var abs = Path.Combine(installDirectory, rel);
+        if (!File.Exists(abs))
+        {
+            continue;
+        }
+        removed += new FileInfo(abs).Length;
+        File.Delete(abs);
+    }
+    // prune directories the packs emptied (e.g. animejanai/rife)
+    foreach (var dir in Directory.GetDirectories(installDirectory, "*", SearchOption.AllDirectories)
+                                 .OrderByDescending(d => d.Length))
+    {
+        if (!Directory.EnumerateFileSystemEntries(dir).Any())
+        {
+            Directory.Delete(dir);
+        }
+    }
+    Console.WriteLine($"Slimmed {removed / 1048576} MB out of the package tree.");
 }
 
 // Component packs: subsets of the freshly built install tree, emitted as
 // rooted 7z archives + a packs.json index. The AnimeJaNai Manager (the
 // updater's component modes) downloads these from the release so a slim
-// install can add - and a full install can shed - the heavy, hardware-
-// specific pieces: the TensorRT runtime, per-GPU-generation builder
-// resources, and the RIFE models. Archive paths are relative to the
-// install root, so extraction over an install IS installation.
-async Task EmitComponentPacks()
+// install can add - and an older full install can shed - the heavy,
+// hardware-specific pieces: the TensorRT runtime, per-GPU-generation
+// builder resources, and the RIFE models. Archive paths are relative to
+// the install root, so extraction over an install IS installation.
+// Returns the expanded per-file list of everything packed; under --packs
+// the caller then strips those files from the tree (SlimInstallTree).
+async Task<List<string>> EmitComponentPacks()
 {
     Console.WriteLine("Emitting component packs...");
     var version = args[0];
@@ -603,6 +640,7 @@ async Task EmitComponentPacks()
     }
 
     var index = new List<object>();
+    var packedFiles = new List<string>();
     foreach (var (name, files) in packs)
     {
         if (files.Length == 0 ||
@@ -647,12 +685,14 @@ async Task EmitComponentPacks()
             bytes = new FileInfo(archive).Length,
             files = allFiles,
         });
+        packedFiles.AddRange(allFiles);
         Console.WriteLine($"  component-{name}.7z ({new FileInfo(archive).Length / 1048576} MB, {allFiles.Length} files)");
     }
     File.WriteAllText(Path.Combine(packsDir, "packs.json"),
         JsonSerializer.Serialize(new { package_version = version, packs = index },
             new JsonSerializerOptions { WriteIndented = true }));
     Console.WriteLine($"Packs written to {packsDir}");
+    return packedFiles;
 }
 
 if (packsOnlyIndex >= 0)
