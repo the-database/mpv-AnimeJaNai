@@ -1,0 +1,15 @@
+name = "animejanai-benchmark-proxy"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Served on the domain the project already owns (the Manager posts to this
+# exact URL). The zone animejan.ai must be on this Cloudflare account.
+route = { pattern = "animejan.ai/api/benchmarks", zone_name = "animejan.ai" }
+
+[vars]
+GITHUB_REPO = "the-database/mpv-upscale-2x_animejanai"
+GITHUB_BASE = "main"
+
+# Secrets are NOT stored here. Set them once with:
+#   wrangler secret put GITHUB_TOKEN     # fine-grained PAT: Contents + Pull requests (write), this repo only
+#   wrangler secret put SUBMIT_TOKEN     # optional shared token; must match the Manager's X-Submit-Token

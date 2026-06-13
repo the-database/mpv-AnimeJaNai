@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mpv-AnimeJaNai community benchmarks</title>
+  <link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; max-width: 1100px; }
+    h1 { margin: 0 0 4px; font-size: 1.6rem; }
+    p.lede { margin: 0 0 16px; opacity: .75; }
+    .meta { font-size: .85rem; opacity: .6; margin: 12px 0 20px; }
+    a { color: #3b82f6; }
+    .note { color: #888; font-style: italic; }
+    #empty { padding: 32px; text-align: center; opacity: .6; }
+    .gridjs-wrapper { box-shadow: none; }
+
+    /* Grid.js mermaid theme is light-only; recolor it for dark mode so the
+       table doesn't glare white against a dark page. */
+    @media (prefers-color-scheme: dark) {
+      .gridjs-container { color: #e3e3e6; }
+      .gridjs-wrapper,
+      .gridjs-table,
+      .gridjs-th,
+      .gridjs-td { background-color: #1b1b1f !important; border-color: #34343b !important; }
+      .gridjs-th { color: #e3e3e6 !important; }
+      .gridjs-td { color: #d0d0d4 !important; }
+      .gridjs-tr:nth-child(even) td.gridjs-td { background-color: #202026 !important; }
+      .gridjs-tr:hover td.gridjs-td { background-color: #2b2b33 !important; }
+      .gridjs-th-sort:hover,
+      .gridjs-th-sort:focus { background-color: #2b2b33 !important; }
+      input.gridjs-search-input,
+      .gridjs-pagination,
+      .gridjs-pagination .gridjs-pages button {
+        background-color: #1b1b1f !important;
+        color: #e3e3e6 !important;
+        border-color: #34343b !important;
+      }
+      .gridjs-pagination .gridjs-pages button:hover { background-color: #2b2b33 !important; }
+      .gridjs-pagination .gridjs-pages button.gridjs-currentPage { background-color: #34343b !important; }
+      .gridjs-footer, .gridjs-head { background-color: transparent !important; border-color: #34343b !important; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <h1>mpv-AnimeJaNai community benchmarks</h1>
+  <p class="lede">
+    Upscaling inference throughput (frames per second) submitted from the
+    AnimeJaNai Manager across a range of hardware. Higher is faster. Use the
+    search box to filter by GPU, resolution, or backend; click a column header to sort.
+  </p>
+  <div id="table"></div>
+  <div id="empty" hidden>No benchmarks yet. Be the first &mdash; run the benchmark in the AnimeJaNai Manager and click <strong>Submit to Catalog</strong>.</div>
+  <p class="meta" id="meta"></p>
+  <p class="meta">
+    Pre-3.4.0 results live in the
+    <a href="https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Benchmarks">archived wiki page</a>.
+    Project: <a href="https://github.com/the-database/mpv-upscale-2x_animejanai">mpv-upscale-2x_animejanai</a>.
+  </p>
+
+  <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+  <script>
+    function fmtDate(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+    }
+
+    function ramText(s) {
+      if (typeof s.ram_mb !== "number" || s.ram_mb <= 0) return "";
+      const gb = Math.round(s.ram_mb / 1024);
+      return s.ram_speed_mhz ? `${gb} GB @ ${s.ram_speed_mhz}` : `${gb} GB`;
+    }
+
+    function cpuText(s) {
+      const name = s.cpu || "";
+      const bits = [];
+      if (s.cpu_cores) bits.push(s.cpu_threads ? `${s.cpu_cores}C/${s.cpu_threads}T` : `${s.cpu_cores}C`);
+      // Many Intel names already embed the clock ("... @ 3.60GHz"); only add ours if not.
+      if (s.cpu_mhz && !/GHz/i.test(name)) bits.push(`${(s.cpu_mhz / 1000).toFixed(1)} GHz`);
+      return bits.length ? `${name} (${bits.join(", ")})` : name;
+    }
+
+    fetch("./benchmarks.json", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        const subs = data.submissions || [];
+        // Only show the Note column if at least one submission has a note;
+        // otherwise it's a column of blanks.
+        const anyNote = subs.some((s) => (s.note || "").trim().length > 0);
+        // Flatten to one row per (submission, template, resolution).
+        const rows = [];
+        for (const s of subs) {
+          for (const template of Object.keys(s.results)) {
+            const row = s.results[template];
+            for (const res of Object.keys(row)) {
+              const cells = [
+                s.gpu || "(unknown)",
+                typeof s.vram_mb === "number" ? Math.round(s.vram_mb / 1024) : null,
+                typeof s.gpu_power_w === "number" ? s.gpu_power_w : null,
+                cpuText(s),
+                ramText(s),
+                s.backend,
+                template,
+                res,
+                Number(row[res]),
+                s.app_version || "",
+                s.os || "",
+                fmtDate(s.submitted_at),
+                s.submitted_by || "",
+              ];
+              if (anyNote) cells.push(s.note || "");
+              rows.push(cells);
+            }
+          }
+        }
+
+        document.getElementById("meta").textContent =
+          `${subs.length} submission${subs.length === 1 ? "" : "s"}, ${rows.length} results` +
+          (data.generated_at ? ` · updated ${fmtDate(data.generated_at)}` : "");
+
+        if (rows.length === 0) {
+          document.getElementById("empty").hidden = false;
+          return;
+        }
+
+        const columns = [
+          "GPU",
+          { name: "VRAM (GB)", formatter: (c) => (typeof c === "number" ? c : "") },
+          { name: "TGP (W)", formatter: (c) => (typeof c === "number" ? c : "") },
+          "CPU",
+          "RAM",
+          "Backend",
+          "Template",
+          "Resolution",
+          { name: "FPS", formatter: (c) => (typeof c === "number" ? c.toFixed(1) : c) },
+          "App",
+          "OS",
+          "Date",
+          "Submitted by",
+        ];
+        if (anyNote) columns.push("Note");
+
+        new gridjs.Grid({
+          columns,
+          data: rows,
+          search: true,
+          sort: true,
+          resizable: true,
+          pagination: { limit: 50 },
+        }).render(document.getElementById("table"));
+      })
+      .catch((e) => {
+        document.getElementById("empty").hidden = false;
+        document.getElementById("empty").textContent = "Could not load benchmark data.";
+        console.error(e);
+      });
+  </script>
+</body>
+</html>

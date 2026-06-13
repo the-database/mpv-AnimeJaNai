@@ -1,0 +1,46 @@
+name: Build benchmark catalog
+
+# Rebuilds the community benchmark catalog (GitHub Pages) whenever a benchmark
+# submission is merged. Submissions arrive as PRs opened by the submit proxy
+# (benchmark-proxy/) and land in data/benchmarks/submissions/. Requires Pages
+# to be enabled with "Source: GitHub Actions" in repo settings.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/benchmarks/submissions/**"
+      - "site/**"
+      - "scripts/build-benchmarks.mjs"
+      - ".github/workflows/benchmarks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two Pages deploys at once.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Aggregate submissions into site/benchmarks.json
+        run: node scripts/build-benchmarks.mjs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

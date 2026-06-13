@@ -1,0 +1,13 @@
+{
+  "name": "animejanai-benchmark-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker that files AnimeJaNai community benchmark submissions into the repo as PRs.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}
