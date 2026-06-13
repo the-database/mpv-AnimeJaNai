@@ -21,7 +21,7 @@ using static Downloader;
 // NOTE: v16.test1 is vs-mlrt's TRT 11 PRE-release - recheck for a stable
 // v16 tag before cutting the package release.
 const string VsMlrtCudaVersion    = "v16.test1";
-const string AjiVersion           = "v0.1.0";       // github.com/the-database/animejanai-inference release tag
+const string AjiVersion           = "v0.2.0";       // github.com/the-database/animejanai-inference release tag (ABI v7, pipelined)
 const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
 const string ManagerVersion       = "0.1.0";        // github.com/the-database/AnimeJaNaiConfEditor release tag (AnimeJaNai Manager)
@@ -34,8 +34,11 @@ const string DirectMLVersion      = "1.15.4";       // Microsoft.AI.DirectML (Nu
 const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inference release tag (fp16 conversions)
 
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
-const string MpvForkVersion       = "20260611";     // release tag (= build date)
-const string MpvForkGitHash       = "ac1ce81871";   // git short hash in the dev archive filename
+// The release tag and the archive filename's date can differ (the tag is
+// stamped at publish, the filename at build), so they are pinned separately.
+const string MpvForkVersion       = "2026-06-13-854f2d84f5"; // release tag
+const string MpvForkBuildDate     = "20260612";     // build date in the dev archive filename
+const string MpvForkGitHash       = "854f2d84f5";   // git short hash in the dev archive filename
 
 // TensorRT runtime files taken from the vs-mlrt cuda archive's vsmlrt-cuda/
 // directory. Everything else in there (cuDNN, cuBLAS, onnxruntime, the lean
@@ -276,7 +279,7 @@ async Task InstallMpvnet()
 async Task InstallCustomLibmpv()
 {
     Console.WriteLine("Downloading custom libmpv fork...");
-    var downloadUrl = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}/mpv-dev-x86_64-{MpvForkVersion}-git-{MpvForkGitHash}.7z";
+    var downloadUrl = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}/mpv-dev-x86_64-{MpvForkBuildDate}-git-{MpvForkGitHash}.7z";
     var targetPath = Path.GetFullPath("mpv-dev.7z");
     await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
