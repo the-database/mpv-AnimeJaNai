@@ -71,7 +71,7 @@ function validate(b) {
   if (b == null || typeof b !== "object") return "body must be an object";
   if (b.schema !== 1) return "unsupported schema";
   if (typeof b.backend !== "string" || !ALLOWED_BACKENDS.has(b.backend)) return "invalid backend";
-  for (const k of ["app_version", "gpu", "cpu", "os", "driver"]) {
+  for (const k of ["app_version", "gpu", "cpu", "os", "driver", "submitted_by"]) {
     if (b[k] != null && (typeof b[k] !== "string" || b[k].length > STR_MAX)) return `invalid ${k}`;
   }
   if (b.note != null && (typeof b.note !== "string" || b.note.length > NOTE_MAX)) return "invalid note";
@@ -144,6 +144,7 @@ function normalize(b) {
     os: sanitize(b.os, STR_MAX),
     driver: sanitize(b.driver, STR_MAX),
     results,
+    submitted_by: sanitize(b.submitted_by, 80),
     note: sanitize(b.note, NOTE_MAX),
   };
 }
@@ -175,7 +176,8 @@ async function fileSubmission(env, record) {
       `- GPU: ${record.gpu || "(unknown)"}\n` +
       `- Backend: ${record.backend}\n` +
       `- App: ${record.app_version || "(unknown)"}\n` +
-      `- OS: ${record.os || "(unknown)"}\n\n` +
+      `- OS: ${record.os || "(unknown)"}\n` +
+      `- Submitted by: ${record.submitted_by || "(anonymous)"}\n\n` +
       (record.note ? `Note: ${record.note}\n\n` : "") +
       "Merging publishes it to the catalog.",
   });

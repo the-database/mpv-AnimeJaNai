@@ -68,6 +68,7 @@ for (const file of files.sort()) {
     os: parsed.os ?? "",
     driver: parsed.driver ?? "",
     results: parsed.results,
+    submitted_by: parsed.submitted_by ?? "",
     note: parsed.note ?? "",
   });
 }

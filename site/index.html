@@ -108,6 +108,7 @@
                 s.app_version || "",
                 s.os || "",
                 fmtDate(s.submitted_at),
+                s.submitted_by || "",
               ];
               if (anyNote) cells.push(s.note || "");
               rows.push(cells);
@@ -137,6 +138,7 @@
           "App",
           "OS",
           "Date",
+          "Submitted by",
         ];
         if (anyNote) columns.push("Note");
 
