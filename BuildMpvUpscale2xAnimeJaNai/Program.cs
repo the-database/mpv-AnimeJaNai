@@ -36,9 +36,9 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
 // The release tag and the archive filename's date can differ (the tag is
 // stamped at publish, the filename at build), so they are pinned separately.
-const string MpvForkVersion       = "2026-06-13-854f2d84f5"; // release tag
-const string MpvForkBuildDate     = "20260612";     // build date in the dev archive filename
-const string MpvForkGitHash       = "854f2d84f5";   // git short hash in the dev archive filename
+const string MpvForkVersion       = "2026-06-13-c9cd49b01f"; // release tag
+const string MpvForkBuildDate     = "20260613";     // build date in the dev archive filename
+const string MpvForkGitHash       = "c9cd49b01f";   // git short hash in the dev archive filename
 
 // TensorRT runtime files taken from the vs-mlrt cuda archive's vsmlrt-cuda/
 // directory. Everything else in there (cuDNN, cuBLAS, onnxruntime, the lean
