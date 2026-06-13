@@ -24,7 +24,9 @@
   #error Define SourceDir (the built slim tree) with /DSourceDir=...
 #endif
 
-#define AppName "AnimeJaNai"
+; The player application is "mpv-AnimeJaNai" (AnimeJaNai alone is the upscaling
+; model family; this is the mpv-based player that runs it).
+#define AppName "mpv-AnimeJaNai"
 #define Publisher "the-database"
 #define PlayerExe "mpvnet.exe"
 #define ManagerExe "AnimeJaNaiManager.exe"
@@ -45,7 +47,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#PlayerExe}
 UninstallDisplayName={#AppName} {#AppVersion}
-OutputBaseFilename=AnimeJaNai-Setup-{#AppVersion}
+OutputBaseFilename=mpv-AnimeJaNai-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -64,7 +66,9 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#UpdaterExe}"; Flags: re
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#PlayerExe}"
-Name: "{group}\{#AppName} Manager"; Filename: "{app}\{#ManagerExe}"
+; The companion tool keeps its own name ("AnimeJaNai Manager" - it manages the
+; AnimeJaNai models/components), matching its window title.
+Name: "{group}\AnimeJaNai Manager"; Filename: "{app}\{#ManagerExe}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#PlayerExe}"; Tasks: desktopicon
 
@@ -74,9 +78,13 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#PlayerExe}"; Tasks: desktop
 ; hash setup can't forge; this is the standard achievable registration - it makes
 ; AnimeJaNai available and the per-user fallback default.)
 [Registry]
-Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv"; ValueType: string; ValueName: ""; ValueData: "AnimeJaNai Video"; Flags: uninsdeletekey; Tasks: assocvideo
+Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv"; ValueType: string; ValueName: ""; ValueData: "{#AppName} Video"; Flags: uninsdeletekey; Tasks: assocvideo
+; FriendlyAppName is what the "Open with" / default-app picker shows, instead of
+; the exe's own name ("mpvnet"). We don't rename the exe (it is mpv.net's binary).
+Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; Tasks: assocvideo
 Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#PlayerExe},0"; Tasks: assocvideo
 Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#PlayerExe}"" ""%1"""; Tasks: assocvideo
+Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\shell\open"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; Tasks: assocvideo
 ; One pair of entries per video extension: add the ProgID to the extension's
 ; Open-with list, and set it as the per-user default ProgID.
 #define public Assoc(str Ext) \

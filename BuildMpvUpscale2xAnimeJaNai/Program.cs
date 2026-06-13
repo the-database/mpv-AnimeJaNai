@@ -426,7 +426,9 @@ void WriteVersionAndManifest()
             "libSkiaSharp.dll",
             "portable_config/scripts",
             "portable_config/shaders",
-            "portable_config/mpv.conf",
+            // The managed defaults file is overwritten on update; the user-facing
+            // mpv.conf (which includes it) is preserved (see user_preserve).
+            "portable_config/mpv-animejanai.conf",
             "portable_config/input.conf",
         },
         // User data never overwritten by an update (full updates preserve these explicitly).
@@ -434,6 +436,10 @@ void WriteVersionAndManifest()
         {
             "animejanai/animejanai.conf",
             "animejanai/currentanimejanai.log",
+            // mpv.conf is the user's file now (it includes mpv-animejanai.conf for
+            // the managed defaults); never overwrite it. Upgrades from <=3.3.x still
+            // get the new mpv.conf because those versions list it under overlay.
+            "portable_config/mpv.conf",
             "portable_config/mpv-user.conf",
             "portable_config/input-user.conf",
             "portable_config/saved-props.json",
