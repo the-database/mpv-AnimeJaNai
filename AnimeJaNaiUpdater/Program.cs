@@ -73,8 +73,9 @@ catch (Exception ex)
 
 async Task CheckAsync()
 {
-    // Before the network call, so post-update cleanup happens even offline.
+    // Before the network call, so post-update housekeeping happens even offline.
     CleanupLegacy();
+    MigrateUserConf();
     var release = await GetLatestReleaseAsync();
     string local = ReadLocalVersion();
     if (IsNewer(release.Tag, local))
@@ -171,6 +172,55 @@ void CleanupLegacy()
         }
     }
     catch { /* cleanup must never break --check */ }
+}
+
+// One-time retirement of mpv-user.conf. Since 3.4.0 mpv.conf is the user's own
+// file (it includes the managed mpv-animejanai.conf), so the old separate
+// mpv-user.conf is deprecated and confusing - it could still hold settings
+// carried from 3.3.x. Fold its real settings into mpv.conf under the
+// "Your settings below" marker, then delete it. Gated on mpv.conf being the
+// new include-style file, so a pre-upgrade 3.3.x mpv.conf is left alone; once
+// mpv-user.conf is gone this is a no-op. Fresh installs never ship it.
+void MigrateUserConf()
+{
+    try
+    {
+        string pc = Path.Combine(installDir, "portable_config");
+        string userConf = Path.Combine(pc, "mpv-user.conf");
+        string mpvConf = Path.Combine(pc, "mpv.conf");
+        if (!File.Exists(userConf) || !File.Exists(mpvConf))
+        {
+            return;
+        }
+        string mpv = File.ReadAllText(mpvConf);
+        // Only fold into the new-style (include-based) mpv.conf; never touch a
+        // legacy managed mpv.conf that an update is about to overwrite anyway.
+        if (!mpv.Contains("mpv-animejanai.conf"))
+        {
+            return;
+        }
+        string nl = mpv.Contains("\r\n") ? "\r\n" : "\n";
+        var keepLines = mpv.Replace("\r\n", "\n").Split('\n').ToList();
+        // Drop any lingering include of mpv-user.conf (older 3.4.0 builds shipped one).
+        keepLines.RemoveAll(l => l.TrimStart().StartsWith("include") &&
+                                 l.Contains("mpv-user"));
+        // Real settings = non-blank, non-comment lines the user actually added.
+        var settings = File.ReadAllLines(userConf)
+            .Where(l => l.Trim().Length > 0 && !l.TrimStart().StartsWith("#"))
+            .ToList();
+        if (settings.Count > 0)
+        {
+            keepLines.Add("");
+            keepLines.Add("# Migrated from mpv-user.conf (retired in 3.4.0):");
+            keepLines.AddRange(settings);
+        }
+        File.WriteAllText(mpvConf, string.Join(nl, keepLines));
+        File.Delete(userConf);
+        Console.WriteLine(settings.Count > 0
+            ? $"USER_CONF_MIGRATED {settings.Count} setting(s) into mpv.conf"
+            : "USER_CONF_RETIRED (no custom settings to migrate)");
+    }
+    catch { /* migration must never break --check */ }
 }
 
 async Task<int> ApplyAsync()

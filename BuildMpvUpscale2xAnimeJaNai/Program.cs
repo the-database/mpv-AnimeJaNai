@@ -440,7 +440,9 @@ void WriteVersionAndManifest()
             // the managed defaults); never overwrite it. Upgrades from <=3.3.x still
             // get the new mpv.conf because those versions list it under overlay.
             "portable_config/mpv.conf",
-            "portable_config/mpv-user.conf",
+            // mpv-user.conf is retired (mpv.conf is the user file). Fresh installs
+            // don't ship it; the updater folds any existing one into mpv.conf and
+            // deletes it on first run after an upgrade. Not preserved here.
             "portable_config/input-user.conf",
             "portable_config/saved-props.json",
             "portable_config/settings.xml",
