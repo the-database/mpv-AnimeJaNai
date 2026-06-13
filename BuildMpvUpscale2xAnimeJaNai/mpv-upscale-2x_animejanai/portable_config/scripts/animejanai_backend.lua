@@ -105,14 +105,23 @@ local function check_components(backend, rife_configured)
     for _, h in ipairs(hints) do
         msg.warn(h)
     end
-    -- OSD only once a VO exists, or the message is dropped
+    -- Shown as an OSD overlay, not mp.osd_message: the player's
+    -- now-playing message (filename) lands right after file-loaded and
+    -- would overwrite the shared osd_message slot, hiding the hint -
+    -- exactly when a first-run user needs it most. Overlays render on
+    -- an independent channel. Wait for file-loaded anyway: before a VO
+    -- exists there is nothing to render onto.
     local shown = false
     mp.register_event('file-loaded', function()
         if shown then
             return
         end
         shown = true
-        mp.osd_message('AnimeJaNai: ' .. table.concat(hints, '\n'), 12)
+        local ov = mp.create_osd_overlay('ass-events')
+        ov.data = '{\\an7\\fs28\\bord1.5\\1c&HFFFFFF&\\3c&H000000&}' ..
+                  'AnimeJaNai: ' .. table.concat(hints, '\\N')
+        ov:update()
+        mp.add_timeout(20, function() ov:remove() end)
     end)
 end
 
