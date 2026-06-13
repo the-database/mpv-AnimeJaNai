@@ -37,6 +37,20 @@ jobs:
     - name: Install 7zip
       run: choco install 7zip -y
 
+    # Setup installer (per-user, GPU-aware component picker), wrapping the same
+    # slim core tree. The component packs install on demand post-install via the
+    # updater, so the installer stays small.
+    - name: Build setup installer
+      shell: pwsh
+      run: |
+        choco install innosetup -y
+        $ver = "${{ github.event.inputs.release_version }}"
+        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+          "/DAppVersion=$ver" `
+          "/DSourceDir=$(Resolve-Path "publish/mpv-upscale-2x_animejanai-v$ver")" `
+          "/O$(Get-Location)" `
+          installer/animejanai.iss
+
     # The "full package" is the slim core: hardware-specific components ship
     # as the component-*.7z assets and install on demand via the Manager.
     - name: Create 7zip archive of the artifact (full package)
@@ -64,5 +78,5 @@ jobs:
         name: ${{ github.event.inputs.release_version }}
         draft: true
         prerelease: false
-        artifacts: "mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z.*,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}.7z,manifest.json,publish/packs-v${{ github.event.inputs.release_version }}/component-*.7z,publish/packs-v${{ github.event.inputs.release_version }}/packs.json"
+        artifacts: "AnimeJaNai-Setup-${{ github.event.inputs.release_version }}.exe,mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z.*,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}.7z,manifest.json,publish/packs-v${{ github.event.inputs.release_version }}/component-*.7z,publish/packs-v${{ github.event.inputs.release_version }}/packs.json"
         token: ${{ secrets.GITHUB_TOKEN }}
