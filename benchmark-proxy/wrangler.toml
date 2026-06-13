@@ -2,9 +2,9 @@ name = "animejanai-benchmark-proxy"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 
-# Served on the domain the project already owns. Add the route in the
-# Cloudflare dashboard (Workers Routes) or here once the zone is attached:
-#   route = { pattern = "animejan.ai/api/benchmarks", zone_name = "animejan.ai" }
+# Served on the domain the project already owns (the Manager posts to this
+# exact URL). The zone animejan.ai must be on this Cloudflare account.
+route = { pattern = "animejan.ai/api/benchmarks", zone_name = "animejan.ai" }
 
 [vars]
 GITHUB_REPO = "the-database/mpv-upscale-2x_animejanai"
