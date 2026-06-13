@@ -105,26 +105,23 @@ local function check_components(backend, rife_configured)
     for _, h in ipairs(hints) do
         msg.warn(h)
     end
-    -- Shown as an OSD overlay, not mp.osd_message: the player's
-    -- now-playing message (filename) lands right after file-loaded and
-    -- would overwrite the shared osd_message slot, hiding the hint -
-    -- exactly when a first-run user needs it most. Overlays render on
-    -- an independent channel. Anchored bottom-left (\an1) so it stays
-    -- clear of the filename the player draws top-left. Wait for
-    -- file-loaded anyway: before a VO exists there is nothing to render
-    -- onto.
+    -- The player shows the filename through the same shared OSD text
+    -- slot we'd use, right after file-loaded and for osd-duration ms
+    -- (default 1s). Posting our hint immediately just loses that slot to
+    -- the filename. So wait until the filename has cleared, then show
+    -- our hint in the normal OSD position (where the filename was) for a
+    -- good while. Reading osd-duration adapts if the user changed it; if
+    -- the player used a longer title duration ours simply replaces it.
     local shown = false
     mp.register_event('file-loaded', function()
         if shown then
             return
         end
         shown = true
-        local ov = mp.create_osd_overlay('ass-events')
-        ov.res_x, ov.res_y = 1280, 720
-        ov.data = '{\\an1\\pos(24,690)\\fs28\\bord1.5\\1c&HFFFFFF&\\3c&H000000&}' ..
-                  'AnimeJaNai: ' .. table.concat(hints, '\\N')
-        ov:update()
-        mp.add_timeout(20, function() ov:remove() end)
+        local after = mp.get_property_number('osd-duration', 1000) / 1000 + 0.5
+        mp.add_timeout(after, function()
+            mp.osd_message('AnimeJaNai: ' .. table.concat(hints, '\n'), 10)
+        end)
     end)
 end
 
