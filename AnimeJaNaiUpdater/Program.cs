@@ -71,6 +71,8 @@ catch (Exception ex)
 
 async Task CheckAsync()
 {
+    // Before the network call, so post-update cleanup happens even offline.
+    CleanupLegacy();
     var release = await GetLatestReleaseAsync();
     string local = ReadLocalVersion();
     if (IsNewer(release.Tag, local))
@@ -81,6 +83,92 @@ async Task CheckAsync()
     {
         Console.WriteLine($"UP_TO_DATE {local}");
     }
+}
+
+// 3.3.x -> 3.4.x leftovers: a full update copies the new package over the install but never
+// deletes, so the retired VapourSynth/Python runtime (~5.5 GB, mostly vs-plugins) and the old
+// in-folder ConfEditor survive the upgrade. The launcher lua runs --check on every mpv start,
+// so this fires right after the post-update relaunch and is a cheap no-op afterwards. The gate
+// is structural rather than a version compare: a legacy marker AND a 3.4-era marker must both
+// exist, which is never true on a real 3.3.x install (no Manager / inference dir) nor on a
+// fresh 3.4 one (no VSPipe).
+void CleanupLegacy()
+{
+    try
+    {
+        bool legacy = File.Exists(Path.Combine(installDir, "VSPipe.exe"));
+        bool current = File.Exists(Path.Combine(installDir, "AnimeJaNaiManager.exe")) ||
+                       Directory.Exists(Path.Combine(installDir, "animejanai", "inference"));
+        if (!legacy || !current)
+        {
+            return;
+        }
+
+        string[] dirs =
+        {
+            "vs-plugins", "vs-coreplugins", "vs-scripts", "vsgenstubs4", "Lib",
+            "__pycache__", Path.Combine("animejanai", "core"),
+        };
+        // Only files 3.4.0 no longer ships. The mpv.net runtime (Locale/, *_cor3.dll, the
+        // msvcp/vcruntime family, MediaInfo.dll), 7z.dll and yt-dlp.exe stay.
+        string[] files =
+        {
+            "VSPipe.exe", "VSScript.dll", "VSVFW.dll", "AVFS.exe",
+            "pfm-192-vapoursynth-win.exe", "portable.vs", "vsmlrt.py", "vsrepo.py",
+            "vsgenstubs.py", "vspackages3.json", "MANIFEST.in", "7z.exe",
+            "python.exe", "pythonw.exe", "python.cat", "python3.dll",
+            "python313.dll", "python313._pth", "python313.zip", "sqlite3.dll",
+            "libcrypto-3.dll", "libssl-3.dll", "libffi-8.dll",
+            Path.Combine("animejanai", "AnimeJaNaiConfEditor.exe"),
+            Path.Combine("animejanai", "av_libglesv2.dll"),
+            Path.Combine("animejanai", "libHarfBuzzSharp.dll"),
+            Path.Combine("animejanai", "libSkiaSharp.dll"),
+        };
+
+        long freed = 0;
+        foreach (var rel in dirs)
+        {
+            string p = Path.Combine(installDir, rel);
+            if (!Directory.Exists(p))
+            {
+                continue;
+            }
+            try
+            {
+                freed += new DirectoryInfo(p).EnumerateFiles("*", SearchOption.AllDirectories)
+                                             .Sum(f => f.Length);
+                Directory.Delete(p, true);
+            }
+            catch { /* locked file etc. - retried on a later start */ }
+        }
+        var pyds = Directory.EnumerateFiles(installDir, "*.pyd")
+                            .Select(p => Path.GetFileName(p)!);
+        foreach (var rel in files.Concat(pyds))
+        {
+            string p = Path.Combine(installDir, rel);
+            if (!File.Exists(p))
+            {
+                continue;
+            }
+            try
+            {
+                long len = new FileInfo(p).Length;
+                File.SetAttributes(p, FileAttributes.Normal);
+                File.Delete(p);
+                freed += len;
+            }
+            catch { /* retried on a later start */ }
+        }
+        if (freed > 0)
+        {
+            string amount = freed >= 1073741824
+                ? $"{freed / 1073741824.0:F1} GB"
+                : $"{freed / 1048576} MB";
+            Console.WriteLine(
+                $"LEGACY_CLEANUP freed {amount} of retired VapourSynth/Python files");
+        }
+    }
+    catch { /* cleanup must never break --check */ }
 }
 
 async Task<int> ApplyAsync()
