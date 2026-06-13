@@ -56,8 +56,10 @@ try
             return RemoveComponent(args.Length > 1 ? args[1] : "");
         case "--auto":
             return await AutoComponentsAsync();
+        case "--recommend":
+            return await RecommendAsync();
         default:
-            Console.WriteLine("Usage: AnimeJaNaiUpdater.exe [--check|--apply|--components|--install <pack>|--remove <pack>|--auto]");
+            Console.WriteLine("Usage: AnimeJaNaiUpdater.exe [--check|--apply|--components|--install <pack>|--remove <pack>|--auto|--recommend]");
             return 2;
     }
 }
@@ -803,6 +805,38 @@ async Task<int> AutoComponentsAsync()
             return rc;
         }
     }
+    return 0;
+}
+
+// Hardware summary for the setup installer's component picker, as trivially
+// parseable KEY=value lines (Inno Setup has no JSON parser). GPU identity is
+// local NVML and always available; TRT_PACKS needs the pack index (network or
+// ANIMEJANAI_PACKS_DIR) - if that fails it is emitted empty and the installer
+// falls back to a generic TensorRT toggle.
+async Task<int> RecommendAsync()
+{
+    var (hasNvidia, sm, gpu) = DetectGpu();
+    Console.WriteLine($"NVIDIA={(hasNvidia ? 1 : 0)}");
+    Console.WriteLine($"GPU={gpu}");
+    string trtPacks = "";
+    string rife = "rife";
+    try
+    {
+        var index = await GetPackIndexAsync();
+        trtPacks = string.Join(",", RecommendedPacks(index, hasNvidia, sm));
+        if (!index.Packs.Any(p => p.Name == "rife"))
+        {
+            rife = "";
+        }
+    }
+    catch
+    {
+        // offline / no published packs yet: GPU lines still printed; the
+        // installer keeps the TensorRT toggle and resolves packs at install
+        // time (when network is needed anyway to download them).
+    }
+    Console.WriteLine($"TRT_PACKS={trtPacks}");
+    Console.WriteLine($"RIFE={rife}");
     return 0;
 }
 
