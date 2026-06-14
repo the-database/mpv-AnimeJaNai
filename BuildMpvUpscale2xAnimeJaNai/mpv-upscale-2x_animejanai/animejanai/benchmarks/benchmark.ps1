@@ -55,7 +55,8 @@ Write-Host "AnimeJaNai playback benchmark - backend: $backend" -ForegroundColor 
 Write-Host "mpv windows will open and close on their own. Do NOT close or click"
 Write-Host "them while the benchmark runs, or the results will be invalid."
 Write-Host "(TensorRT builds an engine per resolution on the first run, about a"
-Write-Host " minute each and cached afterward; the full sweep takes a few minutes.)"
+Write-Host " minute each and cached afterward; the full sweep takes several minutes,"
+Write-Host " longer on slower GPUs.)"
 Write-Host ""
 
 $slots = [ordered]@{ "Balanced" = 1010; "Performance" = 1011 }

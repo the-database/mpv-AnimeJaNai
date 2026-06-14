@@ -4,152 +4,141 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>mpv-AnimeJaNai community benchmarks</title>
-  <link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
   <style>
     :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; max-width: 1100px; }
-    h1 { margin: 0 0 4px; font-size: 1.6rem; }
-    p.lede { margin: 0 0 16px; opacity: .75; }
-    .meta { font-size: .85rem; opacity: .6; margin: 12px 0 20px; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; max-width: 1100px; }
+    h1 { margin: 0 0 4px; font-size: 1.55rem; }
+    p.lede { margin: 0 0 14px; opacity: .8; }
+    .meta { font-size: .85rem; opacity: .6; margin: 14px 0; }
     a { color: #3b82f6; }
-    .note { color: #888; font-style: italic; }
-    #empty { padding: 32px; text-align: center; opacity: .6; }
-    .gridjs-wrapper { box-shadow: none; }
+    input.search {
+      width: 340px; max-width: 92vw; padding: 8px 12px; margin: 4px 0 14px;
+      border: 1px solid #8884; border-radius: 6px; background: transparent; color: inherit; font-size: .95rem;
+    }
+    .legend { font-size: .82rem; opacity: .75; margin: 0 0 8px; }
+    .legend span { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: middle; margin: 0 5px 0 14px; }
+    .legend .gs { background: #1a7f44; } .legend .as { background: #9a6b00; } .legend .rs { background: #b42318; }
 
-    /* Grid.js mermaid theme is light-only; recolor it for dark mode so the
-       table doesn't glare white against a dark page. */
+    .gpu { margin: 26px 0 6px; font-size: 1.12rem; font-weight: 700; border-bottom: 1px solid #8883; padding-bottom: 4px; }
+    .gpu .cnt { font-weight: 400; opacity: .55; font-size: .85rem; margin-left: 8px; }
+    .sys { margin: 12px 0 16px; }
+    .specs { font-size: .85rem; opacity: .72; margin: 0 0 5px; }
+    .specs b { font-weight: 600; opacity: .9; }
+    table.mini { border-collapse: collapse; }
+    table.mini th, table.mini td { padding: 4px 14px 4px 0; white-space: nowrap; text-align: right; }
+    table.mini th { font-weight: 600; opacity: .6; font-size: .8rem; }
+    table.mini td:first-child, table.mini th:first-child { text-align: left; opacity: .85; padding-right: 22px; }
+    table.mini td { border-top: 1px solid #8882; font-variant-numeric: tabular-nums; }
+    td.fps { font-weight: 600; }
+    td.fps.g { color: #1a7f44; } td.fps.a { color: #9a6b00; } td.fps.r { color: #b42318; }
+    #empty { padding: 36px; text-align: center; opacity: .6; }
+
     @media (prefers-color-scheme: dark) {
-      .gridjs-container { color: #e3e3e6; }
-      .gridjs-wrapper,
-      .gridjs-table,
-      .gridjs-th,
-      .gridjs-td { background-color: #1b1b1f !important; border-color: #34343b !important; }
-      .gridjs-th { color: #e3e3e6 !important; }
-      .gridjs-td { color: #d0d0d4 !important; }
-      .gridjs-tr:nth-child(even) td.gridjs-td { background-color: #202026 !important; }
-      .gridjs-tr:hover td.gridjs-td { background-color: #2b2b33 !important; }
-      .gridjs-th-sort:hover,
-      .gridjs-th-sort:focus { background-color: #2b2b33 !important; }
-      input.gridjs-search-input,
-      .gridjs-pagination,
-      .gridjs-pagination .gridjs-pages button {
-        background-color: #1b1b1f !important;
-        color: #e3e3e6 !important;
-        border-color: #34343b !important;
-      }
-      .gridjs-pagination .gridjs-pages button:hover { background-color: #2b2b33 !important; }
-      .gridjs-pagination .gridjs-pages button.gridjs-currentPage { background-color: #34343b !important; }
-      .gridjs-footer, .gridjs-head { background-color: transparent !important; border-color: #34343b !important; box-shadow: none; }
+      td.fps.g { color: #6ee7a0; } td.fps.a { color: #e8c66a; } td.fps.r { color: #f08a8a; }
+      .legend .gs { background: #6ee7a0; } .legend .as { background: #e8c66a; } .legend .rs { background: #f08a8a; }
     }
   </style>
 </head>
 <body>
   <h1>mpv-AnimeJaNai community benchmarks</h1>
-  <p class="lede">
-    Upscaling inference throughput (frames per second) submitted from the
-    AnimeJaNai Manager across a range of hardware. Higher is faster. Use the
-    search box to filter by GPU, resolution, or backend; click a column header to sort.
-  </p>
-  <div id="table"></div>
-  <div id="empty" hidden>No benchmarks yet. Be the first &mdash; run the benchmark in the AnimeJaNai Manager and click <strong>Submit to Catalog</strong>.</div>
-  <p class="meta" id="meta"></p>
+  <p class="lede">Real playback fps of the AnimeJaNai upscaler across hardware. Find your GPU; higher is better.</p>
+  <input class="search" id="q" placeholder="Filter by GPU, CPU, or OS..." />
+  <div class="legend">Headroom vs ~24 fps realtime:<span class="gs"></span>comfortable<span class="as"></span>borderline<span class="rs"></span>below realtime</div>
+
+  <div id="out"></div>
+  <div id="empty" hidden>No benchmarks yet. Be the first: run the benchmark in the AnimeJaNai Manager and click <strong>Submit to Catalog</strong>.</div>
+
+  <p class="meta" id="metaline"></p>
   <p class="meta">
-    Pre-3.4.0 results live in the
+    Submit your own from the AnimeJaNai Manager (Run Benchmarks, then Submit to Catalog).
+    Pre-3.4.0 results (VapourSynth baseline) are in the
     <a href="https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Benchmarks">archived wiki page</a>.
     Project: <a href="https://github.com/the-database/mpv-upscale-2x_animejanai">mpv-upscale-2x_animejanai</a>.
   </p>
 
-  <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
   <script>
-    function fmtDate(iso) {
-      if (!iso) return "";
-      const d = new Date(iso);
-      return isNaN(d) ? "" : d.toISOString().slice(0, 10);
-    }
+    const TEMPLATE_ORDER = ["Quality", "Balanced", "Performance"];
 
-    function ramText(s) {
-      if (typeof s.ram_mb !== "number" || s.ram_mb <= 0) return "";
-      const gb = Math.round(s.ram_mb / 1024);
-      return s.ram_speed_mhz ? `${gb} GB @ ${s.ram_speed_mhz}` : `${gb} GB`;
+    const cleanCpu = (s) => (s || "").replace(/\((R|TM|tm)\)/g, "").replace(/\s{2,}/g, " ").trim();
+    const cleanOs = (s) => (s || "").replace(/^Microsoft Windows/i, "Windows");
+    function osShort(os) {
+      if (!os) return "";
+      const w = os.match(/Windows\s+10\.0\.(\d+)/i);
+      if (w) return (+w[1] >= 22000) ? "Windows 11" : "Windows 10";
+      if (/^Linux/i.test(os)) { const k = os.match(/Linux\s+([\d.]+)/i); return k ? "Linux " + k[1].split(".").slice(0, 2).join(".") : "Linux"; }
+      return cleanOs(os);
     }
+    function cpuFull(s) { const n = cleanCpu(s.cpu); return s.cpu_cores ? `${n} (${s.cpu_cores}C/${s.cpu_threads || "?"}T)` : n; }
+    const ramText = (s) => !s.ram_mb ? "" : (s.ram_speed_mhz ? `${Math.round(s.ram_mb / 1024)}GB @ ${s.ram_speed_mhz}` : `${Math.round(s.ram_mb / 1024)}GB`);
+    const vramText = (s) => s.vram_mb ? Math.round(s.vram_mb / 1024) + "GB VRAM" : "";
+    const resShort = (r) => r.split("x")[1] + "p";
+    const fpsFmt = (v) => (v == null || v === "") ? "" : (Math.round(v * 10) / 10).toString();
+    // Headroom vs ~24 fps realtime: comfortable >=48 (~2x), borderline >=24, below realtime <24.
+    const fpsClass = (v) => (v == null || v === "") ? "" : (v >= 48 ? "g" : v >= 24 ? "a" : "r");
+    const fmtDate = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toISOString().slice(0, 10); };
+    const esc = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-    function cpuText(s) {
-      const name = s.cpu || "";
+    function specLine(s) {
       const bits = [];
-      if (s.cpu_cores) bits.push(s.cpu_threads ? `${s.cpu_cores}C/${s.cpu_threads}T` : `${s.cpu_cores}C`);
-      // Many Intel names already embed the clock ("... @ 3.60GHz"); only add ours if not.
-      if (s.cpu_mhz && !/GHz/i.test(name)) bits.push(`${(s.cpu_mhz / 1000).toFixed(1)} GHz`);
-      return bits.length ? `${name} (${bits.join(", ")})` : name;
+      if (s.cpu) bits.push(`<b>${esc(cpuFull(s))}</b>`);
+      if (ramText(s)) bits.push(esc(ramText(s)));
+      if (s.os) bits.push(esc(osShort(s.os)));
+      if (s.backend) bits.push(esc(s.backend));
+      if (s.driver) bits.push("driver " + esc(s.driver));
+      if (s.app_version) bits.push("v" + esc(s.app_version));
+      if (s.submitted_at) bits.push(fmtDate(s.submitted_at));
+      if (s.submitted_by) bits.push(esc(s.submitted_by));
+      return bits.join(" &middot; ");
     }
+    const best = (s) => (s.results.Balanced && s.results.Balanced["1920x1080"]) || (s.results.Performance && s.results.Performance["1920x1080"]) || 0;
 
     fetch("./benchmarks.json", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         const subs = data.submissions || [];
-        // Only show the Note column if at least one submission has a note;
-        // otherwise it's a column of blanks.
-        const anyNote = subs.some((s) => (s.note || "").trim().length > 0);
-        // Flatten to one row per (submission, template, resolution).
-        const rows = [];
-        for (const s of subs) {
-          for (const template of Object.keys(s.results)) {
-            const row = s.results[template];
-            for (const res of Object.keys(row)) {
-              const cells = [
-                s.gpu || "(unknown)",
-                typeof s.vram_mb === "number" ? Math.round(s.vram_mb / 1024) : null,
-                typeof s.gpu_power_w === "number" ? s.gpu_power_w : null,
-                cpuText(s),
-                ramText(s),
-                s.backend,
-                template,
-                res,
-                Number(row[res]),
-                s.app_version || "",
-                s.os || "",
-                fmtDate(s.submitted_at),
-                s.submitted_by || "",
-              ];
-              if (anyNote) cells.push(s.note || "");
-              rows.push(cells);
+        document.getElementById("metaline").textContent =
+          `${subs.length} submission${subs.length === 1 ? "" : "s"}` +
+          (data.generated_at ? ` · updated ${fmtDate(data.generated_at)}` : "");
+        if (subs.length === 0) { document.getElementById("empty").hidden = false; return; }
+
+        const q = document.getElementById("q");
+        function render() {
+          const f = q.value.toLowerCase();
+          const groups = {};
+          for (const s of subs) {
+            if (f && !`${s.gpu} ${s.cpu} ${osShort(s.os)}`.toLowerCase().includes(f)) continue;
+            (groups[s.gpu] = groups[s.gpu] || []).push(s);
+          }
+          const order = Object.keys(groups).sort((a, b) => best(groups[b][0]) - best(groups[a][0]) || a.localeCompare(b));
+          let html = "";
+          for (const gpu of order) {
+            const sys = groups[gpu].slice().sort((a, b) => best(b) - best(a));
+            const tags = [`${sys.length} system${sys.length > 1 ? "s" : ""}`];
+            if (vramText(sys[0])) tags.push(vramText(sys[0]));
+            if (sys[0].gpu_power_w) tags.push(sys[0].gpu_power_w + "W");
+            html += `<div class="gpu">${esc(gpu)}<span class="cnt">${tags.join(" · ")}</span></div>`;
+            for (const s of sys) {
+              // Per-system column set (its own resolutions/templates), kept simple and local.
+              const tpls = Object.keys(s.results).sort((a, b) => {
+                const ia = TEMPLATE_ORDER.indexOf(a), ib = TEMPLATE_ORDER.indexOf(b);
+                return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+              });
+              const resSet = new Set();
+              tpls.forEach((t) => Object.keys(s.results[t]).forEach((r) => resSet.add(r)));
+              const res = [...resSet].sort((a, b) => (+a.split("x")[0]) - (+b.split("x")[0]));
+              html += `<div class="sys"><div class="specs">${specLine(s)}</div>`;
+              html += `<table class="mini"><tr><th>fps</th>${res.map((r) => `<th>${resShort(r)}</th>`).join("")}</tr>`;
+              for (const t of tpls) {
+                html += `<tr><td>${esc(t)}</td>${res.map((r) => { const v = s.results[t][r]; return `<td class="fps ${fpsClass(v)}">${fpsFmt(v)}</td>`; }).join("")}</tr>`;
+              }
+              html += `</table></div>`;
             }
           }
+          document.getElementById("out").innerHTML = html || "<p class='meta'>No matches.</p>";
         }
-
-        document.getElementById("meta").textContent =
-          `${subs.length} submission${subs.length === 1 ? "" : "s"}, ${rows.length} results` +
-          (data.generated_at ? ` · updated ${fmtDate(data.generated_at)}` : "");
-
-        if (rows.length === 0) {
-          document.getElementById("empty").hidden = false;
-          return;
-        }
-
-        const columns = [
-          "GPU",
-          { name: "VRAM (GB)", formatter: (c) => (typeof c === "number" ? c : "") },
-          { name: "TGP (W)", formatter: (c) => (typeof c === "number" ? c : "") },
-          "CPU",
-          "RAM",
-          "Backend",
-          "Template",
-          "Resolution",
-          { name: "FPS", formatter: (c) => (typeof c === "number" ? c.toFixed(1) : c) },
-          "App",
-          "OS",
-          "Date",
-          "Submitted by",
-        ];
-        if (anyNote) columns.push("Note");
-
-        new gridjs.Grid({
-          columns,
-          data: rows,
-          search: true,
-          sort: true,
-          resizable: true,
-          pagination: { limit: 50 },
-        }).render(document.getElementById("table"));
+        render();
+        q.addEventListener("input", render);
       })
       .catch((e) => {
         document.getElementById("empty").hidden = false;
