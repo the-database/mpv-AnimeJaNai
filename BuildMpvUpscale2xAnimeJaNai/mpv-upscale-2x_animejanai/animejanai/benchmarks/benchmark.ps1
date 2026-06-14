@@ -208,15 +208,20 @@ function Measure-Cell($video, $vf) {
 # cache key). So after this, the timed mpv runs land on a warm engine and never
 # build mid-measurement. No-op on DirectML (no engine build). Best-effort: any
 # failure is swallowed - the mpv warmup + Measure-Cell retry still cover it.
+$buildLog = Join-Path $root 'benchmark-build.log'
 function Invoke-Build($w, $h, $slot) {
     if (-not $buildsEngines) { return }
     try {
         $harness = Join-Path $root 'inference\aji_harness.exe'
-        if (-not (Test-Path $harness)) { return }
+        if (-not (Test-Path $harness)) {
+            Write-Host -NoNewline "[no harness] " -ForegroundColor DarkGray
+            return
+        }
         # nv12 dummy frame (Y + CbCr/2); content is irrelevant - the build depends
         # only on the model and the WxH input shape, not the pixels.
         $dummy = Join-Path $clipRoot 'warm.raw'
-        [System.IO.File]::WriteAllBytes($dummy, (New-Object byte[] ([int]([int]$w * [int]$h * 3 / 2))))
+        $size = [int]([long]$w * [long]$h * 3 / 2)
+        [System.IO.File]::WriteAllBytes($dummy, [byte[]]::new($size))
         $flags = @(
             '--input', $dummy, '--width', "$w", '--height', "$h", '--frames', '1',
             '--conf', $conf, '--model-dir', (Join-Path $root 'onnx'),
@@ -232,15 +237,25 @@ function Invoke-Build($w, $h, $slot) {
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $p = [System.Diagnostics.Process]::Start($psi)
-        [void]$p.StandardOutput.ReadToEndAsync()
-        [void]$p.StandardError.ReadToEndAsync()
-        if (-not $p.WaitForExit([int]($buildAllowSec * 1000))) {
+        $outTask = $p.StandardOutput.ReadToEndAsync()
+        $errTask = $p.StandardError.ReadToEndAsync()
+        $exited = $p.WaitForExit([int]($buildAllowSec * 1000))
+        if (-not $exited) {
             $eap = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
             & taskkill /T /F /PID $p.Id *> $null
             $ErrorActionPreference = $eap
             [void]$p.WaitForExit(5000)
         }
-    } catch { } # best-effort warm-up; never fatal
+        # Log the harness output so a failed/mismatched build is diagnosable
+        # instead of silently leaving the timed runs in passthrough.
+        $code = try { $p.ExitCode } catch { 'killed' }
+        Add-Content $buildLog ("=== slot $slot ${w}x${h}  exit=$code  cmd: " + $psi.Arguments + "`n" +
+                               $outTask.Result + $errTask.Result + "`n")
+        if ($code -ne 0) { Write-Host -NoNewline "[build exit=$code] " -ForegroundColor DarkYellow }
+    } catch {
+        Add-Content $buildLog "=== slot $slot ${w}x${h}  PS error: $_`n"
+        Write-Host -NoNewline "[build err] " -ForegroundColor DarkYellow
+    }
 }
 
 $table = @{}
