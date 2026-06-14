@@ -63,16 +63,19 @@ $resolutions = Get-ChildItem $PSScriptRoot -Filter "*.mp4" | ForEach-Object {
     $_.BaseName
 } | Sort-Object { [int]($_ -split 'x')[0] }
 
+# Frame counts. No --loop-file: it defeats --frames (mpv never quits a looping
+# file), so the high count must fit within one pass of the bundled clips (each
+# is ~90 s, ~2157 frames at 23.976 fps), with margin.
 $warmupFrames = 200
 $lowFrames    = 500
-$highFrames   = 3500
+$highFrames   = 1800
 
 function Invoke-MpvFrames($video, $vf, $n) {
     # & with splatting quotes each arg correctly; -- guards the path so a clip
     # name with spaces/dashes can't be parsed as more options or a stdin '-'.
     $a = @(
         '--process-instance=multi', '--auto-load-folder=no', '--untimed', '--no-audio',
-        '--vo=null', '--keep-open=no', '--idle=no', '--sid=no', '--loop-file=inf',
+        '--vo=null', '--keep-open=no', '--idle=no', '--sid=no',
         '--no-resume-playback', '--save-position-on-quit=no', '--start=0',
         "--vf=$vf", "--frames=$n", '--', $video
     )
