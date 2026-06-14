@@ -72,9 +72,12 @@ Write-Host " are skipped and recorded as -1 (shown as '-' in the catalog).)"
 Write-Host ""
 
 $slots = [ordered]@{ "Balanced" = 1010; "Performance" = 1011 }
+# Ascending by pixel count: a larger input is always more work for the model, so
+# once a template is too slow at one resolution every larger one is too (used to
+# short-circuit the rest below).
 $resolutions = Get-ChildItem $PSScriptRoot -Filter "*.mp4" | ForEach-Object {
     $_.BaseName
-} | Sort-Object { [int]($_ -split 'x')[0] }
+} | Sort-Object { $p = $_ -split 'x'; [int]$p[0] * [int]$p[1] }
 
 # Frame counts. No --loop-file: it defeats --frames (mpv never quits a looping
 # file), so counts must fit within one pass of the bundled clips (each is ~90 s,
@@ -145,6 +148,10 @@ function Invoke-MpvFrames($video, $vf, $n, $timeoutSec) {
 $table = @{}
 foreach ($name in $slots.Keys) { $table[$name] = [ordered]@{} }
 
+# Once a template is too slow at one resolution, every larger resolution for it
+# is skipped without running (it can only be slower). Keyed by template name.
+$skipRest = @{}
+
 # mpv.net auto-loads every file in the opened file's folder into a playlist, and
 # --auto-load-folder=no on the command line does not reliably suppress it. If we
 # played benchmarks/<res>.mp4 directly, each run would also play every other
@@ -162,6 +169,13 @@ foreach ($res in $resolutions) {
     foreach ($name in $slots.Keys) {
         $vf = $vfBase -replace 'slot=\d+', ("slot=" + $slots[$name])
         Write-Host -NoNewline ("{0,-12} {1,-10} " -f $name, $res)
+        # A smaller resolution for this template already fell below the floor;
+        # this larger one can only be slower, so record it without running.
+        if ($skipRest[$name]) {
+            $table[$name][$res] = -1
+            Write-Host "skipped (lower resolution already too slow)" -ForegroundColor DarkYellow
+            continue
+        }
         try {
             # Warmup builds the engine + fills the pipeline. A timeout here means
             # the GPU is below the floor (or, on TensorRT, a build that overran
@@ -169,6 +183,7 @@ foreach ($res in $resolutions) {
             $warm = Invoke-MpvFrames $video $vf $warmupFrames $warmupTimeout
             if ($warm.TimedOut) {
                 $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
+                $skipRest[$name] = $true   # every larger resolution for this template is slower too
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
                 continue
             }
@@ -178,6 +193,7 @@ foreach ($res in $resolutions) {
             $probe = Invoke-MpvFrames $video $vf $probeFrames (Get-RunTimeout $probeFrames)
             if ($probe.TimedOut) {
                 $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
+                $skipRest[$name] = $true   # every larger resolution for this template is slower too
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
                 continue
             }
@@ -193,6 +209,7 @@ foreach ($res in $resolutions) {
             $high = Invoke-MpvFrames $video $vf $highFrames (Get-RunTimeout $highFrames)
             if ($high.TimedOut) {
                 $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
+                $skipRest[$name] = $true   # every larger resolution for this template is slower too
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
                 continue
             }
