@@ -201,6 +201,48 @@ function Measure-Cell($video, $vf) {
     return [pscustomobject]@{ Status = 'anomaly'; Dt = $dt }
 }
 
+# Pre-build one slot+resolution's TensorRT engine via the harness. The harness
+# builds synchronously - it blocks until the engine is built and cached, unlike
+# the player's async (passthrough-while-building) path - and the player reuses
+# the same on-disk cache (same aji_trt, conf, model, slot and resolution => same
+# cache key). So after this, the timed mpv runs land on a warm engine and never
+# build mid-measurement. No-op on DirectML (no engine build). Best-effort: any
+# failure is swallowed - the mpv warmup + Measure-Cell retry still cover it.
+function Invoke-Build($w, $h, $slot) {
+    if (-not $buildsEngines) { return }
+    try {
+        $harness = Join-Path $root 'inference\aji_harness.exe'
+        if (-not (Test-Path $harness)) { return }
+        # nv12 dummy frame (Y + CbCr/2); content is irrelevant - the build depends
+        # only on the model and the WxH input shape, not the pixels.
+        $dummy = Join-Path $clipRoot 'warm.raw'
+        [System.IO.File]::WriteAllBytes($dummy, (New-Object byte[] ([int]([int]$w * [int]$h * 3 / 2))))
+        $flags = @(
+            '--input', $dummy, '--width', "$w", '--height', "$h", '--frames', '1',
+            '--conf', $conf, '--model-dir', (Join-Path $root 'onnx'),
+            '--rife-model-dir', (Join-Path $root 'rife'),
+            '--trtexec', (Join-Path $root 'inference\trtexec.exe'), '--slot', "$slot"
+        )
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $harness
+        # Quote any arg with spaces (install paths can); the harness takes plain argv.
+        $psi.Arguments = (($flags | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' ')
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        [void]$p.StandardOutput.ReadToEndAsync()
+        [void]$p.StandardError.ReadToEndAsync()
+        if (-not $p.WaitForExit([int]($buildAllowSec * 1000))) {
+            $eap = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
+            & taskkill /T /F /PID $p.Id *> $null
+            $ErrorActionPreference = $eap
+            [void]$p.WaitForExit(5000)
+        }
+    } catch { } # best-effort warm-up; never fatal
+}
+
 $table = @{}
 foreach ($name in $slots.Keys) { $table[$name] = [ordered]@{} }
 
@@ -233,9 +275,16 @@ foreach ($res in $resolutions) {
             continue
         }
         try {
-            # Warmup builds the engine + fills the pipeline. A timeout here means
-            # the GPU is below the floor (or, on TensorRT, a build that overran
-            # its budget) - either way not worth measuring.
+            # Pre-build this slot+resolution's TensorRT engine synchronously via the
+            # harness so the timed mpv runs land on a warm cache (identical engine:
+            # same aji_trt + conf + model-dir + slot + WxH => same cache key). No-op
+            # on DirectML; best-effort, so the warmup + retry below still cover it.
+            $wh = $res -split 'x'
+            Invoke-Build $wh[0] $wh[1] $slots[$name]
+
+            # Warmup fills the pipeline and warms GPU clocks (the engine is already
+            # built by Invoke-Build above, or builds here as a fallback). A timeout
+            # means the GPU is below the floor or a build overran its budget.
             $warm = Invoke-MpvFrames $video $vf $warmupFrames $warmupTimeout
             if ($warm.TimedOut) {
                 $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
