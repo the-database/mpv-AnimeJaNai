@@ -28,9 +28,13 @@ if (-not (Test-Path $mpvnet)) {
     exit 1
 }
 
-# Backend from [global] in animejanai.conf - for the report header only. The
-# native filter dispatches to aji_trt/aji_dml itself and animejanai_backend.lua
-# sets the right hwdec, so we must NOT override decoding here.
+# Backend from [global] in animejanai.conf. The native filter dispatches to
+# aji_trt/aji_dml itself, but the decoder must match: TensorRT consumes CUDA
+# frames (nvdec), DirectML/NCNN consume D3D11 frames (d3d11va). In normal
+# playback animejanai_backend.lua sets this, but it does not run reliably under
+# this mpvnet.com benchmark launch, so set hwdec here explicitly. Without it,
+# the conf default hwdec=nvdec is used and a non-NVIDIA machine fails with
+# "Cannot load nvcuda.dll".
 $backend = "TensorRT"
 if (Test-Path $conf) {
     $inGlobal = $false
@@ -39,6 +43,7 @@ if (Test-Path $conf) {
         elseif ($inGlobal -and $line -match '^backend=(\S+)') { $backend = $Matches[1] }
     }
 }
+$hwdec = if ($backend -match '^(?i:directml|ncnn)$') { 'd3d11va' } else { 'nvdec' }
 
 # Pull the aji filter string from the managed conf so paths stay in sync; only
 # the slot is swapped per template below.
@@ -76,7 +81,7 @@ function Invoke-MpvFrames($video, $vf, $n) {
     # name with spaces/dashes can't be parsed as more options or a stdin '-'.
     $a = @(
         '--process-instance=multi', '--auto-load-folder=no', '--untimed', '--no-audio',
-        '--vo=null', '--keep-open=no', '--idle=no', '--sid=no',
+        '--vo=null', '--keep-open=no', '--idle=no', '--sid=no', "--hwdec=$hwdec",
         '--no-resume-playback', '--save-position-on-quit=no', '--start=0',
         "--vf=$vf", "--frames=$n", '--', $video
     )
