@@ -85,8 +85,20 @@ function Invoke-MpvFrames($video, $vf, $n) {
 $table = @{}
 foreach ($name in $slots.Keys) { $table[$name] = [ordered]@{} }
 
+# mpv.net auto-loads every file in the opened file's folder into a playlist, and
+# --auto-load-folder=no on the command line does not reliably suppress it. If we
+# played benchmarks/<res>.mp4 directly, each run would also play every other
+# resolution and the timing would be meaningless. So copy each clip into its own
+# clean temp folder and play it from there - a one-file folder has nothing to
+# auto-load.
+$clipRoot = Join-Path ([System.IO.Path]::GetTempPath()) "animejanai-bench"
+Remove-Item $clipRoot -Recurse -Force -ErrorAction SilentlyContinue
+
 foreach ($res in $resolutions) {
-    $video = Join-Path $PSScriptRoot "$res.mp4"
+    $cellDir = Join-Path $clipRoot $res
+    New-Item -ItemType Directory -Path $cellDir -Force | Out-Null
+    $video = Join-Path $cellDir "$res.mp4"
+    Copy-Item (Join-Path $PSScriptRoot "$res.mp4") $video -Force
     foreach ($name in $slots.Keys) {
         $vf = $vfBase -replace 'slot=\d+', ("slot=" + $slots[$name])
         Write-Host -NoNewline ("{0,-12} {1,-10} " -f $name, $res)
@@ -105,6 +117,8 @@ foreach ($res in $resolutions) {
         }
     }
 }
+
+Remove-Item $clipRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 # Markdown table - same shape the Submit-to-Catalog parser expects.
 $lines = @()
