@@ -88,13 +88,33 @@
     const fmtDate = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toISOString().slice(0, 10); };
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+    // WMI reports the raw Windows/WDDM driver string (e.g. 32.0.16.1047), which no
+    // end user recognizes. Show the vendor's marketing version instead:
+    //   NVIDIA  32.0.16.1047 -> 610.47   (last 5 digits, dot before the last two)
+    //   Intel   32.0.101.6737 -> 101.6737 (drop the leading WDDM major.minor)
+    //   AMD/other: the WMI string doesn't map to a marketing number, so leave raw.
+    // The raw value stays in the data and is shown on hover.
+    function driverPretty(s) {
+      const d = (s.driver || "").trim();
+      if (!d) return "";
+      const gpu = s.gpu || "";
+      const isNvidia = /nvidia|geforce|\brtx\b|\bgtx\b|quadro|titan/i.test(gpu) || /^\d+\.\d+\.1[4-6]\./.test(d);
+      if (isNvidia) {
+        const digits = d.replace(/\D/g, "");
+        if (digits.length >= 5) { const t = digits.slice(-5); return t.slice(0, 3) + "." + t.slice(3); }
+      }
+      const isIntel = /intel|iris|\barc\b|\buhd\b|hd graphics/i.test(gpu) || /^\d+\.\d+\.101\./.test(d);
+      if (isIntel) { const m = d.match(/^\d+\.\d+\.(.+)$/); if (m) return m[1]; }
+      return d;
+    }
+
     function specLine(s) {
       const bits = [];
       if (s.cpu) bits.push(`<b>${esc(cpuFull(s))}</b>`);
       if (ramText(s)) bits.push(esc(ramText(s)));
       if (s.os) bits.push(esc(osShort(s.os)));
       if (s.backend) bits.push(esc(s.backend));
-      if (s.driver) bits.push("driver " + esc(s.driver));
+      if (s.driver) bits.push(`<span title="Driver ${esc(s.driver)}">driver ${esc(driverPretty(s))}</span>`);
       if (s.app_version) bits.push("v" + esc(s.app_version));
       if (s.submitted_at) bits.push(fmtDate(s.submitted_at));
       if (s.submitted_by) bits.push(esc(s.submitted_by));
