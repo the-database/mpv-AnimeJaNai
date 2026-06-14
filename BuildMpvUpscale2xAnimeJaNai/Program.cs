@@ -21,7 +21,7 @@ using static Downloader;
 // NOTE: v16.test1 is vs-mlrt's TRT 11 PRE-release - recheck for a stable
 // v16 tag before cutting the package release.
 const string VsMlrtCudaVersion    = "v16.test1";
-const string AjiVersion           = "v0.2.0";       // github.com/the-database/animejanai-inference release tag (ABI v7, pipelined)
+const string AjiVersion           = "v0.4.0";       // github.com/the-database/animejanai-inference release tag (ABI v7; multi-GPU kernels - fixes sm120-only build)
 const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
 const string ManagerVersion       = "0.2.4";        // github.com/the-database/AnimeJaNaiConfEditor release tag (AnimeJaNai Manager)
