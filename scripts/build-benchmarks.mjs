@@ -19,18 +19,20 @@ function valid(s) {
   if (s.schema !== 1) return false;
   if (!ALLOWED_BACKENDS.has(s.backend)) return false;
   if (!s.results || typeof s.results !== "object") return false;
-  let cells = 0;
+  let measured = 0;
   for (const template of Object.keys(s.results)) {
     const row = s.results[template];
     if (!row || typeof row !== "object") return false;
     for (const res of Object.keys(row)) {
       if (!RES_RE.test(res)) return false;
       const fps = row[res];
-      if (typeof fps !== "number" || !isFinite(fps) || fps <= 0) return false;
-      cells++;
+      if (typeof fps !== "number" || !isFinite(fps)) return false;
+      // -1 = "skipped, too slow to measure" sentinel; otherwise a positive fps.
+      if (fps !== -1 && fps <= 0) return false;
+      if (fps > 0) measured++;
     }
   }
-  return cells > 0;
+  return measured > 0; // require at least one real measurement (sentinels alone don't count)
 }
 
 const files = (await readdir(SUBMISSIONS_DIR)).filter((f) => f.endsWith(".json"));

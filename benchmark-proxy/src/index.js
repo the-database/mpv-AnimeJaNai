@@ -26,6 +26,7 @@ const ROUTE = "/api/benchmarks";
 const MAX_BODY = 16 * 1024; // 16 KB
 const FPS_MIN = 0;
 const FPS_MAX = 100000;
+const SKIP_SENTINEL = -1; // "skipped, ran too slow to measure"; catalog renders "-"
 const ALLOWED_BACKENDS = new Set(["TensorRT", "DirectML", "ncnn"]);
 const RES_RE = /^\d{2,5}x\d{2,5}$/;
 const STR_MAX = 200;
@@ -88,6 +89,7 @@ function validate(b) {
   const templates = Object.keys(results);
   if (templates.length === 0 || templates.length > 16) return "invalid results";
   let cells = 0;
+  let measured = 0;
   for (const t of templates) {
     if (typeof t !== "string" || t.length > 40) return "invalid template name";
     const row = results[t];
@@ -95,11 +97,15 @@ function validate(b) {
     for (const res of Object.keys(row)) {
       if (!RES_RE.test(res)) return `invalid resolution: ${res}`;
       const fps = row[res];
-      if (typeof fps !== "number" || !isFinite(fps) || fps <= FPS_MIN || fps > FPS_MAX) return `invalid fps for ${res}`;
+      // -1 is the "skipped, too slow to measure" sentinel; any other value must
+      // be a real, positive fps.
+      if (typeof fps !== "number" || !isFinite(fps)) return `invalid fps for ${res}`;
+      if (fps !== SKIP_SENTINEL && (fps <= FPS_MIN || fps > FPS_MAX)) return `invalid fps for ${res}`;
+      if (fps > 0) measured++;
       if (++cells > 256) return "too many results";
     }
   }
-  if (cells === 0) return "no results";
+  if (measured === 0) return "no results"; // nothing actually ran; sentinels only
   return null;
 }
 
