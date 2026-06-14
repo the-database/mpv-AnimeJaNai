@@ -28,6 +28,7 @@ local function read_conf()
         return nil, false
     end
     local backend
+    local default_slot
     local rife = false
     local in_global = false
     for line in f:lines() do
@@ -39,13 +40,17 @@ local function read_conf()
             if v then
                 backend = v
             end
+            local d = line:match('^default_slot=(-?%d+)')
+            if d then
+                default_slot = tonumber(d)
+            end
         end
         if line:match('^chain_%d+_rife=yes') or line:match('^chain_%d+_rife=true') then
             rife = true
         end
     end
     f:close()
-    return backend, rife
+    return backend, rife, default_slot
 end
 
 local function exists(rel)
@@ -125,7 +130,7 @@ local function check_components(backend, rife_configured)
     end)
 end
 
-local backend_raw, rife_configured = read_conf()
+local backend_raw, rife_configured, default_slot = read_conf()
 local backend = (backend_raw or 'TensorRT'):lower()
 local hwdec = 'nvdec'
 if backend == 'directml' or backend == 'ncnn' then
@@ -135,4 +140,21 @@ end
 mp.set_property('hwdec', hwdec)
 msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
                        hwdec == 'd3d11va' and ', gpu-api=d3d11' or ''))
+
+-- The Manager's "Set as Default Profile" stores the chosen slot here. The vf
+-- line bakes in Balanced (1002); if the user picked another default, apply it
+-- once after the first file loads (the filter only exists then). Only the first
+-- file is touched so a manual slot switch later in the session sticks.
+if default_slot then
+    local applied = false
+    mp.register_event('file-loaded', function()
+        if applied then
+            return
+        end
+        applied = true
+        msg.info('applying default slot ' .. default_slot)
+        mp.commandv('script-message', 'aji-slot', tostring(default_slot))
+    end)
+end
+
 check_components(backend, rife_configured)
