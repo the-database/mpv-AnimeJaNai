@@ -31,11 +31,12 @@
     table.mini td:first-child, table.mini th:first-child { text-align: left; opacity: .85; padding-right: 22px; }
     table.mini td { border-top: 1px solid #8882; font-variant-numeric: tabular-nums; }
     td.fps { font-weight: 600; }
-    td.fps.g { color: #1a7f44; } td.fps.a { color: #9a6b00; } td.fps.r { color: #b42318; }
+    td.fps.g { color: #1a7f44; } td.fps.a { color: #9a6b00; } td.fps.r, td.fps.skip { color: #b42318; }
+    td.fps.skip { cursor: help; } td.fps.na { opacity: .3; font-weight: 400; }
     #empty { padding: 36px; text-align: center; opacity: .6; }
 
     @media (prefers-color-scheme: dark) {
-      td.fps.g { color: #6ee7a0; } td.fps.a { color: #e8c66a; } td.fps.r { color: #f08a8a; }
+      td.fps.g { color: #6ee7a0; } td.fps.a { color: #e8c66a; } td.fps.r, td.fps.skip { color: #f08a8a; }
       .legend .gs { background: #6ee7a0; } .legend .as { background: #e8c66a; } .legend .rs { background: #f08a8a; }
     }
   </style>
@@ -44,7 +45,7 @@
   <h1>mpv-AnimeJaNai community benchmarks</h1>
   <p class="lede">Real playback fps of the AnimeJaNai upscaler across hardware.</p>
   <input class="search" id="q" placeholder="Filter by GPU, CPU, or OS..." />
-  <div class="legend">Headroom vs ~24 fps realtime:<span class="gs"></span>comfortable<span class="as"></span>borderline<span class="rs"></span>below realtime</div>
+  <div class="legend">Headroom vs ~24 fps realtime:<span class="gs"></span>comfortable<span class="as"></span>borderline<span class="rs"></span>below realtime<span style="margin-left:18px"><b>-</b> = too slow to benchmark</span></div>
 
   <div id="out"></div>
   <div id="empty" hidden>No benchmarks yet. Be the first: run the benchmark in the AnimeJaNai Manager and click <strong>Submit to Catalog</strong>.</div>
@@ -73,9 +74,17 @@
     const ramText = (s) => !s.ram_mb ? "" : (s.ram_speed_mhz ? `${Math.round(s.ram_mb / 1024)}GB @ ${s.ram_speed_mhz}` : `${Math.round(s.ram_mb / 1024)}GB`);
     const vramText = (s) => s.vram_mb ? Math.round(s.vram_mb / 1024) + "GB VRAM" : "";
     const resShort = (r) => r.split("x")[1] + "p";
-    const fpsFmt = (v) => (v == null || v === "") ? "" : (Math.round(v * 10) / 10).toString();
+    const fpsFmt = (v) => (v == null || v === "" || v < 0) ? "" : (Math.round(v * 10) / 10).toString();
     // Headroom vs ~24 fps realtime: comfortable >=48 (~2x), borderline >=24, below realtime <24.
-    const fpsClass = (v) => (v == null || v === "") ? "" : (v >= 48 ? "g" : v >= 24 ? "a" : "r");
+    const fpsClass = (v) => (v == null || v === "" || v < 0) ? "" : (v >= 48 ? "g" : v >= 24 ? "a" : "r");
+    // One fps cell. -1 is the "skipped, too slow to benchmark" sentinel; a missing
+    // value means that machine didn't report this resolution at all.
+    const SKIP = -1;
+    function fpsCell(v) {
+      if (v === SKIP) return `<td class="fps skip" title="Skipped: ran too slow to benchmark (well below real-time)">-</td>`;
+      if (v == null || v === "") return `<td class="fps na" title="Not measured">&middot;</td>`;
+      return `<td class="fps ${fpsClass(v)}">${fpsFmt(v)}</td>`;
+    }
     const fmtDate = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toISOString().slice(0, 10); };
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -91,7 +100,15 @@
       if (s.submitted_by) bits.push(esc(s.submitted_by));
       return bits.join(" &middot; ");
     }
-    const best = (s) => (s.results.Balanced && s.results.Balanced["1920x1080"]) || (s.results.Performance && s.results.Performance["1920x1080"]) || 0;
+    // Sort key: best real 1080p fps across templates (ignores the -1 skip sentinel).
+    function best(s) {
+      let m = 0;
+      for (const t of Object.keys(s.results)) {
+        const v = s.results[t]["1920x1080"];
+        if (typeof v === "number" && v > m) m = v;
+      }
+      return m;
+    }
 
     fetch("./benchmarks.json", { cache: "no-store" })
       .then((r) => r.json())
@@ -101,6 +118,18 @@
           `${subs.length} submission${subs.length === 1 ? "" : "s"}` +
           (data.generated_at ? ` · updated ${fmtDate(data.generated_at)}` : "");
         if (subs.length === 0) { document.getElementById("empty").hidden = false; return; }
+
+        // Fixed table shape: every system shows the same template rows and
+        // resolution columns (the union across all submissions), so the catalog
+        // is predictable to read. A cell a given machine didn't run shows "-"
+        // (skipped, too slow) or a faint dot (not reported); see fpsCell.
+        const ALL_TPL = [...new Set(subs.flatMap((s) => Object.keys(s.results)))]
+          .sort((a, b) => {
+            const ia = TEMPLATE_ORDER.indexOf(a), ib = TEMPLATE_ORDER.indexOf(b);
+            return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+          });
+        const ALL_RES = [...new Set(subs.flatMap((s) => Object.values(s.results).flatMap((r) => Object.keys(r))))]
+          .sort((a, b) => (+a.split("x")[0]) - (+b.split("x")[0]));
 
         const q = document.getElementById("q");
         function render() {
@@ -119,18 +148,12 @@
             if (sys[0].gpu_power_w) tags.push(sys[0].gpu_power_w + "W");
             html += `<div class="gpu">${esc(gpu)}<span class="cnt">${tags.join(" · ")}</span></div>`;
             for (const s of sys) {
-              // Per-system column set (its own resolutions/templates), kept simple and local.
-              const tpls = Object.keys(s.results).sort((a, b) => {
-                const ia = TEMPLATE_ORDER.indexOf(a), ib = TEMPLATE_ORDER.indexOf(b);
-                return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
-              });
-              const resSet = new Set();
-              tpls.forEach((t) => Object.keys(s.results[t]).forEach((r) => resSet.add(r)));
-              const res = [...resSet].sort((a, b) => (+a.split("x")[0]) - (+b.split("x")[0]));
+              // Same fixed columns/rows for every system (see ALL_RES/ALL_TPL).
               html += `<div class="sys"><div class="specs">${specLine(s)}</div>`;
-              html += `<table class="mini"><tr><th>fps</th>${res.map((r) => `<th>${resShort(r)}</th>`).join("")}</tr>`;
-              for (const t of tpls) {
-                html += `<tr><td>${esc(t)}</td>${res.map((r) => { const v = s.results[t][r]; return `<td class="fps ${fpsClass(v)}">${fpsFmt(v)}</td>`; }).join("")}</tr>`;
+              html += `<table class="mini"><tr><th>fps</th>${ALL_RES.map((r) => `<th>${resShort(r)}</th>`).join("")}</tr>`;
+              for (const t of ALL_TPL) {
+                const row = s.results[t] || {};
+                html += `<tr><td>${esc(t)}</td>${ALL_RES.map((r) => fpsCell(row[r])).join("")}</tr>`;
               }
               html += `</table></div>`;
             }

@@ -19,7 +19,8 @@
 # Sizing the window from the probe keeps each cell to about the same wall time
 # regardless of GPU speed. Each run is killed if it can't sustain $fpsFloor fps,
 # so hopelessly slow cells (well below real-time) are skipped instead of running
-# for many minutes; a skipped cell is left blank.
+# for many minutes; a skipped cell is written as -1, the sentinel the catalog
+# renders as a red "-" (well-below-real-time), distinct from a real measurement.
 
 $ErrorActionPreference = "Stop"
 $root        = Split-Path -Parent $PSScriptRoot       # animejanai/
@@ -66,8 +67,8 @@ Write-Host "mpv windows will open and close on their own. Do NOT close or click"
 Write-Host "them while the benchmark runs, or the results will be invalid."
 Write-Host "(TensorRT builds an engine per resolution on the first run, about a"
 Write-Host " minute each and cached afterward; the full sweep takes several minutes,"
-Write-Host " longer on slower GPUs. Cells too slow to be usable, under $fpsFloor fps, are"
-Write-Host " skipped and left blank.)"
+Write-Host " longer on slower GPUs. Cells too slow to be usable, under $fpsFloor fps,"
+Write-Host " are skipped and recorded as -1 (shown as '-' in the catalog).)"
 Write-Host ""
 
 $slots = [ordered]@{ "Balanced" = 1010; "Performance" = 1011 }
@@ -167,7 +168,7 @@ foreach ($res in $resolutions) {
             # its budget) - either way not worth measuring.
             $warm = Invoke-MpvFrames $video $vf $warmupFrames $warmupTimeout
             if ($warm.TimedOut) {
-                $table[$name][$res] = ""
+                $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
                 continue
             }
@@ -176,7 +177,7 @@ foreach ($res in $resolutions) {
             # size the window run.
             $probe = Invoke-MpvFrames $video $vf $probeFrames (Get-RunTimeout $probeFrames)
             if ($probe.TimedOut) {
-                $table[$name][$res] = ""
+                $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
                 continue
             }
@@ -191,7 +192,7 @@ foreach ($res in $resolutions) {
 
             $high = Invoke-MpvFrames $video $vf $highFrames (Get-RunTimeout $highFrames)
             if ($high.TimedOut) {
-                $table[$name][$res] = ""
+                $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
                 continue
             }
