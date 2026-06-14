@@ -145,6 +145,39 @@ function Invoke-MpvFrames($video, $vf, $n, $timeoutSec) {
     return [pscustomobject]@{ Seconds = $sw.Elapsed.TotalSeconds; TimedOut = (-not $exited) }
 }
 
+# Two-point measurement for one cell: a probe run sizes the window run, then the
+# frame/time difference cancels fixed startup cost. If dt <= 0 the one-time
+# TensorRT engine build landed in the probe rather than warmup (heavier models do
+# this when warmup exits before the build finishes), making the fewer-frame probe
+# slower than the window - the engine is cached after that pass, so retry once and
+# it cancels. Returns Status = ok (with Fps) | skip (a run fell below the fps
+# floor) | anomaly (still non-positive after the retry).
+function Measure-Cell($video, $vf) {
+    $dt = 0
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        $probe = Invoke-MpvFrames $video $vf $probeFrames (Get-RunTimeout $probeFrames)
+        if ($probe.TimedOut) { return [pscustomobject]@{ Status = 'skip' } }
+
+        # Size the window to ~$windowSeconds at the probed rate (probe time includes
+        # startup, so this slightly under-shoots - fine). Floor the gap for accuracy,
+        # cap so the run fits one clip pass.
+        $fpsEst = $probeFrames / [math]::Max($probe.Seconds, 0.001)
+        $windowFrames = [math]::Max([int]($fpsEst * $windowSeconds), $minWindowFrames)
+        $windowFrames = [math]::Min($windowFrames, $maxClipFrames - $probeFrames)
+        $highFrames = $probeFrames + $windowFrames
+
+        $high = Invoke-MpvFrames $video $vf $highFrames (Get-RunTimeout $highFrames)
+        if ($high.TimedOut) { return [pscustomobject]@{ Status = 'skip' } }
+
+        $dt = $high.Seconds - $probe.Seconds
+        if ($dt -gt 0) {
+            return [pscustomobject]@{ Status = 'ok'; Fps = [math]::Round(($highFrames - $probeFrames) / $dt, 1) }
+        }
+        # dt <= 0: build was in the probe; it's cached now, so loop once more.
+    }
+    return [pscustomobject]@{ Status = 'anomaly'; Dt = $dt }
+}
+
 $table = @{}
 foreach ($name in $slots.Keys) { $table[$name] = [ordered]@{} }
 
@@ -188,37 +221,19 @@ foreach ($res in $resolutions) {
                 continue
             }
 
-            # Probe point: rough rate used both as the first timed point and to
-            # size the window run.
-            $probe = Invoke-MpvFrames $video $vf $probeFrames (Get-RunTimeout $probeFrames)
-            if ($probe.TimedOut) {
+            # Probe + window, retrying once if the engine build lands in the
+            # probe (see Measure-Cell).
+            $r = Measure-Cell $video $vf
+            if ($r.Status -eq 'skip') {
                 $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
                 $skipRest[$name] = $true   # every larger resolution for this template is slower too
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
-                continue
+            } elseif ($r.Status -eq 'anomaly') {
+                throw "timing anomaly (dt=$([math]::Round($r.Dt, 3))s)"
+            } else {
+                $table[$name][$res] = $r.Fps
+                Write-Host "$($r.Fps) fps" -ForegroundColor Green
             }
-
-            # Size the window so its wall time is ~$windowSeconds at the probed
-            # rate (probe time includes startup, so this slightly under-shoots -
-            # fine). Floor the gap for accuracy, cap so the run fits one clip pass.
-            $fpsEst = $probeFrames / [math]::Max($probe.Seconds, 0.001)
-            $windowFrames = [math]::Max([int]($fpsEst * $windowSeconds), $minWindowFrames)
-            $windowFrames = [math]::Min($windowFrames, $maxClipFrames - $probeFrames)
-            $highFrames = $probeFrames + $windowFrames
-
-            $high = Invoke-MpvFrames $video $vf $highFrames (Get-RunTimeout $highFrames)
-            if ($high.TimedOut) {
-                $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
-                $skipRest[$name] = $true   # every larger resolution for this template is slower too
-                Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
-                continue
-            }
-
-            $dt = $high.Seconds - $probe.Seconds
-            if ($dt -le 0) { throw "timing anomaly (dt=$([math]::Round($dt,3))s)" }
-            $fps = [math]::Round(($highFrames - $probeFrames) / $dt, 1)
-            $table[$name][$res] = $fps
-            Write-Host "$fps fps" -ForegroundColor Green
         } catch {
             $table[$name][$res] = ""
             Write-Host "failed: $_" -ForegroundColor Red
