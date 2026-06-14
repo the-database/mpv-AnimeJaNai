@@ -100,10 +100,13 @@ $buildAllowSec   = 300   # warmup only: also covers a first-time TensorRT engine
 # a legitimate one-time engine build is never mistaken for a slow GPU.
 function Get-RunTimeout($frames) { [int]($decodeInitSec + $frames / $fpsFloor) }
 
-# Warmup budget: TensorRT may build an engine on first use (one-time, minutes),
-# so allow that; DirectML/NCNN never build, so hold warmup to the same fps floor
-# and skip a slow integrated GPU quickly instead of grinding through it.
-$warmupTimeout = if ($backend -match '^(?i:directml|ncnn)$') { Get-RunTimeout $warmupFrames } else { $buildAllowSec }
+# TensorRT builds an engine on first use (one-time, can take minutes); DirectML
+# and NCNN never build. So the benchmark gives engine builds the generous build
+# budget and never reads a slow *build* as "too slow to play" - only cached-engine
+# playback (the tight fps-floor timeout) decides that. DirectML uses the tight
+# timeout throughout, so it never waits on an engine that will never come.
+$buildsEngines = -not ($backend -match '^(?i:directml|ncnn)$')
+$warmupTimeout = if ($buildsEngines) { $buildAllowSec } else { Get-RunTimeout $warmupFrames }
 
 function Invoke-MpvFrames($video, $vf, $n, $timeoutSec) {
     $flags = @(
@@ -146,16 +149,29 @@ function Invoke-MpvFrames($video, $vf, $n, $timeoutSec) {
 }
 
 # Two-point measurement for one cell: a probe run sizes the window run, then the
-# frame/time difference cancels fixed startup cost. If dt <= 0 the one-time
-# TensorRT engine build landed in the probe rather than warmup (heavier models do
-# this when warmup exits before the build finishes), making the fewer-frame probe
-# slower than the window - the engine is cached after that pass, so retry once and
-# it cancels. Returns Status = ok (with Fps) | skip (a run fell below the fps
-# floor) | anomaly (still non-positive after the retry).
+# frame/time difference cancels fixed startup cost (fps = frames / time delta).
+#
+# The engine build is decoupled from the "too slow to play" decision. On an
+# engine-building backend, attempt 1 may still be building, so it runs with the
+# generous build budget - a long build never trips the playback timeout. If the
+# build lands in the probe the fewer-frame probe ends up slower than the cached-
+# engine window (dt <= 0); if it lands in the window it deflates attempt 1's fps.
+# Either way the engine is cached afterward, so we retry: attempt 2 runs entirely
+# on the cached engine with the tight fps-floor timeout, and *that* is what decides
+# the real playback rate (and a skip). DirectML builds nothing, so every run uses
+# the tight timeout and a slow GPU is skipped immediately.
+#
+# Returns Status = ok (with Fps) | skip (cached-engine playback below the floor) |
+# anomaly (dt still non-positive after the cached-engine retry).
 function Measure-Cell($video, $vf) {
     $dt = 0
     for ($attempt = 1; $attempt -le 2; $attempt++) {
-        $probe = Invoke-MpvFrames $video $vf $probeFrames (Get-RunTimeout $probeFrames)
+        # attempt 1 on an engine-building backend may include the build -> generous
+        # budget; the cached-engine retry uses the tight playback-floor timeout.
+        $buildPass = $buildsEngines -and ($attempt -eq 1)
+        $probeTimeout = if ($buildPass) { $buildAllowSec } else { Get-RunTimeout $probeFrames }
+
+        $probe = Invoke-MpvFrames $video $vf $probeFrames $probeTimeout
         if ($probe.TimedOut) { return [pscustomobject]@{ Status = 'skip' } }
 
         # Size the window to ~$windowSeconds at the probed rate (probe time includes
@@ -166,14 +182,21 @@ function Measure-Cell($video, $vf) {
         $windowFrames = [math]::Min($windowFrames, $maxClipFrames - $probeFrames)
         $highFrames = $probeFrames + $windowFrames
 
-        $high = Invoke-MpvFrames $video $vf $highFrames (Get-RunTimeout $highFrames)
+        $highTimeout = if ($buildPass) { $buildAllowSec } else { Get-RunTimeout $highFrames }
+        $high = Invoke-MpvFrames $video $vf $highFrames $highTimeout
         if ($high.TimedOut) { return [pscustomobject]@{ Status = 'skip' } }
 
         $dt = $high.Seconds - $probe.Seconds
-        if ($dt -gt 0) {
-            return [pscustomobject]@{ Status = 'ok'; Fps = [math]::Round(($highFrames - $probeFrames) / $dt, 1) }
-        }
-        # dt <= 0: build was in the probe; it's cached now, so loop once more.
+        # Build landed in the probe (slower than the cached-engine window) -> retry.
+        if ($dt -le 0) { continue }
+
+        $fps = [math]::Round(($highFrames - $probeFrames) / $dt, 1)
+        # A build that landed in the window run deflates attempt 1's fps; if the
+        # first pass looks below the floor, re-measure on the cached engine before
+        # trusting it. The cached-engine pass is the authoritative read.
+        if ($fps -lt $fpsFloor -and $buildPass) { continue }
+        if ($fps -lt $fpsFloor) { return [pscustomobject]@{ Status = 'skip' } }
+        return [pscustomobject]@{ Status = 'ok'; Fps = $fps }
     }
     return [pscustomobject]@{ Status = 'anomaly'; Dt = $dt }
 }
