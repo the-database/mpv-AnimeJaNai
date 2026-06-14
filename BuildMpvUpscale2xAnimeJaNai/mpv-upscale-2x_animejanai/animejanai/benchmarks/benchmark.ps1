@@ -100,10 +100,13 @@ $buildAllowSec   = 300   # warmup only: also covers a first-time TensorRT engine
 # a legitimate one-time engine build is never mistaken for a slow GPU.
 function Get-RunTimeout($frames) { [int]($decodeInitSec + $frames / $fpsFloor) }
 
-# Warmup budget: TensorRT may build an engine on first use (one-time, minutes),
-# so allow that; DirectML/NCNN never build, so hold warmup to the same fps floor
-# and skip a slow integrated GPU quickly instead of grinding through it.
-$warmupTimeout = if ($backend -match '^(?i:directml|ncnn)$') { Get-RunTimeout $warmupFrames } else { $buildAllowSec }
+# TensorRT builds an engine on first use (one-time, can take minutes); DirectML
+# and NCNN never build. So the benchmark gives engine builds the generous build
+# budget and never reads a slow *build* as "too slow to play" - only cached-engine
+# playback (the tight fps-floor timeout) decides that. DirectML uses the tight
+# timeout throughout, so it never waits on an engine that will never come.
+$buildsEngines = -not ($backend -match '^(?i:directml|ncnn)$')
+$warmupTimeout = if ($buildsEngines) { $buildAllowSec } else { Get-RunTimeout $warmupFrames }
 
 function Invoke-MpvFrames($video, $vf, $n, $timeoutSec) {
     $flags = @(
@@ -145,6 +148,101 @@ function Invoke-MpvFrames($video, $vf, $n, $timeoutSec) {
     return [pscustomobject]@{ Seconds = $sw.Elapsed.TotalSeconds; TimedOut = (-not $exited) }
 }
 
+# Two-point measurement for one cell: a probe run sizes the window run, then the
+# frame/time difference cancels fixed startup cost (fps = frames / time delta).
+#
+# The engine build is decoupled from the "too slow to play" decision. On an
+# engine-building backend, attempt 1 may still be building, so it runs with the
+# generous build budget - a long build never trips the playback timeout. If the
+# build lands in the probe the fewer-frame probe ends up slower than the cached-
+# engine window (dt <= 0); if it lands in the window it deflates attempt 1's fps.
+# Either way the engine is cached afterward, so we retry: attempt 2 runs entirely
+# on the cached engine with the tight fps-floor timeout, and *that* is what decides
+# the real playback rate (and a skip). DirectML builds nothing, so every run uses
+# the tight timeout and a slow GPU is skipped immediately.
+#
+# Returns Status = ok (with Fps) | skip (cached-engine playback below the floor) |
+# anomaly (dt still non-positive after the cached-engine retry).
+function Measure-Cell($video, $vf) {
+    $dt = 0
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        # attempt 1 on an engine-building backend may include the build -> generous
+        # budget; the cached-engine retry uses the tight playback-floor timeout.
+        $buildPass = $buildsEngines -and ($attempt -eq 1)
+        $probeTimeout = if ($buildPass) { $buildAllowSec } else { Get-RunTimeout $probeFrames }
+
+        $probe = Invoke-MpvFrames $video $vf $probeFrames $probeTimeout
+        if ($probe.TimedOut) { return [pscustomobject]@{ Status = 'skip' } }
+
+        # Size the window to ~$windowSeconds at the probed rate (probe time includes
+        # startup, so this slightly under-shoots - fine). Floor the gap for accuracy,
+        # cap so the run fits one clip pass.
+        $fpsEst = $probeFrames / [math]::Max($probe.Seconds, 0.001)
+        $windowFrames = [math]::Max([int]($fpsEst * $windowSeconds), $minWindowFrames)
+        $windowFrames = [math]::Min($windowFrames, $maxClipFrames - $probeFrames)
+        $highFrames = $probeFrames + $windowFrames
+
+        $highTimeout = if ($buildPass) { $buildAllowSec } else { Get-RunTimeout $highFrames }
+        $high = Invoke-MpvFrames $video $vf $highFrames $highTimeout
+        if ($high.TimedOut) { return [pscustomobject]@{ Status = 'skip' } }
+
+        $dt = $high.Seconds - $probe.Seconds
+        # Build landed in the probe (slower than the cached-engine window) -> retry.
+        if ($dt -le 0) { continue }
+
+        $fps = [math]::Round(($highFrames - $probeFrames) / $dt, 1)
+        # A build that landed in the window run deflates attempt 1's fps; if the
+        # first pass looks below the floor, re-measure on the cached engine before
+        # trusting it. The cached-engine pass is the authoritative read.
+        if ($fps -lt $fpsFloor -and $buildPass) { continue }
+        if ($fps -lt $fpsFloor) { return [pscustomobject]@{ Status = 'skip' } }
+        return [pscustomobject]@{ Status = 'ok'; Fps = $fps }
+    }
+    return [pscustomobject]@{ Status = 'anomaly'; Dt = $dt }
+}
+
+# Pre-build one slot+resolution's TensorRT engine via the harness. The harness
+# builds synchronously - it blocks until the engine is built and cached, unlike
+# the player's async (passthrough-while-building) path - and the player reuses
+# the same on-disk cache (same aji_trt, conf, model, slot and resolution => same
+# cache key). So after this, the timed mpv runs land on a warm engine and never
+# build mid-measurement. No-op on DirectML (no engine build). Best-effort: any
+# failure is swallowed - the mpv warmup + Measure-Cell retry still cover it.
+function Invoke-Build($w, $h, $slot) {
+    if (-not $buildsEngines) { return }
+    try {
+        $harness = Join-Path $root 'inference\aji_harness.exe'
+        if (-not (Test-Path $harness)) { return }
+        # nv12 dummy frame (Y + CbCr/2); content is irrelevant - the build depends
+        # only on the model and the WxH input shape, not the pixels.
+        $dummy = Join-Path $clipRoot 'warm.raw'
+        [System.IO.File]::WriteAllBytes($dummy, (New-Object byte[] ([int]([int]$w * [int]$h * 3 / 2))))
+        $flags = @(
+            '--input', $dummy, '--width', "$w", '--height', "$h", '--frames', '1',
+            '--conf', $conf, '--model-dir', (Join-Path $root 'onnx'),
+            '--rife-model-dir', (Join-Path $root 'rife'),
+            '--trtexec', (Join-Path $root 'inference\trtexec.exe'), '--slot', "$slot"
+        )
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $harness
+        # Quote any arg with spaces (install paths can); the harness takes plain argv.
+        $psi.Arguments = (($flags | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' ')
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        [void]$p.StandardOutput.ReadToEndAsync()
+        [void]$p.StandardError.ReadToEndAsync()
+        if (-not $p.WaitForExit([int]($buildAllowSec * 1000))) {
+            $eap = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
+            & taskkill /T /F /PID $p.Id *> $null
+            $ErrorActionPreference = $eap
+            [void]$p.WaitForExit(5000)
+        }
+    } catch { } # best-effort warm-up; never fatal
+}
+
 $table = @{}
 foreach ($name in $slots.Keys) { $table[$name] = [ordered]@{} }
 
@@ -177,9 +275,16 @@ foreach ($res in $resolutions) {
             continue
         }
         try {
-            # Warmup builds the engine + fills the pipeline. A timeout here means
-            # the GPU is below the floor (or, on TensorRT, a build that overran
-            # its budget) - either way not worth measuring.
+            # Pre-build this slot+resolution's TensorRT engine synchronously via the
+            # harness so the timed mpv runs land on a warm cache (identical engine:
+            # same aji_trt + conf + model-dir + slot + WxH => same cache key). No-op
+            # on DirectML; best-effort, so the warmup + retry below still cover it.
+            $wh = $res -split 'x'
+            Invoke-Build $wh[0] $wh[1] $slots[$name]
+
+            # Warmup fills the pipeline and warms GPU clocks (the engine is already
+            # built by Invoke-Build above, or builds here as a fallback). A timeout
+            # means the GPU is below the floor or a build overran its budget.
             $warm = Invoke-MpvFrames $video $vf $warmupFrames $warmupTimeout
             if ($warm.TimedOut) {
                 $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
@@ -188,37 +293,19 @@ foreach ($res in $resolutions) {
                 continue
             }
 
-            # Probe point: rough rate used both as the first timed point and to
-            # size the window run.
-            $probe = Invoke-MpvFrames $video $vf $probeFrames (Get-RunTimeout $probeFrames)
-            if ($probe.TimedOut) {
+            # Probe + window, retrying once if the engine build lands in the
+            # probe (see Measure-Cell).
+            $r = Measure-Cell $video $vf
+            if ($r.Status -eq 'skip') {
                 $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
                 $skipRest[$name] = $true   # every larger resolution for this template is slower too
                 Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
-                continue
+            } elseif ($r.Status -eq 'anomaly') {
+                throw "timing anomaly (dt=$([math]::Round($r.Dt, 3))s)"
+            } else {
+                $table[$name][$res] = $r.Fps
+                Write-Host "$($r.Fps) fps" -ForegroundColor Green
             }
-
-            # Size the window so its wall time is ~$windowSeconds at the probed
-            # rate (probe time includes startup, so this slightly under-shoots -
-            # fine). Floor the gap for accuracy, cap so the run fits one clip pass.
-            $fpsEst = $probeFrames / [math]::Max($probe.Seconds, 0.001)
-            $windowFrames = [math]::Max([int]($fpsEst * $windowSeconds), $minWindowFrames)
-            $windowFrames = [math]::Min($windowFrames, $maxClipFrames - $probeFrames)
-            $highFrames = $probeFrames + $windowFrames
-
-            $high = Invoke-MpvFrames $video $vf $highFrames (Get-RunTimeout $highFrames)
-            if ($high.TimedOut) {
-                $table[$name][$res] = -1   # sentinel: skipped, ran too slow (catalog renders "-")
-                $skipRest[$name] = $true   # every larger resolution for this template is slower too
-                Write-Host "skipped (under $fpsFloor fps)" -ForegroundColor DarkYellow
-                continue
-            }
-
-            $dt = $high.Seconds - $probe.Seconds
-            if ($dt -le 0) { throw "timing anomaly (dt=$([math]::Round($dt,3))s)" }
-            $fps = [math]::Round(($highFrames - $probeFrames) / $dt, 1)
-            $table[$name][$res] = $fps
-            Write-Host "$fps fps" -ForegroundColor Green
         } catch {
             $table[$name][$res] = ""
             Write-Host "failed: $_" -ForegroundColor Red
