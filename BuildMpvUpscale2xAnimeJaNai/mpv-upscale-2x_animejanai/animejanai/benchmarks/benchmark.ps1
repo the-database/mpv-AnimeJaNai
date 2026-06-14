@@ -80,7 +80,13 @@ function Invoke-MpvFrames($video, $vf, $n) {
         '--no-resume-playback', '--save-position-on-quit=no', '--start=0',
         "--vf=$vf", "--frames=$n", '--', $video
     )
-    return (Measure-Command { & $mpvnet @a *> $null }).TotalSeconds
+    # The DirectML/onnxruntime backend prints warnings to stderr; with
+    # ErrorActionPreference=Stop, PowerShell turns native stderr into a fatal
+    # error, so relax it around the call (all output is discarded anyway).
+    $eap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { return (Measure-Command { & $mpvnet @a *> $null }).TotalSeconds }
+    finally { $ErrorActionPreference = $eap }
 }
 
 $table = @{}
