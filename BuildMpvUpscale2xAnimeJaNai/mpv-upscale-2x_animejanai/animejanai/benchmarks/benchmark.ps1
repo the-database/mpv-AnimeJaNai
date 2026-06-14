@@ -1,24 +1,36 @@
-# AnimeJaNai native benchmark driver.
+# AnimeJaNai playback benchmark driver.
 #
-# Measures upscaling inference throughput (pre-processing + model +
-# post-processing on the GPU; decode excluded) for the built-in
-# Balanced (slot 1010) and Performance (slot 1011) templates across the
-# bundled seed resolutions, on the backend configured in
-# animejanai.conf. Run via animejanai_benchmark_all.bat (which the
-# config editor's Benchmark button launches) from the animejanai
-# directory.
+# Measures real end-to-end mpv playback throughput - nvdec decode plus the aji
+# upscale filter - for the built-in benchmark templates Balanced (slot 1010)
+# and Performance (slot 1011) across the bundled source clips, on the backend
+# configured in animejanai.conf. This is the fps that determines whether your
+# hardware can actually play content at each resolution; it is lower than raw
+# inference fps because, like real playback, it includes video decode.
 #
-# TensorRT builds an engine per model/resolution on the first run
-# (about a minute each, cached afterwards - playback reuses them).
+# Launched by animejanai_benchmark_all.bat (the Manager's Run Benchmarks
+# button). mpv windows open and close on their own during the run - do not
+# close or click them, or the timings are invalid.
+#
+# Method: each cell runs mpvnet.com uncapped (--untimed --vo=null), looping a
+# short clip. A warmup run builds the TensorRT engine and fills the pipeline,
+# then two timed runs (low/high frame counts) are subtracted so the fixed
+# startup cost cancels out:  fps = (high - low) / (t_high - t_low).
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot     # animejanai/
-$conf = Join-Path $root "animejanai.conf"
-$inference = Join-Path $root "inference"
-$onnx = Join-Path $root "onnx"
-$seeds = Join-Path $PSScriptRoot "seeds"
+$root        = Split-Path -Parent $PSScriptRoot       # animejanai/
+$installRoot = Split-Path -Parent $root               # install root (mpvnet.com is here)
+$conf        = Join-Path $root "animejanai.conf"
+$mpvConf     = Join-Path $installRoot "portable_config\mpv-animejanai.conf"
+$mpvnet      = Join-Path $installRoot "mpvnet.com"
 
-# backend from [global] in animejanai.conf (3.3.x semantics)
+if (-not (Test-Path $mpvnet)) {
+    Write-Host "mpvnet.com not found at $mpvnet" -ForegroundColor Red
+    exit 1
+}
+
+# Backend from [global] in animejanai.conf - for the report header only. The
+# native filter dispatches to aji_trt/aji_dml itself and animejanai_backend.lua
+# sets the right hwdec, so we must NOT override decoding here.
 $backend = "TensorRT"
 if (Test-Path $conf) {
     $inGlobal = $false
@@ -27,63 +39,73 @@ if (Test-Path $conf) {
         elseif ($inGlobal -and $line -match '^backend=(\S+)') { $backend = $Matches[1] }
     }
 }
-$isDml = $backend -match '^(?i)(directml|ncnn)$'
-$harness = Join-Path $inference $(if ($isDml) { "aji_harness_dml.exe" } else { "aji_harness.exe" })
-if (-not (Test-Path $harness)) {
-    Write-Host "Benchmark tool not found: $harness" -ForegroundColor Red
+
+# Pull the aji filter string from the managed conf so paths stay in sync; only
+# the slot is swapped per template below.
+$vfBase = $null
+foreach ($line in Get-Content $mpvConf) {
+    if ($line -match '^\s*vf=(@aji:.+)$') { $vfBase = $Matches[1]; break }
+}
+if (-not $vfBase) {
+    Write-Host "Could not find the aji vf line in $mpvConf" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "AnimeJaNai benchmark - backend: $backend" -ForegroundColor Cyan
-if (-not $isDml) {
-    Write-Host "(TensorRT builds an engine per model/resolution on the first run,"
-    Write-Host " about a minute each; they are cached and reused by playback.)"
-}
+Write-Host "AnimeJaNai playback benchmark - backend: $backend" -ForegroundColor Cyan
+Write-Host "mpv windows will open and close on their own. Do NOT close or click"
+Write-Host "them while the benchmark runs, or the results will be invalid."
+Write-Host "(TensorRT builds an engine per resolution on the first run, about a"
+Write-Host " minute each and cached afterward; the full sweep takes a few minutes.)"
 Write-Host ""
 
 $slots = [ordered]@{ "Balanced" = 1010; "Performance" = 1011 }
-$resolutions = Get-ChildItem $seeds -Filter "*.raw" | ForEach-Object {
+$resolutions = Get-ChildItem $PSScriptRoot -Filter "*.mp4" | ForEach-Object {
     $_.BaseName
 } | Sort-Object { [int]($_ -split 'x')[0] }
 
-$frames = 120
+$warmupFrames = 200
+$lowFrames    = 500
+$highFrames   = 3500
+
+function Invoke-MpvFrames($video, $vf, $n) {
+    # & with splatting quotes each arg correctly; -- guards the path so a clip
+    # name with spaces/dashes can't be parsed as more options or a stdin '-'.
+    $a = @(
+        '--process-instance=multi', '--auto-load-folder=no', '--untimed', '--no-audio',
+        '--vo=null', '--keep-open=no', '--idle=no', '--sid=no', '--loop-file=inf',
+        '--no-resume-playback', '--save-position-on-quit=no', '--start=0',
+        "--vf=$vf", "--frames=$n", '--', $video
+    )
+    return (Measure-Command { & $mpvnet @a *> $null }).TotalSeconds
+}
+
 $table = @{}
 foreach ($name in $slots.Keys) { $table[$name] = [ordered]@{} }
 
 foreach ($res in $resolutions) {
-    $w, $h = $res -split 'x'
+    $video = Join-Path $PSScriptRoot "$res.mp4"
     foreach ($name in $slots.Keys) {
+        $vf = $vfBase -replace 'slot=\d+', ("slot=" + $slots[$name])
         Write-Host -NoNewline ("{0,-12} {1,-10} " -f $name, $res)
-        $argv = @("--input", (Join-Path $seeds "$res.raw"),
-                  "--width", $w, "--height", $h,
-                  "--frames", $frames, "--fps", "23.976",
-                  "--conf", $conf, "--model-dir", $onnx,
-                  "--slot", $slots[$name])
-        if (-not $isDml) {
-            $argv += @("--trtexec", (Join-Path $inference "trtexec.exe"))
-        }
-        # native commands write progress/warnings to stderr; with
-        # ErrorActionPreference=Stop PowerShell would turn those into
-        # fatal NativeCommandErrors, so relax it around the call
-        $eap = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        $out = & $harness @argv 2>&1 | Out-String
-        $ErrorActionPreference = $eap
-        if ($out -match '([\d.]+) ms/frame') {
-            $fps = [math]::Round(1000.0 / [double]$Matches[1], 1)
+        try {
+            [void](Invoke-MpvFrames $video $vf $warmupFrames)   # build engine + fill pipeline
+            $tLow  = Invoke-MpvFrames $video $vf $lowFrames
+            $tHigh = Invoke-MpvFrames $video $vf $highFrames
+            $dt = $tHigh - $tLow
+            if ($dt -le 0) { throw "timing anomaly (dt=$([math]::Round($dt,3))s)" }
+            $fps = [math]::Round(($highFrames - $lowFrames) / $dt, 1)
             $table[$name][$res] = $fps
             Write-Host "$fps fps" -ForegroundColor Green
-        } else {
+        } catch {
             $table[$name][$res] = ""
-            Write-Host "failed" -ForegroundColor Red
-            Write-Host ($out | Select-String -Pattern "failed|error" | Select-Object -First 2)
+            Write-Host "failed: $_" -ForegroundColor Red
         }
     }
 }
 
-# markdown table like the 3.3.x benchmark wrote
+# Markdown table - same shape the Submit-to-Catalog parser expects.
 $lines = @()
-$lines += "AnimeJaNai inference benchmark - backend: $backend"
+$lines += "AnimeJaNai playback benchmark - backend: $backend"
 $lines += ""
 $lines += "|fps|" + ($resolutions -join "|") + "|"
 $lines += "|-|" + (($resolutions | ForEach-Object { "-" }) -join "|") + "|"

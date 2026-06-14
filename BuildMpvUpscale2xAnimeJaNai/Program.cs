@@ -444,6 +444,7 @@ void WriteVersionAndManifest()
             "manifest.json",
             "AnimeJaNaiUpdater.exe",
             "animejanai/onnx",
+            "animejanai/benchmarks",
             "animejanai/inference/aji.dll",
             "animejanai/inference/aji_trt.dll",
             "animejanai/inference/aji_dml.dll",
