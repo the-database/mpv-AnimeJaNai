@@ -62,7 +62,20 @@ Name: "assocvideo"; Description: "Associate common &video file types with {#AppN
 ; can run it for GPU detection during the wizard; exclude it from the wildcard to
 ; avoid listing it twice.
 Source: "{#SourceDir}\{#UpdaterExe}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#UpdaterExe}"; Flags: recursesubdirs createallsubdirs ignoreversion
+
+; User-owned files: write the shipped default only on a FRESH install; never clobber an
+; existing user copy on a reinstall-over (mirrors the updater's manifest "user_preserve"
+; deny-list in BuildMpvUpscale2xAnimeJaNai/Program.cs). Without onlyifdoesntexist the
+; wildcard below would reset the user's profiles, keybindings, mpv settings, and mpv.net
+; state (last-played video / window / volume) to the package defaults on every reinstall.
+; Keep this list in sync with that manifest's user_preserve array.
+Source: "{#SourceDir}\animejanai\animejanai.conf";       DestDir: "{app}\animejanai";       Flags: onlyifdoesntexist
+Source: "{#SourceDir}\portable_config\mpv.conf";         DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
+Source: "{#SourceDir}\portable_config\input.conf";       DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
+Source: "{#SourceDir}\portable_config\saved-props.json"; DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
+Source: "{#SourceDir}\portable_config\settings.xml";     DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
+
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#UpdaterExe},animejanai\animejanai.conf,portable_config\mpv.conf,portable_config\input.conf,portable_config\saved-props.json,portable_config\settings.xml"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#PlayerExe}"
