@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-This repo does **not** contain the mpv player or the AnimeJaNaiConfEditor. It contains:
+This repo does **not** contain the mpv player or the AnimeJaNai Manager. It contains:
 
-1. **`BuildMpvUpscale2xAnimeJaNai/`** — a C# console app whose only job is to download mpv.net, Portable VapourSynth, vs-mlrt (TensorRT/CUDA), RIFE models, yt-dlp, AnimeJaNaiConfEditor, and various VS plugins, then layer the runtime files in `BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/` on top to produce the redistributable `mpv-upscale-2x_animejanai-v<version>/` directory.
-2. **`BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/`** — the *runtime overlay*: the Python/VapourSynth scripts (`animejanai/core/`), ONNX models (`animejanai/onnx/`), per-slot `.vpy` shims (`animejanai/profiles/`), default `animejanai.conf`, and mpv config (`portable_config/`). `AnimeJaNaiConfEditor.exe` is **not** in the overlay — it's downloaded at build time from its own repo's release (see below).
+1. **`BuildMpvUpscale2xAnimeJaNai/`** — a C# console app whose only job is to download mpv.net, Portable VapourSynth, vs-mlrt (TensorRT/CUDA), RIFE models, yt-dlp, AnimeJaNai Manager, and various VS plugins, then layer the runtime files in `BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/` on top to produce the redistributable `mpv-upscale-2x_animejanai-v<version>/` directory.
+2. **`BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/`** — the *runtime overlay*: the Python/VapourSynth scripts (`animejanai/core/`), ONNX models (`animejanai/onnx/`), per-slot `.vpy` shims (`animejanai/profiles/`), default `animejanai.conf`, and mpv config (`portable_config/`). `AnimeJaNaiManager.exe` is **not** in the overlay — it's downloaded at build time from its own repo's release (see below).
 
 A user-facing release is the C# app's output, not anything in source form.
 
@@ -77,17 +77,17 @@ The chain that runs when a user plays a video:
 
 - Hardcodes the built-in slots (`1001`–`1003`, `1010`–`1011`) as Python dicts.
 - Parses the user's `.conf` with `configparser`, then *flattens* keys of the form `chain_<n>_model_<m>_<field>` into nested `{slot: {chain_n: {models: [...], ...}}}` dicts. Any new chain/model field must be read explicitly in `read_config_by_chain` / `read_config_by_chain_model` — there is no generic schema.
-- Applies `[global]` migrations/overrides via `_migrate_global` (schema `config_version`, default-fingerprinting) and `_apply_default_preset`. The latter is per-profile: `[global] quality_preset` / `balanced_preset` / `performance_preset` (`standard | sharp`, absent ⇒ standard) independently switch the HD models in built-in slots `1001`/`1002`/`1003` from `…_HD_V3.1_…` to `…_HD_V3.1Sharp1_…`. The AnimeJaNaiConfEditor writes these keys (per-profile Standard/Sharp toggle); keep the two in sync.
+- Applies `[global]` migrations/overrides via `_migrate_global` (schema `config_version`, default-fingerprinting) and `_apply_default_preset`. The latter is per-profile: `[global] quality_preset` / `balanced_preset` / `performance_preset` (`standard | sharp`, absent ⇒ standard) independently switch the HD models in built-in slots `1001`/`1002`/`1003` from `…_HD_V3.1_…` to `…_HD_V3.1Sharp1_…`. The AnimeJaNai Manager writes these keys (per-profile Standard/Sharp toggle); keep the two in sync.
 
 ### Stats overlay
 
 `Ctrl+J` in mpv invokes `portable_config/scripts/animejanaistats.lua`, which simply reads `animejanai/core/currentanimejanai.log`. That file is rewritten every run by `write_current_log()` in `animejanai_core.py` — append to `current_logger_info` / `current_logger_steps` to surface info to the user.
 
-### `AnimeJaNaiConfEditor.exe`
+### `AnimeJaNaiManager.exe`
 
-Downloaded at build time by `InstallAnimeJaNaiConfEditor()` in `Program.cs` from a GitHub release of its source repo (`github.com/the-database/AnimeJaNaiConfEditor`), pinned via the `ConfEditorVersion` constant. The release asset `AnimeJaNaiConfEditor-portable-x64.zip` (the `.exe` + native Avalonia DLLs `libSkiaSharp.dll`/`av_libglesv2.dll`/`libHarfBuzzSharp.dll`) is extracted into `animejanai/`, so it ends up next to the overlay's own `animejanai.conf` and `onnx/`. It edits `animejanai.conf` and is launched by mpv via `Ctrl+E`.
+Downloaded at build time by `InstallAnimeJaNaiManager()` in `Program.cs` from a GitHub release of its source repo (`github.com/the-database/AnimeJaNaiManager`), pinned via the `ManagerVersion` constant. The release asset `AnimeJaNaiManager-portable-x64.zip` (the `.exe` + native Avalonia DLLs `libSkiaSharp.dll`/`av_libglesv2.dll`/`libHarfBuzzSharp.dll`) is extracted into `animejanai/`, so it ends up next to the overlay's own `animejanai.conf` and `onnx/`. It edits `animejanai.conf` and is launched by mpv via `Ctrl+E`.
 
-To ship a new editor build: run the editor repo's manual `Release` workflow (Actions → Run workflow, enter the version) to cut a release, then bump `ConfEditorVersion` here to match. The binaries are **not** committed to this repo (they're `.gitignore`d as a guard).
+To ship a new editor build: run the editor repo's manual `Release` workflow (Actions → Run workflow, enter the version) to cut a release, then bump `ManagerVersion` here to match. The binaries are **not** committed to this repo (they're `.gitignore`d as a guard).
 
 ## Conventions
 

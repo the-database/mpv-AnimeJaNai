@@ -8,10 +8,10 @@
 # Runtime log written on every play by animejanai_core.write_current_log_empty
 BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/core/currentanimejanai.log
 
-# AnimeJaNaiConfEditor binaries are downloaded at build time (InstallAnimeJaNaiConfEditor),
+# AnimeJaNaiManager binaries are downloaded at build time (InstallAnimeJaNaiManager),
 # not committed. Guard against accidentally re-tracking them in the overlay.
-/BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/AnimeJaNaiConfEditor.exe
-/BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/AnimeJaNaiConfEditor.pdb
+/BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/AnimeJaNaiManager.exe
+/BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/AnimeJaNaiManager.pdb
 /BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/av_libglesv2.dll
 /BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/libHarfBuzzSharp.dll
 /BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/libSkiaSharp.dll

@@ -24,7 +24,7 @@ const string VsMlrtCudaVersion    = "v16.test1";
 const string AjiVersion           = "v0.4.0";       // github.com/the-database/animejanai-inference release tag (multi-GPU kernels + P010; CUDA graphs ON)
 const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.2.4";        // github.com/the-database/AnimeJaNaiConfEditor release tag (AnimeJaNai Manager)
+const string ManagerVersion       = "0.3.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -352,7 +352,7 @@ void GenerateInputConf()
 async Task InstallAnimeJaNaiManager()
 {
     Console.WriteLine("Downloading AnimeJaNai Manager...");
-    var downloadUrl = $"https://github.com/the-database/AnimeJaNaiConfEditor/releases/download/{ManagerVersion}/AnimeJaNaiManager-portable-x64.zip";
+    var downloadUrl = $"https://github.com/the-database/AnimeJaNaiManager/releases/download/{ManagerVersion}/AnimeJaNaiManager-portable-x64.zip";
     var targetPath = Path.GetFullPath("AnimeJaNaiManager-portable-x64.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
