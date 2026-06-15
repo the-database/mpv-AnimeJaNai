@@ -23,7 +23,7 @@ as a Worker secret — never in the desktop app and never in this repo.
 ## Endpoint
 
 `POST /api/benchmarks` — JSON body (schema 1). The Manager builds this; see
-`AnimeJaNaiConfEditor` → `Services/BenchmarkSubmission.cs`.
+`AnimeJaNaiManager` → `Services/BenchmarkSubmission.cs`.
 
 ```json
 {
