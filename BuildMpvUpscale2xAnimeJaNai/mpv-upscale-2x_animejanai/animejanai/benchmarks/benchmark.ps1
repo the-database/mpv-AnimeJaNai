@@ -11,8 +11,13 @@
 # button). mpv windows open and close on their own during the run - do not
 # close or click them, or the timings are invalid.
 #
-# Method: each cell runs mpvnet.com uncapped (--untimed --vo=null) over a short
-# clip. A warmup run builds the TensorRT engine and fills the pipeline, then a
+# Method: each cell runs mpvnet.com uncapped over a short clip on the REAL,
+# zero-copy video output - the same pipeline as normal playback (gpu-next, the
+# backend's gpu-api, --untimed + immediate swap so there's no vsync cap). It
+# deliberately does NOT use --vo=null: for a GPU frame that forces a per-frame
+# ~50 MB GPU->CPU readback of the 4K output and serializes the pipeline, which
+# underreports real playback fps several-fold. A warmup run builds the TensorRT
+# engine and fills the pipeline, then a
 # probe run measures a rough rate, which sizes a second (window) run so the two
 # timed points are subtracted to cancel fixed startup cost:
 #   fps = (window_frames - probe_frames) / (t_window - t_probe)
@@ -50,6 +55,11 @@ if (Test-Path $conf) {
     }
 }
 $hwdec = if ($backend -match '^(?i:directml|ncnn)$') { 'd3d11va' } else { 'nvdec' }
+# The render API must match too, for a zero-copy present (no GPU->CPU readback):
+# TensorRT's CUDA frames go through Vulkan (mpv's only CUDA<->render interop),
+# DirectML's D3D11 frames through d3d11. animejanai_backend.lua would set this in
+# normal playback but does not run reliably under this launch, so set it here.
+$gpuApi = if ($backend -match '^(?i:directml|ncnn)$') { 'd3d11' } else { 'vulkan' }
 
 # Pull the aji filter string from the managed conf so paths stay in sync; only
 # the slot is swapped per template below.
@@ -109,9 +119,17 @@ $buildsEngines = -not ($backend -match '^(?i:directml|ncnn)$')
 $warmupTimeout = if ($buildsEngines) { $buildAllowSec } else { Get-RunTimeout $warmupFrames }
 
 function Invoke-MpvFrames($video, $vf, $n, $timeoutSec) {
+    # Real zero-copy VO, uncapped (no vsync): measures the actual playback
+    # pipeline (decode + upscale + present), unlike --vo=null which forces a 4K
+    # GPU->CPU readback and serializes it. The swap option for the backend not in
+    # use is ignored by mpv. --force-window keeps a (non-minimized) surface so the
+    # present isn't compositor-throttled.
     $flags = @(
         '--process-instance=multi', '--auto-load-folder=no', '--untimed', '--no-audio',
-        '--vo=null', '--keep-open=no', '--idle=no', '--sid=no', "--hwdec=$hwdec",
+        '--vo=gpu-next', "--gpu-api=$gpuApi", '--force-window=immediate',
+        '--video-sync=display-desync', '--vulkan-swap-mode=immediate',
+        '--d3d11-sync-interval=0', '--opengl-swapinterval=0',
+        '--keep-open=no', '--idle=no', '--sid=no', "--hwdec=$hwdec",
         '--no-resume-playback', '--save-position-on-quit=no', '--start=0',
         "--vf=$vf", "--frames=$n"
     )
