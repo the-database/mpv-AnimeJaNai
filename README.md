@@ -45,7 +45,7 @@ shipped keybindings are refreshed.)
 
 ## Customizing Profiles and Other Settings
 
-Upscaling can be further customized using the AnimeJaNaiConfEditor which can be launched by pressing `ctrl+E` from mpvnet. The editor allows the setup of up to 9 custom slots and also the use of custom chains, conditional settings based on video resolution and framerate, downscaling to improve performance, and more. The default upscaling profile can also be set using the conf editor. 
+Upscaling can be further customized using the AnimeJaNai Manager which can be launched by pressing `ctrl+E` from mpvnet. The Manager allows the setup of up to 9 custom slots and also the use of custom chains, conditional settings based on video resolution and framerate, downscaling to improve performance, and more. The default upscaling profile can also be set in the Manager. 
 
 ![image](https://github.com/the-database/mpv-upscale-2x_animejanai/assets/25811902/76a8db5b-8c67-4b0c-911a-9b02598fb37a)
 
