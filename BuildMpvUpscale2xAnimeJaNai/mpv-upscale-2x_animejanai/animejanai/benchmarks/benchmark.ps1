@@ -2,9 +2,8 @@
 #
 # Measures the throughput of the real mpv pipeline for the built-in benchmark
 # templates: Balanced (slot 1010) and Performance (slot 1011) across the bundled
-# source clips, plus an Off/no-upscale reference at 1920x1080. This is the fps that
-# tells you whether your hardware can upscale each resolution faster than real time,
-# and how much headroom remains above a no-upscale baseline.
+# source clips. This is the fps that tells you whether your hardware can upscale
+# each resolution faster than real time.
 #
 # Launched by animejanai_benchmark_all.bat (the Manager's Run Benchmarks button).
 # It runs OFFSCREEN (--vo=null), so there is no window and nothing to click - it
@@ -119,7 +118,7 @@ Write-Host " longer on slower GPUs. Cells too slow to be usable, under $fpsFloor
 Write-Host " are skipped and recorded as -1 (shown as '-' in the catalog).)"
 Write-Host ""
 
-$slots = [ordered]@{ "Balanced" = 1010; "Performance" = 1011; "Off" = 0 }
+$slots = [ordered]@{ "Balanced" = 1010; "Performance" = 1011 }
 # Ascending by pixel count: a larger input is always more work for the model, so
 # once a template is too slow at one resolution every larger one is too (used to
 # short-circuit the rest below).
@@ -146,11 +145,6 @@ $sampleMinSec       = 0.25
 $sampleMaxSec       = 4.0
 $slowSampleMaxSec   = 12
 $sampleTimeoutSec   = 15
-$offSampleTargetFrames = 1000000        # no-upscale is fast enough to race short samples; use a fixed window
-$offSampleMinSec       = 2.0
-$offSampleMaxSec       = 2.0
-$offSlowSampleMaxSec   = 2.0
-$offSampleTimeoutSec   = 8
 $sampleStartSecs    = @(0, 10, 20, 35)   # varied clip positions reduce content/startup bias across retries
 $minGoodSamples     = 2                  # median-of-2 minimum for stability
 $maxGoodSamples     = 3                  # take a third sample only when the first two disagree
@@ -670,12 +664,7 @@ foreach ($res in $resolutions) {
     $video = Join-Path $cellDir "$res.mp4"
     Copy-Item (Join-Path $benchRoot "$res.mp4") $video -Force
     foreach ($name in $slots.Keys) {
-        $isOff = ($name -eq 'Off')
-        $vf = if ($isOff) { "" } else { $vfBase -replace 'slot=\d+', ("slot=" + $slots[$name]) }
-        if ($isOff -and $res -ne '1920x1080') {
-            $table[$name][$res] = ""
-            continue
-        }
+        $vf = $vfBase -replace 'slot=\d+', ("slot=" + $slots[$name])
         Write-Host -NoNewline ("{0,-12} {1,-10} " -f $name, $res)
         # A smaller resolution for this template already fell below the floor; this
         # larger one can only be slower, so record it without running.
@@ -689,14 +678,14 @@ foreach ($res in $resolutions) {
         # or a wedged run), retry. A genuine below-floor sample marks this cell - and
         # the larger ones - too slow.
         $done = $false
-        $engineReady = $isOff -or (-not $buildsEngines)   # Off/DirectML/NCNN: nothing to build
+        $engineReady = (-not $buildsEngines)   # DirectML/NCNN: nothing to build
         for ($cellAttempt = 1; $cellAttempt -le $cellRetries -and -not $done; $cellAttempt++) {
             try {
                 # Pre-build this slot+resolution's TensorRT engine synchronously via the
                 # harness so the timed mpv runs land on a warm cache (identical engine:
                 # same aji_trt + conf + model-dir + slot + WxH => same cache key). Only
                 # needed once (cached after attempt 1); no-op on DirectML.
-                if ($cellAttempt -eq 1 -and $buildsEngines -and -not $isOff) {
+                if ($cellAttempt -eq 1 -and $buildsEngines) {
                     $wh = $res -split 'x'
                     $engineReady = Invoke-Build $wh[0] $wh[1] $slots[$name]
                 }
@@ -719,11 +708,7 @@ foreach ($res in $resolutions) {
                 # got there - the measured runs are all cached-engine runs.
                 $engineReady = $true
 
-                $r = if ($isOff) {
-                    Measure-Cell $video $vf $true $offSampleTargetFrames $offSampleMinSec $offSampleMaxSec $offSlowSampleMaxSec $offSampleTimeoutSec
-                } else {
-                    Measure-Cell $video $vf $engineReady
-                }
+                $r = Measure-Cell $video $vf $engineReady
                 if ($r.Status -eq 'fail') {
                     Write-Host -NoNewline "[retry] " -ForegroundColor DarkCyan
                     continue
