@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "3893d8c6-e31b-4b28-a841-d0064d36697d",
+  "submitted_at": "2026-06-14T22:57:16.692Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "vram_mb": 24564,
+  "gpu_power_w": 450,
+  "cpu": "12th Gen Intel(R) Core(TM) i5-12600KF",
+  "cpu_mhz": 3700,
+  "cpu_cores": 10,
+  "cpu_threads": 16,
+  "ram_mb": 16223,
+  "ram_speed_mhz": 3200,
+  "os": "Microsoft Windows 10.0.22631",
+  "driver": "32.0.15.9186",
+  "results": {
+    "Balanced": {
+      "480x360": 605.9,
+      "640x480": 317.5,
+      "768x576": 246.3,
+      "1280x720": 214.8,
+      "1920x1080": 86.6
+    },
+    "Performance": {
+      "480x360": 577.3,
+      "640x480": 316.3,
+      "768x576": 222.8,
+      "1280x720": 214.8,
+      "1920x1080": 90.4
+    }
+  },
+  "submitted_by": "422415",
+  "note": ""
+}
