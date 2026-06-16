@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "573f5202-7fc3-467b-9c11-13302f3f5654",
+  "submitted_at": "2026-06-16T18:17:06.857Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "vram_mb": 16303,
+  "gpu_power_w": 300,
+  "cpu": "AMD Ryzen 7 7800X3D 8-Core Processor",
+  "cpu_mhz": 4201,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32344,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 1217.5,
+      "640x480": 610.8,
+      "768x576": 402.2,
+      "1280x720": 184.4,
+      "1920x1080": 81.4
+    },
+    "Performance": {
+      "480x360": 1213.5,
+      "640x480": 1213.5,
+      "768x576": 605.2,
+      "1280x720": 301.9,
+      "1920x1080": 134.8
+    }
+  },
+  "submitted_by": "",
+  "note": "GPU model: Gigabyte GeForce RTX 5070 Ti WINDFORCE OC SFF 16G, undervolt/overclock profile: 2,932 MHz at 900 mV and +1,000 MHz memory."
+}
