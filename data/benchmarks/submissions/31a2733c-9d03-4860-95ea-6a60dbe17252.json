@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "31a2733c-9d03-4860-95ea-6a60dbe17252",
+  "submitted_at": "2026-06-16T13:59:02.627Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 2080",
+  "vram_mb": 8192,
+  "gpu_power_w": 260,
+  "cpu": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+  "cpu_mhz": 3600,
+  "cpu_cores": 8,
+  "cpu_threads": 8,
+  "ram_mb": 16299,
+  "ram_speed_mhz": 3200,
+  "os": "Microsoft Windows 10.0.19045",
+  "driver": "32.0.15.9649",
+  "results": {
+    "Balanced": {
+      "480x360": 257.2,
+      "640x480": 148.2,
+      "768x576": 110.3,
+      "1280x720": 56.1,
+      "1920x1080": 29.2
+    },
+    "Performance": {
+      "480x360": 400.6,
+      "640x480": 239.7,
+      "768x576": 166.5,
+      "1280x720": 84.5,
+      "1920x1080": 41.6
+    }
+  },
+  "submitted_by": "KuroToge",
+  "note": ""
+}
