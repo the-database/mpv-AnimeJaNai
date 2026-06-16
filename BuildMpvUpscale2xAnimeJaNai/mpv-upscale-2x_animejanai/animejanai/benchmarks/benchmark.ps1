@@ -113,8 +113,8 @@ $fpsFloor = 6   # referenced in the banner below; full description at the tunabl
 Write-Host "AnimeJaNai playback benchmark - backend: $backend" -ForegroundColor Cyan
 Write-Host "Runs offscreen (no window). Just let it churn through the clips."
 Write-Host "(TensorRT builds an engine per resolution on the first run, about a"
-Write-Host " minute each and cached afterward; the full sweep takes a few minutes,"
-Write-Host " longer on slower GPUs. Cells too slow to be usable, under $fpsFloor fps,"
+Write-Host " minute each and cached afterward; the full sweep can take 10+ minutes"
+Write-Host " depending on your hardware. Cells too slow to be usable, under $fpsFloor fps,"
 Write-Host " are skipped and recorded as -1 (shown as '-' in the catalog).)"
 Write-Host ""
 
