@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "c8c59248-ffe9-4d1b-984e-e989eef0b83f",
+  "submitted_at": "2026-06-16T13:59:20.408Z",
+  "app_version": "3.4.0",
+  "backend": "DirectML",
+  "gpu": "Intel(R) Iris(R) Xe Graphics",
+  "cpu": "12th Gen Intel(R) Core(TM) i5-1235U",
+  "cpu_mhz": 2500,
+  "cpu_cores": 10,
+  "cpu_threads": 12,
+  "ram_mb": 8016,
+  "ram_speed_mhz": 5200,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.101.6737",
+  "results": {
+    "Balanced": {
+      "480x360": 13.1,
+      "640x480": 6.5,
+      "768x576": -1,
+      "1280x720": -1,
+      "1920x1080": -1
+    },
+    "Performance": {
+      "480x360": 28.2,
+      "640x480": 14.4,
+      "768x576": 10.5,
+      "1280x720": -1,
+      "1920x1080": -1
+    }
+  },
+  "submitted_by": "the-database",
+  "note": "Surface Pro 9"
+}
