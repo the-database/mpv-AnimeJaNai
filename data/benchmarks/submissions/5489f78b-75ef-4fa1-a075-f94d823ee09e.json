@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "5489f78b-75ef-4fa1-a075-f94d823ee09e",
+  "submitted_at": "2026-06-16T18:26:23.037Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5080",
+  "vram_mb": 16303,
+  "gpu_power_w": 360,
+  "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
+  "cpu_mhz": 4700,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 31797,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26100",
+  "driver": "32.0.21030.2001",
+  "results": {
+    "Balanced": {
+      "480x360": 1214,
+      "640x480": 604.8,
+      "768x576": 602.8,
+      "1280x720": 241,
+      "1920x1080": 92
+    },
+    "Performance": {
+      "480x360": 1227,
+      "640x480": 1220.5,
+      "768x576": 604.5,
+      "1280x720": 403.2,
+      "1920x1080": 150.8
+    }
+  },
+  "submitted_by": "Bradjy",
+  "note": "INSANE PERFORMANCE, LOOKS INCREDIBLE AND WORKS SO WELL!"
+}
