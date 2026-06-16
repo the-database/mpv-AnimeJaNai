@@ -163,7 +163,10 @@
             if (f && !`${s.gpu} ${s.cpu} ${osShort(s.os)}`.toLowerCase().includes(f)) continue;
             (groups[s.gpu] = groups[s.gpu] || []).push(s);
           }
-          const order = Object.keys(groups).sort((a, b) => best(groups[b][0]) - best(groups[a][0]) || a.localeCompare(b));
+          // Rank GPUs by the group's best system (its fastest 1080p fps), not by
+          // whichever submission happens to be first in the file.
+          const groupBest = (g) => Math.max(...g.map(best));
+          const order = Object.keys(groups).sort((a, b) => groupBest(groups[b]) - groupBest(groups[a]) || a.localeCompare(b));
           let html = "";
           for (const gpu of order) {
             const sys = groups[gpu].slice().sort((a, b) => best(b) - best(a));
