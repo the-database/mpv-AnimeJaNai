@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "cb71b676-3723-4e58-8de0-8417d6915985",
+  "submitted_at": "2026-06-16T18:07:42.781Z",
+  "app_version": "3.4.0",
+  "backend": "DirectML",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "vram_mb": 32607,
+  "gpu_power_w": 575,
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
+  "cpu_mhz": 3000,
+  "cpu_cores": 24,
+  "cpu_threads": 32,
+  "ram_mb": 32509,
+  "ram_speed_mhz": 2400,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1047",
+  "results": {
+    "Balanced": {
+      "480x360": 402.5,
+      "640x480": 403.4,
+      "768x576": 301.2,
+      "1280x720": 169,
+      "1920x1080": 71.2
+    },
+    "Performance": {
+      "480x360": 603.2,
+      "640x480": 402.5,
+      "768x576": 401.8,
+      "1280x720": 264.5,
+      "1920x1080": 125.5
+    }
+  },
+  "submitted_by": "the-database",
+  "note": ""
+}
