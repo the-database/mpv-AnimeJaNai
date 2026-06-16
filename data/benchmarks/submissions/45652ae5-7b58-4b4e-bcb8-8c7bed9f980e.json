@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "45652ae5-7b58-4b4e-bcb8-8c7bed9f980e",
+  "submitted_at": "2026-06-16T13:45:15.283Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "vram_mb": 32607,
+  "gpu_power_w": 575,
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
+  "cpu_mhz": 3000,
+  "cpu_cores": 24,
+  "cpu_threads": 32,
+  "ram_mb": 32509,
+  "ram_speed_mhz": 2400,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1047",
+  "results": {
+    "Balanced": {
+      "480x360": 1219,
+      "640x480": 1208,
+      "768x576": 607,
+      "1280x720": 301.4,
+      "1920x1080": 131.4
+    },
+    "Performance": {
+      "480x360": 1227,
+      "640x480": 1212,
+      "768x576": 606.5,
+      "1280x720": 301.7,
+      "1920x1080": 152.4
+    }
+  },
+  "submitted_by": "the-database",
+  "note": ""
+}
