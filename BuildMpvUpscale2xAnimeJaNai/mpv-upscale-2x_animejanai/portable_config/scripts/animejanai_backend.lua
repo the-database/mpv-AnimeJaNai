@@ -142,16 +142,13 @@ msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
                        hwdec == 'd3d11va' and ', gpu-api=d3d11' or ''))
 
 -- The Manager's "Set as Default Profile" stores the chosen slot here. The vf
--- line bakes in Balanced (1002); if the user picked another default, apply it
--- once after the first file loads (the filter only exists then). Only the first
--- file is touched so a manual slot switch later in the session sticks.
+-- line bakes in Balanced (1002), and mpv rebuilds the filter chain from that vf
+-- string on every file, so re-apply the user's chosen default after each file
+-- loads (the filter only exists then). Without re-applying per file, only the
+-- first file would honor the default and every later file would fall back to
+-- Balanced.
 if default_slot then
-    local applied = false
     mp.register_event('file-loaded', function()
-        if applied then
-            return
-        end
-        applied = true
         msg.info('applying default slot ' .. default_slot)
         mp.commandv('script-message', 'aji-slot', tostring(default_slot))
     end)
