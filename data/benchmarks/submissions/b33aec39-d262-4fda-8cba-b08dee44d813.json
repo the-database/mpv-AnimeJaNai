@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "b33aec39-d262-4fda-8cba-b08dee44d813",
+  "submitted_at": "2026-06-17T21:01:35.458Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "vram_mb": 32607,
+  "gpu_power_w": 600,
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900KF",
+  "cpu_mhz": 3000,
+  "cpu_cores": 24,
+  "cpu_threads": 32,
+  "ram_mb": 48908,
+  "ram_speed_mhz": 7200,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1047",
+  "results": {
+    "Balanced": {
+      "480x360": 1216,
+      "640x480": 1210.5,
+      "768x576": 1224.5,
+      "1280x720": 402.6,
+      "1920x1080": 167.2
+    },
+    "Performance": {
+      "480x360": 1233,
+      "640x480": 1210,
+      "768x576": 1217,
+      "1280x720": 602.5,
+      "1920x1080": 251.6
+    }
+  },
+  "submitted_by": "HONGLONG",
+  "note": "ZOTAC AMP EXTREME INFINITY 5090 w/ +200MHz OC on memory, +134MHz OC on core."
+}
