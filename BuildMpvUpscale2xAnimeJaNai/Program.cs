@@ -22,9 +22,11 @@ using static Downloader;
 // v16 tag before cutting the package release.
 const string VsMlrtCudaVersion    = "v16.test1";
 const string AjiVersion           = "v0.4.0";       // github.com/the-database/animejanai-inference release tag (multi-GPU kernels + P010; CUDA graphs ON)
+                                                    // bump to the next release to pick up chain rife_before_upscale (configurable RIFE/upscale order) + benchmark slots 1012/1013
+
 const string SevenZipVersion      = "2501";         // 7-zip "extra" standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.3.2";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager)
+const string ManagerVersion       = "0.3.3";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
