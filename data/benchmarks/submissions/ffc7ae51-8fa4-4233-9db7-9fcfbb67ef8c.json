@@ -4,7 +4,7 @@
   "submitted_at": "2026-06-16T23:15:18.803Z",
   "app_version": "3.4.0",
   "backend": "TensorRT",
-  "gpu": "AMD Radeon(TM) Graphics",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
   "vram_mb": 16376,
   "gpu_power_w": 285,
   "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
