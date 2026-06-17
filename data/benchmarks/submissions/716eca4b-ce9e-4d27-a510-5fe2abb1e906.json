@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "716eca4b-ce9e-4d27-a510-5fe2abb1e906",
+  "submitted_at": "2026-06-17T01:13:19.857Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5070",
+  "vram_mb": 12227,
+  "gpu_power_w": 280,
+  "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+  "cpu_mhz": 3701,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 32690,
+  "ram_speed_mhz": 3200,
+  "os": "Microsoft Windows 10.0.19045",
+  "driver": "32.0.15.9649",
+  "results": {
+    "Balanced": {
+      "480x360": 608.5,
+      "640x480": 405.3,
+      "768x576": 402.5,
+      "1280x720": 141.6,
+      "1920x1080": 59.8
+    },
+    "Performance": {
+      "480x360": 1214,
+      "640x480": 609.8,
+      "768x576": 607.5,
+      "1280x720": 262.4,
+      "1920x1080": 104.6
+    }
+  },
+  "submitted_by": "",
+  "note": "very slightly undervolted and OCed 5070, 3060@975 mv, +2000 mem"
+}
