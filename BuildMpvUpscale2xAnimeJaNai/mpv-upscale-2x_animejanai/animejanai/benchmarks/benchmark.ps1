@@ -738,6 +738,15 @@ foreach ($res in $resolutions) {
 
 Remove-Item $clipRoot -Recurse -Force -ErrorAction SilentlyContinue
 
+function Format-ResultCell($value) {
+    if ($null -eq $value) { return "" }
+    if ($value -is [string]) { return $value }
+    if ($value -is [ValueType]) {
+        return ([double]$value).ToString("0.##", [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    return [string]$value
+}
+
 # Markdown table - same shape the Submit-to-Catalog parser expects.
 $lines = @()
 $lines += "AnimeJaNai playback benchmark - backend: $backend"
@@ -745,7 +754,7 @@ $lines += ""
 $lines += "|fps|" + ($resolutions -join "|") + "|"
 $lines += "|-|" + (($resolutions | ForEach-Object { "-" }) -join "|") + "|"
 foreach ($name in $slots.Keys) {
-    $row = $resolutions | ForEach-Object { $table[$name][$_] }
+    $row = $resolutions | ForEach-Object { Format-ResultCell $table[$name][$_] }
     if (($row | Where-Object { $_ -ne $null -and $_ -ne "" }).Count -eq 0) { continue }
     $lines += "|$name|" + ($row -join "|") + "|"
 }
