@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "e91f5ae3-810a-4c49-ad6c-3f2208a1b7ad",
+  "submitted_at": "2026-06-17T10:52:16.034Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "AMD Radeon(TM) Graphics",
+  "vram_mb": 24576,
+  "gpu_power_w": 350,
+  "cpu": "AMD Ryzen 5 9600X 6-Core Processor",
+  "cpu_mhz": 3900,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 31831,
+  "ram_speed_mhz": 5600,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.21036.18",
+  "results": {
+    "Balanced": {
+      "1280x720": 142
+    },
+    "Performance": {
+      "1280x720": 250
+    }
+  },
+  "submitted_by": "Alexandros",
+  "note": "It got issues with the gpu (it took the integrated gpu) Also it doesnt seams to log result that contain a comma/point { \"schema\": 1, \"app_version\": \"3.4.0\", \"backend\": \"TensorRT\", \"gpu\": \"NVIDIA GeForce RTX 3090\", \"vram_mb\": 24576, \"gpu_power_w\": 350, \"cp"
+}
