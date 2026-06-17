@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "ffc7ae51-8fa4-4233-9db7-9fcfbb67ef8c",
+  "submitted_at": "2026-06-16T23:15:18.803Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "vram_mb": 16376,
+  "gpu_power_w": 285,
+  "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
+  "cpu_mhz": 4700,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 48293,
+  "ram_speed_mhz": 6400,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.21043.12001",
+  "results": {
+    "Balanced": {
+      "480x360": 609.2,
+      "640x480": 402.8,
+      "768x576": 300,
+      "1280x720": 138.8,
+      "1920x1080": 60.6
+    },
+    "Performance": {
+      "480x360": 1208.5,
+      "640x480": 605,
+      "768x576": 402,
+      "1280x720": 209.1,
+      "1920x1080": 87.4
+    }
+  },
+  "submitted_by": "TechnoStone",
+  "note": "NVIDIA GeForce RTX 4070 Ti SUPER (\"UV\" by +80 MHz core in MSI Afterburner, +1000 MHz VRAM)"
+}
