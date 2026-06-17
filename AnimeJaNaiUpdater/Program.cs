@@ -77,6 +77,7 @@ async Task CheckAsync()
     CleanupLegacy();
     MigrateUserConf();
     SyncInputConf();
+    MigrateAnimeJaNaiConf();
     var release = await GetLatestReleaseAsync();
     string local = ReadLocalVersion();
     if (IsNewer(release.Tag, local))
@@ -290,6 +291,37 @@ void SyncInputConf()
             : "INPUT_CONF_SYNCED (managed keybindings block refreshed)");
     }
     catch { /* must never break --check */ }
+}
+
+// The SD model was re-exported at ONNX opset 21 (the op23 build fell back to the
+// CPU on the DirectML backend); the op23 .onnx no longer ships. animejanai.conf
+// is user-preserved, so a custom profile that named the old model by hand would
+// otherwise error with "model not found" on that slot. Plain idempotent rewrite
+// of the one renamed name; no-op once rewritten or if absent. Runs on --check
+// (every start), so it fires on the post-update relaunch - with the new binary,
+// since the updater ships in overlay_paths - before the user plays.
+void MigrateAnimeJaNaiConf()
+{
+    try
+    {
+        string conf = Path.Combine(installDir, "animejanai", "animejanai.conf");
+        if (!File.Exists(conf))
+        {
+            return;
+        }
+        const string oldName =
+            "2x_AnimeJaNai_SD_V1beta34_Compact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo";
+        const string newName =
+            "2x_AnimeJaNai_SD_V1beta34_Compact_1x3xHxW_dyn-HW_strong_fp16_op21_dynamo";
+        string text = File.ReadAllText(conf);
+        if (!text.Contains(oldName))
+        {
+            return;
+        }
+        File.WriteAllText(conf, text.Replace(oldName, newName));
+        Console.WriteLine("ANIMEJANAI_CONF_MIGRATED (SD model op23 -> op21)");
+    }
+    catch { /* migration must never break --check */ }
 }
 
 async Task<int> ApplyAsync()
