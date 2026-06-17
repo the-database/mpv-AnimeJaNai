@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "41bc2d2e-2f92-488e-ad36-ba6abf3c174d",
+  "submitted_at": "2026-06-17T14:09:22.441Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "vram_mb": 24564,
+  "gpu_power_w": 480,
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
+  "cpu_mhz": 3000,
+  "cpu_cores": 24,
+  "cpu_threads": 32,
+  "ram_mb": 65287,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.15.9649",
+  "results": {
+    "Balanced": {
+      "480x360": 1223.5,
+      "640x480": 1208,
+      "768x576": 603.8,
+      "1280x720": 294.8,
+      "1920x1080": 134.4
+    },
+    "Performance": {
+      "480x360": 1238.5,
+      "640x480": 1230.5,
+      "768x576": 1212,
+      "1280x720": 602.8,
+      "1920x1080": 176.8
+    }
+  },
+  "submitted_by": "xmex",
+  "note": "+75 Core, +1150 Mem, Watercooled"
+}
