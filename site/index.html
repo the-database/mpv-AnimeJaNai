@@ -20,8 +20,21 @@
     .legend span { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: middle; margin: 0 5px 0 14px; }
     .legend .gs { background: #1a7f44; } .legend .as { background: #9a6b00; } .legend .rs { background: #b42318; }
 
-    .gpu { margin: 26px 0 6px; font-size: 1.12rem; font-weight: 700; border-bottom: 1px solid #8883; padding-bottom: 4px; }
-    .gpu .cnt { font-weight: 400; opacity: .55; font-size: .85rem; margin-left: 8px; }
+    details.gpu-item { border-bottom: 1px solid #8883; }
+    summary.gpu-row {
+      list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 10px;
+      padding: 9px 4px; font-size: 1.1rem; font-weight: 700;
+    }
+    summary.gpu-row::-webkit-details-marker { display: none; }
+    summary.gpu-row::before { content: "\25B8"; font-size: .75rem; opacity: .5; display: inline-block; transition: transform .12s; }
+    details[open] > summary.gpu-row::before { transform: rotate(90deg); }
+    summary.gpu-row:hover { background: #8881; }
+    summary.gpu-row .cnt { font-weight: 400; opacity: .55; font-size: .82rem; }
+    summary.gpu-row .head { margin-left: auto; font-variant-numeric: tabular-nums; font-size: .95rem; white-space: nowrap; }
+    summary.gpu-row .head.g { color: #1a7f44; } summary.gpu-row .head.a { color: #9a6b00; } summary.gpu-row .head.r { color: #b42318; }
+    summary.gpu-row .head.na { opacity: .4; font-weight: 400; }
+    .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; font-size: .85rem; }
+    .controls button, .controls select { font: inherit; padding: 5px 10px; border: 1px solid #8884; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
     .sys { margin: 12px 0 16px; }
     .specs { font-size: .85rem; opacity: .72; margin: 0 0 5px; }
     .specs b { font-weight: 600; opacity: .9; }
@@ -37,6 +50,7 @@
 
     @media (prefers-color-scheme: dark) {
       td.fps.g { color: #6ee7a0; } td.fps.a { color: #e8c66a; } td.fps.r, td.fps.skip { color: #f08a8a; }
+      summary.gpu-row .head.g { color: #6ee7a0; } summary.gpu-row .head.a { color: #e8c66a; } summary.gpu-row .head.r { color: #f08a8a; }
       .legend .gs { background: #6ee7a0; } .legend .as { background: #e8c66a; } .legend .rs { background: #f08a8a; }
     }
   </style>
@@ -45,6 +59,10 @@
   <h1>mpv-AnimeJaNai community benchmarks</h1>
   <p class="lede">Real playback fps of the AnimeJaNai upscaler across hardware.</p>
   <input class="search" id="q" placeholder="Filter by GPU, CPU, or OS..." />
+  <div class="controls">
+    <label>Sort: <select id="sort"><option value="perf">Fastest first</option><option value="name">GPU name (A&ndash;Z)</option></select></label>
+    <button id="expandAll" type="button">Expand all</button>
+  </div>
   <div class="legend">Headroom vs ~24 fps realtime:<span class="gs"></span>comfortable<span class="as"></span>borderline<span class="rs"></span>below realtime</div>
 
   <div id="out"></div>
@@ -141,7 +159,11 @@
         document.getElementById("metaline").textContent =
           `${subs.length} submission${subs.length === 1 ? "" : "s"}` +
           (data.generated_at ? ` · updated ${fmtDate(data.generated_at)}` : "");
-        if (subs.length === 0) { document.getElementById("empty").hidden = false; return; }
+        if (subs.length === 0) {
+          document.getElementById("empty").hidden = false;
+          document.querySelector(".controls").hidden = true;
+          return;
+        }
 
         // Fixed table shape: every system shows the same template rows and
         // resolution columns (the union across all submissions), so the catalog
@@ -156,6 +178,18 @@
           .sort((a, b) => (+a.split("x")[0]) - (+b.split("x")[0]));
 
         const q = document.getElementById("q");
+        const sortSel = document.getElementById("sort");
+        const expandBtn = document.getElementById("expandAll");
+        let expandAll = false;
+
+        // Stable per-GPU anchor id so a system can be deep-linked / bookmarked.
+        const slug = (g) => "gpu-" + g.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        // The collapsed row's at-a-glance signal: the group's best 1080p fps.
+        function headCell(v) {
+          if (!(v > 0)) return `<span class="head na" title="Not measured at 1080p">&mdash;</span>`;
+          return `<span class="head ${fpsClass(v)}" title="Best 1080p fps">${fpsFmt(v)} fps</span>`;
+        }
+
         function render() {
           const f = q.value.toLowerCase();
           const groups = {};
@@ -166,14 +200,21 @@
           // Rank GPUs by the group's best system (its fastest 1080p fps), not by
           // whichever submission happens to be first in the file.
           const groupBest = (g) => Math.max(...g.map(best));
-          const order = Object.keys(groups).sort((a, b) => groupBest(groups[b]) - groupBest(groups[a]) || a.localeCompare(b));
+          const byName = sortSel.value === "name";
+          const order = Object.keys(groups).sort((a, b) =>
+            byName ? a.localeCompare(b) : (groupBest(groups[b]) - groupBest(groups[a]) || a.localeCompare(b)));
           let html = "";
           for (const gpu of order) {
             const sys = groups[gpu].slice().sort((a, b) => best(b) - best(a));
             const tags = [`${sys.length} system${sys.length > 1 ? "s" : ""}`];
             if (vramText(sys[0])) tags.push(vramText(sys[0]));
             if (sys[0].gpu_power_w) tags.push(sys[0].gpu_power_w + "W");
-            html += `<div class="gpu">${esc(gpu)}<span class="cnt">${tags.join(" · ")}</span></div>`;
+            // Collapsed by default = a dense, scannable GPU directory. An active
+            // search auto-opens its matches; "Expand all" opens everything.
+            const open = (expandAll || f) ? " open" : "";
+            html += `<details class="gpu-item" id="${slug(gpu)}"${open}>`;
+            html += `<summary class="gpu-row"><span class="name">${esc(gpu)}</span>`
+              + `<span class="cnt">${tags.join(" · ")}</span>${headCell(groupBest(groups[gpu]))}</summary>`;
             for (const s of sys) {
               // Same fixed columns/rows for every system (see ALL_RES/ALL_TPL).
               html += `<div class="sys"><div class="specs">${specLine(s)}</div>`;
@@ -184,11 +225,25 @@
               }
               html += `</table></div>`;
             }
+            html += `</details>`;
           }
           document.getElementById("out").innerHTML = html || "<p class='meta'>No matches.</p>";
         }
         render();
         q.addEventListener("input", render);
+        sortSel.addEventListener("change", render);
+        expandBtn.addEventListener("click", () => {
+          expandAll = !expandAll;
+          expandBtn.textContent = expandAll ? "Collapse all" : "Expand all";
+          document.querySelectorAll("#out details.gpu-item").forEach((d) => { d.open = expandAll; });
+        });
+
+        // Deep-link: open and scroll to a GPU named in the URL hash (e.g. #gpu-rtx-5090).
+        if (location.hash.length > 1) {
+          let el = null;
+          try { el = document.querySelector(location.hash); } catch (_) { /* invalid selector */ }
+          if (el && el.tagName === "DETAILS") { el.open = true; el.scrollIntoView({ block: "start" }); }
+        }
       })
       .catch((e) => {
         document.getElementById("empty").hidden = false;
