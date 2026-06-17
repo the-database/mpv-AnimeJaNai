@@ -39,6 +39,7 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // The release tag and the archive filename's date can differ (the tag is
 // stamped at publish, the filename at build), so they are pinned separately.
 const string MpvForkVersion       = "2026-06-13-c9cd49b01f"; // release tag
+                                                    // rebuild + bump alongside AjiVersion to ship the vf_animejanai filter that honors chain rife_before_upscale (RIFE-first runs before upscaling); the filter lives inside this libmpv build
 const string MpvForkBuildDate     = "20260613";     // build date in the dev archive filename
 const string MpvForkGitHash       = "c9cd49b01f";   // git short hash in the dev archive filename
 

@@ -118,7 +118,17 @@ Write-Host " depending on your hardware. Cells too slow to be usable, under $fps
 Write-Host " are skipped and recorded as -1 (shown as '-' in the catalog).)"
 Write-Host ""
 
-$slots = [ordered]@{ "Balanced" = 1010; "Performance" = 1011 }
+$slots = [ordered]@{
+    "Balanced"    = 1010
+    "Performance" = 1011
+    # RIFE/upscale order A/B (built-in slots: same HD Balanced + RIFE 2x chain,
+    # 1012 = upscale-then-RIFE, 1013 = RIFE-then-upscale, the default). Uncomment
+    # to catalog the two orders here; needs the RIFE models installed and a build
+    # whose aji.dll exposes the slots. The clean headless comparison is
+    # animejanai-inference's aji_harness --rife-chain (see its BENCHMARKS.md).
+    # "RIFE-after"  = 1012
+    # "RIFE-before" = 1013
+}
 # Ascending by pixel count: a larger input is always more work for the model, so
 # once a template is too slow at one resolution every larger one is too (used to
 # short-circuit the rest below).
