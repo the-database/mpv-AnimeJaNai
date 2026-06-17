@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "aa69bde9-c7bf-4080-8e84-165247bf15fb",
+  "submitted_at": "2026-06-17T02:52:19.186Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 3070",
+  "vram_mb": 8192,
+  "gpu_power_w": 264,
+  "cpu": "AMD Ryzen 7 5700X3D 8-Core Processor",
+  "cpu_mhz": 3001,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32693,
+  "ram_speed_mhz": 3000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1047",
+  "results": {
+    "Balanced": {
+      "480x360": 402.8,
+      "640x480": 229,
+      "768x576": 164.3,
+      "1280x720": 93.6,
+      "1920x1080": 41.8
+    },
+    "Performance": {
+      "480x360": 609.8,
+      "640x480": 400.8,
+      "768x576": 293.8,
+      "1280x720": 155.8,
+      "1920x1080": 69.5
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
