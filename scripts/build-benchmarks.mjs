@@ -13,6 +13,34 @@ const OUT = path.join(repoRoot, "site", "benchmarks.json");
 
 const ALLOWED_BACKENDS = new Set(["TensorRT", "DirectML", "ncnn"]);
 const RES_RE = /^\d{2,5}x\d{2,5}$/;
+const GPU_SPECS = [
+  [/Radeon\s+RX\s+9070\s+XT\b/i, 16 * 1024, 304],
+  [/Radeon\s+RX\s+9070\s+GRE\b/i, 12 * 1024, 220],
+  [/Radeon\s+RX\s+9070\b/i, 16 * 1024, 220],
+  [/Radeon\s+RX\s+9060\s+XT\b/i, null, 160],
+  [/Radeon\s+RX\s+7900\s+XTX\b/i, 24 * 1024, 355],
+  [/Radeon\s+RX\s+7900\s+XT\b/i, 20 * 1024, 315],
+  [/Radeon\s+RX\s+7900\s+GRE\b/i, 16 * 1024, 260],
+  [/Radeon\s+RX\s+7800\s+XT\b/i, 16 * 1024, 263],
+  [/Radeon\s+RX\s+7700\s+XT\b/i, 12 * 1024, 245],
+  [/Radeon\s+RX\s+7600\s+XT\b/i, 16 * 1024, 165],
+  [/Radeon\s+RX\s+7600\b/i, 8 * 1024, 165],
+  [/Radeon\s+RX\s+6950\s+XT\b/i, 16 * 1024, 335],
+  [/Radeon\s+RX\s+6900\s+XT\b/i, 16 * 1024, 300],
+  [/Radeon\s+RX\s+6800\s+XT\b/i, 16 * 1024, 300],
+  [/Radeon\s+RX\s+6800\b/i, 16 * 1024, 250],
+  [/Radeon\s+RX\s+6750\s+XT\b/i, 12 * 1024, 250],
+  [/Radeon\s+RX\s+6700\s+XT\b/i, 12 * 1024, 230],
+  [/Radeon\s+RX\s+6600\s+XT\b/i, 8 * 1024, 160],
+  [/Radeon\s+RX\s+6600\b/i, 8 * 1024, 132],
+];
+
+function knownGpuSpec(gpu) {
+  for (const [re, vram_mb, gpu_power_w] of GPU_SPECS) {
+    if (re.test(gpu || "")) return { vram_mb, gpu_power_w };
+  }
+  return {};
+}
 
 function valid(s) {
   if (!s || typeof s !== "object") return false;
@@ -53,14 +81,15 @@ for (const file of files.sort()) {
     skipped++;
     continue;
   }
+  const fallbackSpec = knownGpuSpec(parsed.gpu);
   submissions.push({
     id: parsed.id ?? path.basename(file, ".json"),
     submitted_at: parsed.submitted_at ?? null,
     app_version: parsed.app_version ?? "",
     backend: parsed.backend,
     gpu: parsed.gpu ?? "",
-    vram_mb: typeof parsed.vram_mb === "number" ? parsed.vram_mb : null,
-    gpu_power_w: typeof parsed.gpu_power_w === "number" ? parsed.gpu_power_w : null,
+    vram_mb: typeof parsed.vram_mb === "number" ? parsed.vram_mb : (fallbackSpec.vram_mb ?? null),
+    gpu_power_w: typeof parsed.gpu_power_w === "number" ? parsed.gpu_power_w : (fallbackSpec.gpu_power_w ?? null),
     cpu: parsed.cpu ?? "",
     cpu_mhz: typeof parsed.cpu_mhz === "number" ? parsed.cpu_mhz : null,
     cpu_cores: typeof parsed.cpu_cores === "number" ? parsed.cpu_cores : null,

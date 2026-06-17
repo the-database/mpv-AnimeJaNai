@@ -75,6 +75,9 @@ function validate(b) {
   for (const k of ["app_version", "gpu", "cpu", "os", "driver", "submitted_by"]) {
     if (b[k] != null && (typeof b[k] !== "string" || b[k].length > STR_MAX)) return `invalid ${k}`;
   }
+  if (b.backend === "TensorRT" && !isNvidiaGpuName(b.gpu)) {
+    return "TensorRT submissions must identify the NVIDIA GPU";
+  }
   if (b.note != null && (typeof b.note !== "string" || b.note.length > NOTE_MAX)) return "invalid note";
   if (b.vram_mb != null && (typeof b.vram_mb !== "number" || !isFinite(b.vram_mb) || b.vram_mb < 0 || b.vram_mb > 4194304)) return "invalid vram_mb";
   if (b.gpu_power_w != null && (typeof b.gpu_power_w !== "number" || !isFinite(b.gpu_power_w) || b.gpu_power_w < 0 || b.gpu_power_w > 10000)) return "invalid gpu_power_w";
@@ -107,6 +110,10 @@ function validate(b) {
   }
   if (measured === 0) return "no results"; // nothing actually ran; sentinels only
   return null;
+}
+
+function isNvidiaGpuName(value) {
+  return /nvidia|geforce|\brtx\b|\bgtx\b|quadro|titan/i.test(String(value || ""));
 }
 
 // Replace control characters and angle brackets with spaces, then collapse

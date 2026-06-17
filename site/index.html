@@ -206,9 +206,10 @@
           let html = "";
           for (const gpu of order) {
             const sys = groups[gpu].slice().sort((a, b) => best(b) - best(a));
+            const spec = sys.find((s) => vramText(s) || s.gpu_power_w) || sys[0];
             const tags = [`${sys.length} system${sys.length > 1 ? "s" : ""}`];
-            if (vramText(sys[0])) tags.push(vramText(sys[0]));
-            if (sys[0].gpu_power_w) tags.push(sys[0].gpu_power_w + "W");
+            if (vramText(spec)) tags.push(vramText(spec));
+            if (spec.gpu_power_w) tags.push(spec.gpu_power_w + "W");
             // Collapsed by default = a dense, scannable GPU directory. An active
             // search auto-opens its matches; "Expand all" opens everything.
             const open = (expandAll || f) ? " open" : "";
