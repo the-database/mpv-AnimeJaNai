@@ -294,34 +294,66 @@ void SyncInputConf()
 }
 
 // The SD model was re-exported at ONNX opset 21 (the op23 build fell back to the
-// CPU on the DirectML backend); the op23 .onnx no longer ships. animejanai.conf
-// is user-preserved, so a custom profile that named the old model by hand would
-// otherwise error with "model not found" on that slot. Plain idempotent rewrite
-// of the one renamed name; no-op once rewritten or if absent. Runs on --check
-// (every start), so it fires on the post-update relaunch - with the new binary,
-// since the updater ships in overlay_paths - before the user plays.
+// CPU on the DirectML backend); the op23 .onnx no longer ships. Two post-update
+// chores, both on --check (every start), so they fire on the post-update relaunch
+// - with the new binary, since the updater ships in overlay_paths - before play:
+//  1. animejanai.conf is user-preserved, so a custom profile that named the old
+//     model by hand would error "model not found". Idempotent name rewrite.
+//  2. The additive update copies the new op21 .onnx in but never deletes the old
+//     op23 one (or its TensorRT engines - clean_stale_engines only prunes other
+//     GPU/TRT versions, so same-machine op23 engines, tens of MB each, linger).
+//     Remove op23's .onnx + derived engine/timing-cache files, gated on op21
+//     being present so the last copy of the SD model is never deleted.
 void MigrateAnimeJaNaiConf()
 {
+    const string oldName =
+        "2x_AnimeJaNai_SD_V1beta34_Compact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo";
+    const string newName =
+        "2x_AnimeJaNai_SD_V1beta34_Compact_1x3xHxW_dyn-HW_strong_fp16_op21_dynamo";
+
     try
     {
         string conf = Path.Combine(installDir, "animejanai", "animejanai.conf");
-        if (!File.Exists(conf))
+        if (File.Exists(conf))
         {
-            return;
+            string text = File.ReadAllText(conf);
+            if (text.Contains(oldName))
+            {
+                File.WriteAllText(conf, text.Replace(oldName, newName));
+                Console.WriteLine("ANIMEJANAI_CONF_MIGRATED (SD model op23 -> op21)");
+            }
         }
-        const string oldName =
-            "2x_AnimeJaNai_SD_V1beta34_Compact_1x3xHxW_dyn-HW_strong_fp16_op23_dynamo";
-        const string newName =
-            "2x_AnimeJaNai_SD_V1beta34_Compact_1x3xHxW_dyn-HW_strong_fp16_op21_dynamo";
-        string text = File.ReadAllText(conf);
-        if (!text.Contains(oldName))
-        {
-            return;
-        }
-        File.WriteAllText(conf, text.Replace(oldName, newName));
-        Console.WriteLine("ANIMEJANAI_CONF_MIGRATED (SD model op23 -> op21)");
     }
     catch { /* migration must never break --check */ }
+
+    try
+    {
+        string onnx = Path.Combine(installDir, "animejanai", "onnx");
+        if (Directory.Exists(onnx) &&
+            File.Exists(Path.Combine(onnx, newName + ".onnx")))
+        {
+            int removed = 0;
+            foreach (var f in Directory.EnumerateFiles(onnx))
+            {
+                if (!Path.GetFileName(f).StartsWith(oldName + ".", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                try
+                {
+                    File.SetAttributes(f, FileAttributes.Normal);
+                    File.Delete(f);
+                    removed++;
+                }
+                catch { /* locked etc. - retried on a later start */ }
+            }
+            if (removed > 0)
+            {
+                Console.WriteLine($"ANIMEJANAI_ORPHAN_REMOVED ({removed} op23 SD file(s))");
+            }
+        }
+    }
+    catch { /* cleanup must never break --check */ }
 }
 
 async Task<int> ApplyAsync()
