@@ -20,6 +20,7 @@
 // Dev override: set ANIMEJANAI_PACKS_DIR to a local directory with packs.json + archives.
 
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using static Downloader;
@@ -35,6 +36,30 @@ string installDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar
 string localManifest = Path.Combine(installDir, "manifest.json");
 string playerExe = ReadManifestString(localManifest, "player_executable", "mpvnet.exe");
 string archiveTool = ReadManifestString(localManifest, "archive_tool", "7z.exe");
+// The thing to *launch* (vs. the process name to wait on). On Windows the
+// player exe is both; on Linux the launcher (mpv-animejanai) wraps the mpv
+// binary to set --config-dir + the bundled library path. Falls back to the
+// player exe for older installs / Windows.
+string playerLauncher = ReadManifestString(localManifest, "player_launcher", playerExe);
+// Release assets are shared across platforms on one tag, suffixed by RID
+// (…-linux-x64.tar.zst / overlay-…-linux-x64.7z / manifest-linux-x64.json).
+// Windows keeps its legacy unsuffixed names. This RID selects our platform's
+// assets from a release that may carry both.
+string platformRid = ReadManifestString(localManifest, "platform", "win-x64");
+bool isWinRid = platformRid == "win-x64";
+// True if an asset belongs to our platform: Windows = anything not tagged
+// "linux"; otherwise the name must carry our RID.
+bool RidMatch(string name) => isWinRid ? !name.Contains("linux") : name.Contains(platformRid);
+
+// NVML ships in the NVIDIA driver as nvml.dll on Windows and libnvidia-ml.so.1
+// on Linux; remap the DllImport library name on non-Windows so GPU detection
+// (DetectGpu) works cross-platform without per-OS P/Invoke declarations.
+if (!OperatingSystem.IsWindows())
+{
+    NativeLibrary.SetDllImportResolver(typeof(Nvml).Assembly, (name, asm, search) =>
+        name == "nvml.dll" ? NativeLibrary.Load("libnvidia-ml.so.1", asm, search)
+                           : IntPtr.Zero);
+}
 
 string mode = args.Length > 0 ? args[0].ToLowerInvariant() : "--check";
 
@@ -412,7 +437,9 @@ async Task<int> ApplyAsync()
 // Overlay is enough when the latest release's heavy deps match the installed manifest's deps.
 async Task<bool> IsOverlaySufficientAsync(Release release, string work)
 {
-    var asset = release.Assets.FirstOrDefault(a => a.Name == "manifest.json");
+    string manifestName = isWinRid ? "manifest.json" : $"manifest-{platformRid}.json";
+    var asset = release.Assets.FirstOrDefault(a => a.Name == manifestName)
+                ?? release.Assets.FirstOrDefault(a => a.Name == "manifest.json");
     if (asset is null)
     {
         return false; // no manifest published -> play safe with a full update
@@ -476,7 +503,9 @@ static string ReadManifestDep(string manifestPath, string depKey)
 
 async Task<string> DownloadOverlayAsync(Release release, string work)
 {
-    var asset = release.Assets.FirstOrDefault(a => Regex.IsMatch(a.Name, @"overlay-.*\.7z$"))
+    // The overlay archive is a .7z on both platforms (extracted with the
+    // manifest's archive_tool: 7za.exe / 7zz). Pick our platform's asset.
+    var asset = release.Assets.FirstOrDefault(a => Regex.IsMatch(a.Name, @"overlay-.*\.7z$") && RidMatch(a.Name))
         ?? throw new InvalidOperationException("No overlay asset found on the latest release.");
     string dest = Path.Combine(work, asset.Name);
     await DownloadWithProgress(asset, dest);
@@ -485,6 +514,18 @@ async Task<string> DownloadOverlayAsync(Release release, string work)
 
 async Task<string> DownloadFullAsync(Release release, string work)
 {
+    if (!isWinRid)
+    {
+        // Linux full package is a single zstd tarball (…-<rid>.tar.zst).
+        var tar = release.Assets.FirstOrDefault(a =>
+                Regex.IsMatch(a.Name, $@"{Regex.Escape(platformRid)}\.tar\.zst$"))
+            ?? throw new InvalidOperationException("No full-package tarball found on the latest release.");
+        string tarDest = Path.Combine(work, tar.Name);
+        await DownloadWithProgress(tar, tarDest);
+        return tarDest;
+    }
+
+    // Windows full package is a multi-volume .7z (full-package-*.7z.001/.002/...).
     var parts = release.Assets
         .Where(a => a.Name.Contains("full-package-") && Regex.IsMatch(a.Name, @"\.7z\.\d+$"))
         .OrderBy(a => a.Name)
@@ -521,17 +562,23 @@ async Task DownloadWithProgress(Asset asset, string dest)
 void Extract(string archiveEntry, string outDir)
 {
     Directory.CreateDirectory(outDir);
-    string sevenZip = Path.Combine(installDir, archiveTool);
+    // The Linux full package is a zstd tarball; the overlay (.7z) and the
+    // Windows archives extract with the manifest's archive_tool.
+    bool isTar = archiveEntry.EndsWith(".tar.zst", StringComparison.OrdinalIgnoreCase);
+    string tool = isTar ? "tar" : Path.Combine(installDir, archiveTool);
+    string toolArgs = isTar
+        ? $"--zstd -xf \"{archiveEntry}\" -C \"{outDir}\""
+        : $"x \"{archiveEntry}\" -o\"{outDir}\" -y";
     var psi = new ProcessStartInfo
     {
-        FileName = sevenZip,
-        Arguments = $"x \"{archiveEntry}\" -o\"{outDir}\" -y",
+        FileName = tool,
+        Arguments = toolArgs,
         UseShellExecute = false,
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         CreateNoWindow = true,
     };
-    using var p = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start 7z.exe");
+    using var p = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start {tool}");
     string err = p.StandardError.ReadToEnd();
     p.StandardOutput.ReadToEnd();
     p.WaitForExit();
@@ -674,12 +721,39 @@ async Task<Release> GetLatestReleaseAsync()
 
 void RelaunchMpv()
 {
-    string mpv = Path.Combine(installDir, playerExe);
-    if (File.Exists(mpv))
+    // Launch through the platform launcher: mpvnet.exe on Windows (shell-exec
+    // so file associations/working dir resolve), the mpv-animejanai shell
+    // launcher on Linux (sets --config-dir + the bundled library path).
+    string launcher = Path.Combine(installDir, playerLauncher);
+    if (!File.Exists(launcher))
     {
-        try { Process.Start(new ProcessStartInfo { FileName = mpv, UseShellExecute = true }); }
-        catch (Exception e) { Console.WriteLine($"Could not relaunch mpv: {e.Message}"); }
+        return;
     }
+    try
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Process.Start(new ProcessStartInfo { FileName = launcher, UseShellExecute = true });
+        }
+        else
+        {
+            // ensure the launcher is executable (overlay extraction may have
+            // dropped the bit), then start it directly with an absolute path.
+            try
+            {
+                File.SetUnixFileMode(launcher, File.GetUnixFileMode(launcher)
+                    | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+            }
+            catch { /* best effort */ }
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = launcher,
+                UseShellExecute = false,
+                WorkingDirectory = installDir,
+            });
+        }
+    }
+    catch (Exception e) { Console.WriteLine($"Could not relaunch mpv: {e.Message}"); }
 }
 
 static void WaitForProcessExit(string name, TimeSpan timeout)
@@ -736,7 +810,12 @@ async Task<PackIndex> GetPackIndexAsync()
     else
     {
         var release = await GetLatestReleaseAsync();
-        var idx = release.Assets.FirstOrDefault(a => a.Name == "packs.json")
+        // packs index is RID-suffixed on Linux (packs-linux-x64.json) so it can
+        // coexist with the Windows packs.json on a shared release; its "asset"
+        // fields already carry the matching component-*-<rid>.7z names.
+        string packsName = isWinRid ? "packs.json" : $"packs-{platformRid}.json";
+        var idx = release.Assets.FirstOrDefault(a => a.Name == packsName)
+            ?? release.Assets.FirstOrDefault(a => a.Name == "packs.json")
             ?? throw new InvalidOperationException(
                 "The latest release publishes no component packs (packs.json missing).");
         using var client = NewClient();
