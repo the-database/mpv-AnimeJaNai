@@ -1,0 +1,78 @@
+#!/bin/sh
+# AppImage entrypoint for AnimeJaNai.
+#
+# The AppImage mounts read-only (squashfs), but the runtime writes a lot:
+# TensorRT engines build next to the ONNX, the filter writes the stats log, and
+# the Manager edits animejanai.conf. So we mirror the *writable* parts of the
+# tree into $XDG_DATA_HOME/AnimeJaNai on first run (and re-seed managed files on
+# version change), rewrite the config's paths to point at that writable dir, and
+# run the bundled mpv against it. The read-only bits (mpv, libs, the inference
+# runtime) stay in the mounted image.
+set -eu
+
+HERE="$(dirname "$(readlink -f "$0")")"
+export ANIMEJANAI_APPIMAGE=1   # animejanai_update.lua => "download the new AppImage"
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}/AnimeJaNai"
+mkdir -p "$DATA/portable_config" "$DATA/animejanai/onnx" "$DATA/animejanai/rife"
+
+# Seed / refresh writable data. Managed files are overwritten on version change;
+# user-owned files (animejanai.conf, mpv.conf, input.conf, engines) are kept.
+VER_SRC="$HERE/version.txt"
+VER_DST="$DATA/.seeded-version"
+if [ ! -f "$VER_DST" ] || ! cmp -s "$VER_SRC" "$VER_DST" 2>/dev/null; then
+    # user-preservable config: only copy if absent
+    cp -rn "$HERE/portable_config/." "$DATA/portable_config/" 2>/dev/null || true
+    # managed defaults: always refresh
+    cp -f  "$HERE/portable_config/mpv-animejanai.conf"   "$DATA/portable_config/" 2>/dev/null || true
+    cp -f  "$HERE/portable_config/input-animejanai.conf" "$DATA/portable_config/" 2>/dev/null || true
+    cp -rf "$HERE/portable_config/scripts"               "$DATA/portable_config/" 2>/dev/null || true
+    cp -rf "$HERE/portable_config/shaders"               "$DATA/portable_config/" 2>/dev/null || true
+    # onnx/rife: engines build next to the onnx, so these must be writable.
+    # (small models; copy if absent so user-added models survive updates)
+    cp -rn "$HERE/animejanai/onnx/."  "$DATA/animejanai/onnx/"  2>/dev/null || true
+    cp -rn "$HERE/animejanai/rife/."  "$DATA/animejanai/rife/"  2>/dev/null || true
+    [ -f "$DATA/animejanai/animejanai.conf" ] || \
+        cp -f "$HERE/animejanai/animejanai.conf" "$DATA/animejanai/animejanai.conf" 2>/dev/null || true
+    cp -f "$VER_SRC" "$VER_DST" 2>/dev/null || true
+fi
+
+# Point the vf=@aji line at the right places: inference libs from the read-only
+# image ($HERE), writable model/rife/conf/log under $DATA. Idempotent (the
+# ~~/.. tokens only exist until first rewrite; re-seeded files get rewritten).
+conf="$DATA/portable_config/mpv-animejanai.conf"
+if [ -f "$conf" ]; then
+    sed -i \
+        -e "s#~~/\.\./animejanai/inference#$HERE/animejanai/inference#g" \
+        -e "s#~~/\.\./animejanai/onnx#$DATA/animejanai/onnx#g" \
+        -e "s#~~/\.\./animejanai/rife#$DATA/animejanai/rife#g" \
+        -e "s#~~/\.\./animejanai/animejanai.conf#$DATA/animejanai/animejanai.conf#g" \
+        -e "s#~~/\.\./animejanai/currentanimejanai.log#$DATA/animejanai/currentanimejanai.log#g" \
+        "$conf"
+fi
+
+# The AppImage stays under GitHub's 2 GB asset limit by NOT baking in the ~1.8 GB
+# of per-SM TensorRT builder resources. On first run we fetch just the one pack
+# matching this GPU's compute capability into $DATA (writable) and add it to the
+# loader path, so trtexec can build engines. Cached engines work without it; a
+# fetch failure is non-fatal (engine builds for new resolutions just won't work
+# until the pack is present).
+INFDATA="$DATA/animejanai/inference"
+mkdir -p "$INFDATA"
+sm="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' .')"
+if [ -n "$sm" ] && ! ls "$HERE/animejanai/inference"/libnvinfer_builder_resource_sm${sm}.so* "$INFDATA"/animejanai/inference/libnvinfer_builder_resource_sm${sm}.so* >/dev/null 2>&1; then
+    ver="$(cat "$HERE/version.txt" 2>/dev/null || echo "")"
+    pack="component-trt-sm${sm}-linux-x64.7z"
+    url="https://github.com/the-database/mpv-upscale-2x_animejanai/releases/download/${ver}/${pack}"
+    if [ -n "$ver" ] && command -v curl >/dev/null 2>&1; then
+        echo "AnimeJaNai: fetching TensorRT kernels for sm${sm} (one-time, ~250 MB)..." >&2
+        if curl -fSL "$url" -o "$DATA/$pack"; then
+            "$HERE/7zz" x -y -o"$DATA" "$DATA/$pack" >/dev/null 2>&1 || true
+            rm -f "$DATA/$pack"
+        else
+            echo "AnimeJaNai: could not fetch $pack (offline?); engine builds may fail." >&2
+        fi
+    fi
+fi
+
+export LD_LIBRARY_PATH="$HERE/mpv:$HERE/animejanai/inference:$DATA/animejanai/inference:$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
+exec "$HERE/mpv/mpv" --config-dir="$DATA/portable_config" "$@"
