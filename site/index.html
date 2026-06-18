@@ -26,9 +26,13 @@
       padding: 9px 4px; font-size: 1.1rem; font-weight: 700;
     }
     summary.gpu-row::-webkit-details-marker { display: none; }
-    summary.gpu-row::before { content: "\25B8"; font-size: .75rem; opacity: .5; display: inline-block; transition: transform .12s; }
+    summary.gpu-row::before {
+      content: "\25B8"; flex: 0 0 18px; text-align: center; font-size: .95rem;
+      color: #3b82f6; opacity: .9; display: inline-block; transition: transform .12s;
+    }
     details[open] > summary.gpu-row::before { transform: rotate(90deg); }
     summary.gpu-row:hover { background: #8881; }
+    summary.gpu-row:hover::before { opacity: 1; }
     summary.gpu-row .cnt { font-weight: 400; opacity: .55; font-size: .82rem; }
     summary.gpu-row .head { margin-left: auto; font-variant-numeric: tabular-nums; font-size: .95rem; white-space: nowrap; }
     summary.gpu-row .head.g { color: #1a7f44; } summary.gpu-row .head.a { color: #9a6b00; } summary.gpu-row .head.r { color: #b42318; }
@@ -36,6 +40,9 @@
     .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; font-size: .85rem; }
     .controls button, .controls select { font: inherit; padding: 5px 10px; border: 1px solid #8884; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
     .sys { margin: 12px 0 16px; }
+    /* Indent expanded content so it lines up with the GPU name (right of the
+       chevron): summary left padding (4) + chevron column (18) + flex gap (10) = 32px. */
+    details.gpu-item > .sys { padding-left: 32px; }
     .specs { font-size: .85rem; opacity: .72; margin: 0 0 5px; }
     .specs b { font-weight: 600; opacity: .9; }
     table.mini { border-collapse: collapse; }
