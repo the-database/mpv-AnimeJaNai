@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libdrm-dev libegl-dev libgl-dev libgles2-mesa-dev \
         libxkbcommon-dev libxkbcommon-x11-dev \
         libx11-dev libxext-dev libxrandr-dev libxpresent-dev libxss-dev \
-        libxinerama-dev libxv-dev libxfixes-dev libxscrnsaver-dev \
+        libxinerama-dev libxv-dev libxfixes-dev \
         libpulse-dev libasound2-dev libjpeg-dev libuchardet-dev libbluray-dev \
         libdvdnav-dev libdvdread-dev libcdio-paranoia-dev \
         zlib1g-dev libbz2-dev liblzma-dev \
