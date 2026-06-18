@@ -121,6 +121,14 @@ jobs:
         dotnet publish AnimeJaNaiUpdater/AnimeJaNaiUpdater.csproj -c Release \
           -r linux-x64 --self-contained -p:PublishSingleFile=true -o updater-publish
 
+    - name: Build benchmark tool (linux-x64) into the tree
+      run: |
+        dotnet publish AnimeJaNaiBenchmark/AnimeJaNaiBenchmark.csproj -c Release \
+          -r linux-x64 --self-contained -p:PublishSingleFile=true \
+          -o "publish/mpv-upscale-2x_animejanai-v$VER/animejanai/benchmarks"
+        chmod +x "publish/mpv-upscale-2x_animejanai-v$VER/animejanai/benchmarks/AnimeJaNaiBenchmark" \
+                 "publish/mpv-upscale-2x_animejanai-v$VER/animejanai/benchmarks/animejanai_benchmark_all.sh" 2>/dev/null || true
+
     # The AnimeJaNai Manager is downloaded + laid into the tree by the assembler
     # (InstallAnimeJaNaiManager) from the AnimeJaNaiManager repo's own linux-x64
     # release, exactly like the Windows flow - so no Manager build step here.
