@@ -1,0 +1,36 @@
+name: Build Linux build image
+
+# Builds + pushes the old-baseline (Ubuntu 22.04, glibc 2.35) build image used by
+# the Linux legs of this repo (deploy.yml) and the sibling repos' build-linux
+# workflows (the-database/mpv, the-database/animejanai-inference). Run once, then
+# re-run only when build/Dockerfile.ubuntu2204 changes.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - build/Dockerfile.ubuntu2204
+      - .github/workflows/build-image.yml
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      with:
+        context: build
+        file: build/Dockerfile.ubuntu2204
+        push: true
+        tags: ghcr.io/the-database/animejanai-linux-build:ubuntu2204

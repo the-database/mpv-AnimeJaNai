@@ -78,5 +78,86 @@ jobs:
         name: ${{ github.event.inputs.release_version }}
         draft: true
         prerelease: false
+        allowUpdates: true
         artifacts: "mpv-AnimeJaNai-Setup-${{ github.event.inputs.release_version }}.exe,mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z.*,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}.7z,manifest.json,publish/packs-v${{ github.event.inputs.release_version }}/component-*.7z,publish/packs-v${{ github.event.inputs.release_version }}/packs.json"
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Linux leg. Runs in the old-baseline build image (Ubuntu 22.04 + CUDA toolkit
+  # + TensorRT 11 + .NET 10 SDK + 7zz + luajit + mpv build deps) so the artifacts
+  # carry a low glibc floor. The image is built/pushed by the build-image
+  # workflow; the Linux mpv fork bundle + aji.so are consumed from their sibling
+  # repos' releases (the assembler downloads them). Assets are shared on the same
+  # release tag, suffixed with the RID so they don't collide with the Windows
+  # assets; the updater resolves its platform's assets by that suffix.
+  deploy-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/the-database/animejanai-linux-build:ubuntu2204
+    env:
+      VER: ${{ github.event.inputs.release_version }}
+      TRT_LINUX_ROOT: /usr
+      CUDA_LINUX_LIB: /usr/local/cuda/lib64
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Publish assembler (host RID = linux-x64)
+      run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
+
+    - name: Run assembler (linux-x64, with packs)
+      # Downloads aji-linux-x64.tar.zst + the Linux mpv fork bundle from the
+      # sibling repos' releases; copies the TensorRT runtime from the image.
+      # --packs emits component-*.7z + packs.json and slims the core tree.
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai "$VER" --target linux-x64 --packs
+
+    - name: Build updater (linux-x64, single file)
+      run: |
+        dotnet publish AnimeJaNaiUpdater/AnimeJaNaiUpdater.csproj -c Release \
+          -r linux-x64 --self-contained -p:PublishSingleFile=true -o updater-publish
+
+    # The AnimeJaNai Manager is downloaded + laid into the tree by the assembler
+    # (InstallAnimeJaNaiManager) from the AnimeJaNaiManager repo's own linux-x64
+    # release, exactly like the Windows flow - so no Manager build step here.
+
+    - name: Package portable tarball (+ updater + install scripts)
+      run: |
+        chmod +x installer/linux/*.sh
+        installer/linux/package-tarball.sh \
+          "publish/mpv-upscale-2x_animejanai-v$VER" updater-publish/AnimeJaNaiUpdater "$VER" .
+
+    - name: Build AppImage (runtime + RIFE baked in; per-SM kernels fetched on first run)
+      # Reconstitute a tree with the inference runtime + RIFE (but NOT the ~1.8 GB
+      # of per-SM builder resources) so the single AppImage stays under GitHub's
+      # 2 GB asset limit; AppRun downloads the one pack matching the user's GPU on
+      # first run.
+      run: |
+        full="appimage-tree/mpv-upscale-2x_animejanai-v$VER"
+        mkdir -p "$full"
+        cp -a "publish/mpv-upscale-2x_animejanai-v$VER/." "$full/"
+        cp -f updater-publish/AnimeJaNaiUpdater "$full/AnimeJaNaiUpdater"
+        chmod +x "$full/AnimeJaNaiUpdater"
+        for p in "publish/packs-v$VER/component-trt-runtime-linux-x64.7z" \
+                 "publish/packs-v$VER/component-rife-linux-x64.7z"; do
+          [ -f "$p" ] && 7zz x -y -o"$full" "$p"
+        done
+        installer/linux/build-appimage.sh "$full" "$VER" .
+
+    - name: Overlay archive + RID-suffixed manifest
+      # Lightweight program-file overlay (the assembler already emits RID-suffixed
+      # component packs + packs-linux-x64.json).
+      run: |
+        pkg="publish/mpv-upscale-2x_animejanai-v$VER"
+        cp "$pkg/manifest.json" "manifest-linux-x64.json"
+        mapfile -t paths < <(jq -r '.overlay_paths[]' "$pkg/manifest.json")
+        ( cd "$pkg" && 7zz a -t7z -mx=9 \
+            "$GITHUB_WORKSPACE/mpv-upscale-2x_animejanai-overlay-$VER-linux-x64.7z" "${paths[@]}" )
+
+    - name: Create / update GitHub Release (Linux assets)
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ github.event.inputs.release_version }}
+        name: ${{ github.event.inputs.release_version }}
+        draft: true
+        allowUpdates: true
+        artifacts: "mpv-upscale-2x_animejanai-v${{ github.event.inputs.release_version }}-linux-x64.tar.zst,*.AppImage,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}-linux-x64.7z,manifest-linux-x64.json,publish/packs-v${{ github.event.inputs.release_version }}/component-*-linux-x64.7z,publish/packs-v${{ github.event.inputs.release_version }}/packs-linux-x64.json"
         token: ${{ secrets.GITHUB_TOKEN }}
