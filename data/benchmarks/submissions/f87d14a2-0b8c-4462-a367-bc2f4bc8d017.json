@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "f87d14a2-0b8c-4462-a367-bc2f4bc8d017",
+  "submitted_at": "2026-06-18T10:54:39.328Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "vram_mb": 24564,
+  "gpu_power_w": 500,
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "cpu_mhz": 3701,
+  "cpu_cores": 12,
+  "cpu_threads": 24,
+  "ram_mb": 32416,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26100",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 1214,
+      "640x480": 1214,
+      "1280x720": 301
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
