@@ -243,6 +243,18 @@ var
   failed: Integer;
   packsToInstall: String;
 begin
+  // Before the new core overwrites manifest.json, snapshot the existing one so the updater's
+  // --install can tell whether an already-present component (TensorRT/RIFE) is unchanged across
+  // this upgrade and skip re-downloading it. ssInstall fires while the old install is still intact;
+  // a fresh install has no manifest.json yet, so nothing is snapshotted.
+  if CurStep = ssInstall then
+  begin
+    if FileExists(ExpandConstant('{app}\manifest.json')) then
+      FileCopy(ExpandConstant('{app}\manifest.json'),
+               ExpandConstant('{app}\manifest.prev.json'), False);
+    Exit;
+  end;
+
   if CurStep <> ssPostInstall then
     Exit;
 
@@ -263,6 +275,10 @@ begin
   end;
 
   WizardForm.StatusLabel.Caption := '';
+
+  // The pre-upgrade manifest snapshot has served its purpose (the updater consulted it above).
+  DeleteFile(ExpandConstant('{app}\manifest.prev.json'));
+
   if failed > 0 then
     MsgBox('Some components could not be downloaded (you may be offline). ' +
            'AnimeJaNai will still play video; open the AnimeJaNai Manager ' +
