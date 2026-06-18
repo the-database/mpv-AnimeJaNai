@@ -144,6 +144,7 @@ jobs:
           "publish/mpv-upscale-2x_animejanai-v$VER" updater-publish/AnimeJaNaiUpdater "$VER" .
 
     - name: Build AppImage (runtime + RIFE baked in; per-SM kernels fetched on first run)
+      continue-on-error: true  # don't block the tarball release if AppImage tooling trips
       # Reconstitute a tree with the inference runtime + RIFE (but NOT the ~1.8 GB
       # of per-SM builder resources) so the single AppImage stays under GitHub's
       # 2 GB asset limit; AppRun downloads the one pack matching the user's GPU on

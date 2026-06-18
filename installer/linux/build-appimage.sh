@@ -44,8 +44,8 @@ icon="$APPDIR/mpv-animejanai.png"
 if   [ -f "$TREE/portable_config/animejanai.png" ]; then cp "$TREE/portable_config/animejanai.png" "$icon"
 elif [ -f "$HERE/animejanai.png" ]; then cp "$HERE/animejanai.png" "$icon"
 elif command -v convert >/dev/null 2>&1; then
-    convert -size 256x256 xc:'#1b1033' -gravity center -pointsize 40 -fill white \
-            -annotate 0 "AnimeJaNai" "$icon"
+    # plain solid square — no text, so it needs no font (containers often lack one)
+    convert -size 256x256 xc:'#1b1033' "$icon"
 else
     # 1x1 transparent PNG fallback (appimagetool just needs a valid icon file)
     printf '\211PNG\r\n\032\n\0\0\0\rIHDR\0\0\0\1\0\0\0\1\10\6\0\0\0\37\25\304\211\0\0\0\rIDATx\234c\374\17\0\0\1\1\0\5\030\335\215\260\0\0\0\0IEND\256B`\202' > "$icon"
