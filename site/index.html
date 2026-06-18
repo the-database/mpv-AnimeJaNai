@@ -193,7 +193,7 @@
         const slug = (g) => "gpu-" + g.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
         // The collapsed row's at-a-glance signal: the group's best 1080p fps.
         function headCell(v) {
-          if (!(v > 0)) return `<span class="head na" title="Not measured at 1080p">&mdash;</span>`;
+          if (!(v > 0)) return `<span class="head na" title="Not measured at 1080p">-</span>`;
           return `<span class="head ${fpsClass(v)}" title="Best 1080p fps">${fpsFmt(v)} fps</span>`;
         }
 
