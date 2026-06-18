@@ -141,17 +141,25 @@ mp.set_property('hwdec', hwdec)
 msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
                        hwdec == 'd3d11va' and ', gpu-api=d3d11' or ''))
 
--- The Manager's "Set as Default Profile" stores the chosen slot here. The vf
--- line bakes in Balanced (1002), and mpv rebuilds the filter chain from that vf
--- string on every file, so re-apply the user's chosen default after each file
--- loads (the filter only exists then). Without re-applying per file, only the
--- first file would honor the default and every later file would fall back to
--- Balanced.
-if default_slot then
-    mp.register_event('file-loaded', function()
-        msg.info('applying default slot ' .. default_slot)
-        mp.commandv('script-message', 'aji-slot', tostring(default_slot))
-    end)
-end
+-- The Manager's "Set as Default Profile" stores the chosen slot here. mpv
+-- rebuilds the filter chain from the vf string (which bakes in Balanced, 1002)
+-- on every file, so the active slot must be re-applied after each file loads or
+-- every file after the first would snap back to Balanced. We re-apply the
+-- *current* slot, not always default_slot: the default seeds the active slot at
+-- startup, but once the user switches that choice sticks across file loads.
+-- Restarting mpv re-reads default_slot and resets again.
+local current_slot = default_slot
+mp.register_script_message('aji-slot', function(slot)
+    local n = tonumber(slot)
+    if n then
+        current_slot = n
+    end
+end)
+mp.register_event('file-loaded', function()
+    if current_slot then
+        msg.info('applying slot ' .. current_slot)
+        mp.commandv('script-message', 'aji-slot', tostring(current_slot))
+    end
+end)
 
 check_components(backend, rife_configured)
