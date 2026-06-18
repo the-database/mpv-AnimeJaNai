@@ -657,9 +657,12 @@ async Task<List<string>> EmitComponentPacks()
         sevenZa = Path.Combine(assemblyDirectory, "7za.exe"); // --packs-only on a partial tree
     }
 
-    var packs = new List<(string Name, string[] Files)>
+    // Dep = the manifest.json deps key that governs a pack's content, emitted into packs.json so
+    // the updater can skip re-downloading an already-present pack when that dep is unchanged across
+    // releases (TensorRT runtime + builder resources are versioned by inference_runtime; RIFE by rife).
+    var packs = new List<(string Name, string Dep, string[] Files)>
     {
-        ("trt-runtime", Directory.GetFiles(inferencePath)
+        ("trt-runtime", "inference_runtime", Directory.GetFiles(inferencePath)
             .Where(f =>
             {
                 var n = Path.GetFileName(f);
@@ -669,7 +672,7 @@ async Task<List<string>> EmitComponentPacks()
                        n.Contains("LICENSE", StringComparison.OrdinalIgnoreCase);
             })
             .Select(f => Path.GetRelativePath(installDirectory, f)).ToArray()),
-        ("rife", new[] { Path.GetRelativePath(installDirectory, rifePath) }),
+        ("rife", "rife", new[] { Path.GetRelativePath(installDirectory, rifePath) }),
     };
     foreach (var f in Directory.GetFiles(inferencePath, "nvinfer_builder_resource_*"))
     {
@@ -678,14 +681,14 @@ async Task<List<string>> EmitComponentPacks()
             Path.GetFileName(f), @"builder_resource_([a-z0-9]+)_");
         if (m.Success)
         {
-            packs.Add(($"trt-{m.Groups[1].Value}",
+            packs.Add(($"trt-{m.Groups[1].Value}", "inference_runtime",
                        new[] { Path.GetRelativePath(installDirectory, f) }));
         }
     }
 
     var index = new List<object>();
     var packedFiles = new List<string>();
-    foreach (var (name, files) in packs)
+    foreach (var (name, dep, files) in packs)
     {
         if (files.Length == 0 ||
             !files.Any(f => File.Exists(Path.Combine(installDirectory, f)) ||
@@ -725,6 +728,7 @@ async Task<List<string>> EmitComponentPacks()
         index.Add(new
         {
             name,
+            dep,
             asset = Path.GetFileName(archive),
             bytes = new FileInfo(archive).Length,
             files = allFiles,

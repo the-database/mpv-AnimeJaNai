@@ -454,6 +454,24 @@ static string? ReadDepsRaw(string manifestPath)
     }
 }
 
+// One heavy-dependency version out of a manifest's deps (e.g. "inference_runtime", "rife").
+// "" if the manifest/key is missing - used to decide whether an already-present component pack's
+// content is unchanged and the download can be skipped.
+static string ReadManifestDep(string manifestPath, string depKey)
+{
+    try
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        if (doc.RootElement.TryGetProperty("deps", out var deps) &&
+            deps.TryGetProperty(depKey, out var v) && v.ValueKind == JsonValueKind.String)
+        {
+            return v.GetString() ?? "";
+        }
+    }
+    catch { /* missing/unreadable manifest -> "" */ }
+    return "";
+}
+
 // ---- downloads -----------------------------------------------------------------------------
 
 async Task<string> DownloadOverlayAsync(Release release, string work)
@@ -738,7 +756,8 @@ async Task<PackIndex> GetPackIndexAsync()
             asset,
             assets.FirstOrDefault(a => a.Name == asset)?.Url,
             e.GetProperty("bytes").GetInt64(),
-            files));
+            files,
+            e.TryGetProperty("dep", out var d) ? d.GetString() : null));
     }
     return new PackIndex(
         doc.RootElement.TryGetProperty("package_version", out var v)
@@ -916,6 +935,33 @@ async Task<int> InstallComponentAsync(string name)
         return 1;
     }
 
+    // Skip the (large) download when the identical content is already on disk: every file the pack
+    // ships is present AND the upstream version that governs it is unchanged. That version is the
+    // manifest dep the build tagged the pack with (inference_runtime for TensorRT, rife for RIFE).
+    // We treat it as unchanged when the just-installed core's manifest (target) matches either the
+    // snapshot the setup installer leaves of the pre-upgrade manifest (manifest.prev.json - the
+    // bootstrap for the first upgrade off an install that recorded only the package version) or the
+    // dep version components.json recorded on a prior managed install. A future TensorRT/RIFE bump
+    // changes the dep, so this correctly re-downloads then; a different GPU's builder-resource pack
+    // has files that aren't present, so it isn't skipped either.
+    string target = pack.Dep is null ? "" : ReadManifestDep(localManifest, pack.Dep);
+    bool filesPresent = pack.Files.Count > 0 &&
+        pack.Files.All(f => File.Exists(Path.Combine(installDir, f)));
+    if (filesPresent && target != "")
+    {
+        string prev = pack.Dep is null ? "" :
+            ReadManifestDep(Path.Combine(installDir, "manifest.prev.json"), pack.Dep);
+        var current = ReadInstalledComponents(index);
+        current.TryGetValue(pack.Name, out var recorded);
+        if (prev == target || recorded == target)
+        {
+            current[pack.Name] = target;
+            WriteInstalledComponents(current);
+            Console.WriteLine($"{pack.Name} already up to date ({target}); skipping download.");
+            return 0;
+        }
+    }
+
     string work = Path.Combine(Path.GetTempPath(), "animejanai-packs");
     Directory.CreateDirectory(work);
     string archive = Path.Combine(work, pack.Asset);
@@ -932,7 +978,9 @@ async Task<int> InstallComponentAsync(string name)
     TryDelete(() => File.Delete(archive));
 
     var installed = ReadInstalledComponents(index);
-    installed[pack.Name] = index.PackageVersion;
+    // Record the dep version (not the package version) so a later reinstall can tell whether this
+    // pack's content actually changed; fall back to the package version for an untagged pack.
+    installed[pack.Name] = target != "" ? target : index.PackageVersion;
     WriteInstalledComponents(installed);
     Console.WriteLine($"{pack.Name} installed.");
     return 0;
@@ -1046,5 +1094,5 @@ static class Nvml
 
 record Release(string Tag, List<Asset> Assets);
 record Asset(string Name, string Url);
-record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files);
+record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files, string? Dep);
 record PackIndex(string PackageVersion, List<Pack> Packs);
