@@ -37,10 +37,10 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // Custom libmpv fork build (github.com/the-database/mpv-winbuild release).
 // The release tag and the archive filename's date can differ (the tag is
 // stamped at publish, the filename at build), so they are pinned separately.
-const string MpvForkVersion       = "2026-06-13-c9cd49b01f"; // release tag
-                                                    // rebuild + bump alongside AjiVersion to ship the vf_animejanai filter that honors chain rife_before_upscale (RIFE-first runs before upscaling); the filter lives inside this libmpv build
-const string MpvForkBuildDate     = "20260613";     // build date in the dev archive filename
-const string MpvForkGitHash       = "c9cd49b01f";   // git short hash in the dev archive filename
+const string MpvForkVersion       = "2026-06-18-9bb5fe9680"; // release tag
+                                                    // the vf_animejanai filter lives inside this libmpv build; rebuild + bump alongside AjiVersion when the filter changes. This build carries DML 4:4:4 (x2bgr10) input + rife_before_upscale (RIFE-first) on both TRT and DML.
+const string MpvForkBuildDate     = "20260618";     // build date in the dev archive filename
+const string MpvForkGitHash       = "9bb5fe9680";   // git short hash in the dev archive filename
 
 // TensorRT runtime files taken from the vs-mlrt cuda archive's vsmlrt-cuda/
 // directory. Everything else in there (cuDNN, cuBLAS, onnxruntime, the lean
