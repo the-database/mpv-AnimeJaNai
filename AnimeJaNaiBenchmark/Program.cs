@@ -155,7 +155,9 @@ async Task<double> BenchmarkCell(int slot, string clip)
     };
     foreach (var a in new[]
     {
-        "--no-config", "--vo=null", "--untimed", "--no-audio", "--keep-open=no",
+        // Loop the short seed clip so playback stays active over the sampling
+        // window (--untimed = uncapped throughput).
+        "--no-config", "--vo=null", "--untimed", "--no-audio", "--loop-file=inf",
         $"--input-ipc-server={ipc}", "--hwdec=nvdec", "--gpu-api=vulkan",
         $"--vf={vf}", clip,
     }) psi.ArgumentList.Add(a);
@@ -171,18 +173,35 @@ async Task<double> BenchmarkCell(int slot, string clip)
     try
     {
         using var ipcConn = await ConnectIpc(ipc, proc, TimeSpan.FromSeconds(60));
-        // Wait for playback to actually advance (engine build happens here).
-        double first = await SampleFrame(ipcConn, TimeSpan.FromSeconds(180));
-        if (first < 0) return -1;
+        // Wait for the first decoded frame: this excludes process launch AND the
+        // one-time TensorRT engine build (the filter pauses playback to build, so
+        // the counter only starts advancing once real upscaling begins).
+        double f0 = await SampleFrame(ipcConn, TimeSpan.FromSeconds(180));
+        if (f0 < 0) return -1;
 
-        // Sample over an active window and derive fps from frame delta / time.
+        // Time the remaining frames until mpv exits at --frames=FRAMES.
+        // Sample over a ~3s window, accumulating across --loop-file resets
+        // (estimated-frame-number restarts at 0 each loop of the short clip).
+        // NOTE: at multi-thousand fps the tiny seed clips loop faster than we can
+        // poll, so small-resolution numbers are approximate; the high-resolution
+        // cells (the ones users care about) are the most reliable.
+        double prev = f0, accumulated = 0, baseTotal = -1, lastTotal = f0;
         var sw = Stopwatch.StartNew();
-        double startFrame = first;
-        await Task.Delay(2500);
-        double endFrame = await SampleFrame(ipcConn, TimeSpan.FromSeconds(10));
-        sw.Stop();
-        if (endFrame <= startFrame) return -1;
-        return (endFrame - startFrame) / sw.Elapsed.TotalSeconds;
+        TimeSpan baseTime = TimeSpan.Zero, lastTime = TimeSpan.Zero;
+        while (sw.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            double f = await SampleFrame(ipcConn, TimeSpan.FromSeconds(3));
+            if (f < 0) break;
+            if (f < prev) accumulated += prev;
+            prev = f;
+            double total = accumulated + f;
+            if (baseTotal < 0) { baseTotal = total; baseTime = sw.Elapsed; }
+            lastTotal = total; lastTime = sw.Elapsed;
+            await Task.Delay(100);
+        }
+        double dt = (lastTime - baseTime).TotalSeconds;
+        if (baseTotal < 0 || dt < 0.5 || lastTotal <= baseTotal) return -1;
+        return (lastTotal - baseTotal) / dt;
     }
     finally
     {
