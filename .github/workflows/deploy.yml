@@ -6,9 +6,13 @@ on:
       release_version:
         description: 'Release version'
         required: true
+      linux_only:
+        description: 'Build only the Linux artifacts (skip the Windows leg)'
+        default: 'false'
 
 jobs:
   deploy:
+    if: ${{ github.event.inputs.linux_only != 'true' }}
     runs-on: windows-latest
 
     steps:
