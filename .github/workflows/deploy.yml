@@ -91,8 +91,14 @@ jobs:
   # assets; the updater resolves its platform's assets by that suffix.
   deploy-linux:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
     container:
       image: ghcr.io/the-database/animejanai-linux-build:ubuntu2204
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       VER: ${{ github.event.inputs.release_version }}
       TRT_LINUX_ROOT: /usr
