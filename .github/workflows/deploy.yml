@@ -180,5 +180,14 @@ jobs:
         name: ${{ github.event.inputs.release_version }}
         draft: true
         allowUpdates: true
+        # The Linux leg only *adds* its RID-suffixed assets to the release the
+        # Windows leg owns (same tag). When that release already exists - e.g.
+        # adding Linux to an already-published 3.5.0 - never change its
+        # published/draft state, name, or notes; just attach the Linux files.
+        # (draft: true above still applies when the Linux leg creates the
+        # release from scratch, e.g. a linux_only first run.)
+        omitDraftDuringUpdate: true
+        omitNameDuringUpdate: true
+        omitBodyDuringUpdate: true
         artifacts: "mpv-upscale-2x_animejanai-v${{ github.event.inputs.release_version }}-linux-x64.tar.zst,*.AppImage,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}-linux-x64.7z,manifest-linux-x64.json,publish/packs-v${{ github.event.inputs.release_version }}/component-*-linux-x64.7z,publish/packs-v${{ github.event.inputs.release_version }}/packs-linux-x64.json"
         token: ${{ secrets.GITHUB_TOKEN }}
