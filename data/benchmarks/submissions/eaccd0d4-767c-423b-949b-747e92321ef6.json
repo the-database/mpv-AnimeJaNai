@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "eaccd0d4-767c-423b-949b-747e92321ef6",
+  "submitted_at": "2026-06-19T22:18:55.601Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "vram_mb": 16376,
+  "gpu_power_w": 285,
+  "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
+  "cpu_mhz": 4700,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 48293,
+  "ram_speed_mhz": 6400,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 1212,
+      "640x480": 604.5,
+      "768x576": 403.4,
+      "1280x720": 166.8,
+      "1920x1080": 72.6
+    },
+    "Performance": {
+      "480x360": 1226.5,
+      "640x480": 1219,
+      "768x576": 609.5,
+      "1280x720": 287.8,
+      "1920x1080": 128.8
+    }
+  },
+  "submitted_by": "TechnoStone",
+  "note": ""
+}
