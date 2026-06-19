@@ -76,11 +76,6 @@ VER_DST="$DATA/.seeded-version"
 if [ ! -f "$VER_DST" ] || ! cmp -s "$VER_SRC" "$VER_DST" 2>/dev/null; then
     # user-preservable config: only copy if absent
     cp -rn "$HERE/portable_config/." "$DATA/portable_config/" 2>/dev/null || true
-    # managed defaults: always refresh (mpv-animejanai.conf is refreshed every
-    # launch below, since its paths depend on the per-run mount)
-    cp -f  "$HERE/portable_config/input-animejanai.conf" "$DATA/portable_config/" 2>/dev/null || true
-    cp -rf "$HERE/portable_config/scripts"               "$DATA/portable_config/" 2>/dev/null || true
-    cp -rf "$HERE/portable_config/shaders"               "$DATA/portable_config/" 2>/dev/null || true
     # onnx models: engines build next to them, so they must be writable.
     # (RIFE models are fetched on demand below, not baked into the AppImage.)
     cp -rn "$HERE/animejanai/onnx/."  "$DATA/animejanai/onnx/"  2>/dev/null || true
@@ -94,6 +89,12 @@ fi
 # point at a dead mount. Inference libs come from the read-only image ($HERE);
 # writable model/rife/conf/log live under $DATA. (mpv-animejanai.conf is a managed
 # file, not user-edited, so overwriting it each launch is safe.)
+# Managed files (lua scripts, shaders, the conf templates) are refreshed from
+# the image EVERY launch - they're not user-edited, and version-gating them goes
+# stale if a build reuses a version string.
+cp -rf "$HERE/portable_config/scripts"               "$DATA/portable_config/" 2>/dev/null || true
+cp -rf "$HERE/portable_config/shaders"               "$DATA/portable_config/" 2>/dev/null || true
+cp -f  "$HERE/portable_config/input-animejanai.conf" "$DATA/portable_config/" 2>/dev/null || true
 conf="$DATA/portable_config/mpv-animejanai.conf"
 cp -f "$HERE/portable_config/mpv-animejanai.conf" "$conf" 2>/dev/null || true
 if [ -f "$conf" ]; then
