@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "206ab8f9-8e3d-465d-ac89-897831858e5d",
+  "submitted_at": "2026-06-19T22:19:17.025Z",
+  "app_version": "3.5.0",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon RX 7900 XTX",
+  "vram_mb": 24517,
+  "gpu_power_w": 355,
+  "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+  "cpu_mhz": 3600,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32581,
+  "ram_speed_mhz": 4000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.31019.2002",
+  "results": {
+    "Balanced": {
+      "480x360": 602.2,
+      "640x480": 402.7,
+      "768x576": 301.5,
+      "1280x720": 168.8,
+      "1920x1080": 69.6
+    },
+    "Performance": {
+      "480x360": 1208,
+      "640x480": 1216,
+      "768x576": 603.8,
+      "1280x720": 301.4,
+      "1920x1080": 133.6
+    }
+  },
+  "submitted_by": "Austrian painter (the other one)",
+  "note": ""
+}
