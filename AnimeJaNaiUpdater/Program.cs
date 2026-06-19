@@ -568,7 +568,7 @@ void Extract(string archiveEntry, string outDir)
     string tool = isTar ? "tar" : Path.Combine(installDir, archiveTool);
     string toolArgs = isTar
         ? $"--zstd -xf \"{archiveEntry}\" -C \"{outDir}\""
-        : $"x \"{archiveEntry}\" -o\"{outDir}\" -y";
+        : $"x \"{archiveEntry}\" -o\"{outDir}\" -snl -y";   // -snl: restore symlinks as links
     var psi = new ProcessStartInfo
     {
         FileName = tool,
