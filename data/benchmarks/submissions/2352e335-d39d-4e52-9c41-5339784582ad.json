@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "2352e335-d39d-4e52-9c41-5339784582ad",
+  "submitted_at": "2026-06-19T03:13:39.439Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti",
+  "vram_mb": 12282,
+  "gpu_power_w": 330,
+  "cpu": "Intel(R) Core(TM) i5-14600KF",
+  "cpu_mhz": 3494,
+  "cpu_cores": 14,
+  "cpu_threads": 20,
+  "ram_mb": 32614,
+  "ram_speed_mhz": 5600,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 1205.5,
+      "640x480": 605.5,
+      "768x576": 400.5,
+      "1280x720": 123.1,
+      "1920x1080": 61.1
+    },
+    "Performance": {
+      "480x360": 1222,
+      "640x480": 1224,
+      "768x576": 610.5,
+      "1280x720": 223.9,
+      "1920x1080": 85.8
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
