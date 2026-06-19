@@ -1,0 +1,15 @@
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/bin/Release/net10.0/AnimeJaNaiBenchmark
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/bin/Release/net10.0/AnimeJaNaiBenchmark.deps.json
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/bin/Release/net10.0/AnimeJaNaiBenchmark.runtimeconfig.json
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/bin/Release/net10.0/AnimeJaNaiBenchmark.dll
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/bin/Release/net10.0/AnimeJaNaiBenchmark.pdb
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.GeneratedMSBuildEditorConfig.editorconfig
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.AssemblyInfoInputs.cache
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.AssemblyInfo.cs
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.csproj.CoreCompileInputs.cache
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.sourcelink.json
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.dll
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/refint/AnimeJaNaiBenchmark.dll
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.pdb
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/AnimeJaNaiBenchmark.genruntimeconfig.cache
+/home/jsoosiah/src/mpv-upscale-2x_animejanai/AnimeJaNaiBenchmark/obj/Release/net10.0/ref/AnimeJaNaiBenchmark.dll

@@ -11,9 +11,20 @@ local exe_name = mp.get_property("platform") == "windows" and "AnimeJaNaiUpdater
 local updater = mp.command_native({ "expand-path", "~~/../" .. exe_name })
 local available_version = nil
 
+-- Inside an AppImage the install tree is a read-only squashfs, so the in-place
+-- updater can't apply. AppRun sets ANIMEJANAI_APPIMAGE (APPIMAGE is set by the
+-- runtime too); in that case we point the user at the new AppImage instead.
+local is_appimage = os.getenv("ANIMEJANAI_APPIMAGE") ~= nil or os.getenv("APPIMAGE") ~= nil
+local releases_url = "github.com/the-database/mpv-upscale-2x_animejanai/releases"
+
 local function start_update()
     if not available_version then
         mp.osd_message("AnimeJaNai is up to date.", 3)
+        return
+    end
+    if is_appimage then
+        mp.osd_message("AnimeJaNai " .. available_version ..
+            " is available.\nDownload the new AppImage:\n" .. releases_url, 12)
         return
     end
     mp.osd_message("Installing AnimeJaNai " .. available_version .. " - mpv will close and reopen...", 5)
@@ -37,7 +48,9 @@ local function on_check(success, result)
     if ver then
         available_version = ver
         msg.info("Update available: " .. ver)
-        mp.osd_message("AnimeJaNai update " .. ver .. " available - press Ctrl+U to install.", 8)
+        local how = is_appimage and "press Ctrl+U for the download link."
+                                 or "press Ctrl+U to install."
+        mp.osd_message("AnimeJaNai update " .. ver .. " available - " .. how, 8)
     else
         msg.verbose("AnimeJaNai is up to date.")
     end
