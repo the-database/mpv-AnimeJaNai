@@ -1,0 +1,88 @@
+# Old-baseline build image for portable AnimeJaNai Linux artifacts.
+#
+# Ubuntu 22.04 => glibc 2.35 / GLIBCXX_3.4.30. Everything compiled here demands
+# only those, so the resulting mpv/libplacebo/aji + .NET bits run on every
+# mainstream distro from ~2022 on (the NVIDIA libs we bundle need just
+# glibc 2.17-2.27, so they are never the constraint).
+#
+# This image carries the *toolchain + apt-able deps + CUDA 13.2 + TensorRT 11*.
+# The modern stack that 22.04 ships too old (wayland, FFmpeg, libplacebo, mpv,
+# aji) is built from source by build-stack.sh, run inside a container from this
+# image with the repos mounted, so that step stays iterable without image rebuilds.
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Base toolchain + everything 22.04 ships new enough to use as-is, plus the
+# build-time deps for the from-source components (wayland, FFmpeg, libplacebo,
+# mpv). meson comes from pip (jammy's is too old for mpv: needs >=1.3).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential gcc g++ pkg-config git ca-certificates curl wget \
+        python3 python3-pip python3-setuptools python3-jinja2 \
+        ninja-build nasm yasm autoconf automake libtool gettext \
+        zstd xz-utils file desktop-file-utils imagemagick jq patchelf fuse libfuse2 \
+        libffi-dev libexpat1-dev libxml2-dev \
+        libvulkan-dev vulkan-tools \
+        libspirv-cross-c-shared-dev liblcms2-dev libxxhash-dev libunwind-dev \
+        libass-dev libfreetype6-dev libfribidi-dev libharfbuzz-dev \
+        libluajit-5.1-dev luajit \
+        libdrm-dev libegl-dev libgl-dev libgles2-mesa-dev \
+        libxkbcommon-dev libxkbcommon-x11-dev \
+        libx11-dev libxext-dev libxrandr-dev libxpresent-dev libxss-dev \
+        libxinerama-dev libxv-dev libxfixes-dev \
+        libpulse-dev libasound2-dev libjpeg-dev libuchardet-dev libbluray-dev \
+        libdvdnav-dev libdvdread-dev libcdio-paranoia-dev \
+        zlib1g-dev libbz2-dev liblzma-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# meson (jammy ships 0.61; mpv/libplacebo need >=1.3) and cmake (jammy ships
+# 3.22; aji needs >=3.24, shaderc wants a recent one too).
+RUN pip3 install --no-cache-dir 'meson>=1.4' 'cmake>=3.28'
+
+# .NET 10 SDK (Microsoft feed) for the assembler / updater / Manager.
+RUN wget -q https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh \
+    && bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/lib/dotnet \
+    && ln -sf /usr/lib/dotnet/dotnet /usr/local/bin/dotnet \
+    && rm /tmp/dotnet-install.sh
+ENV DOTNET_ROOT=/usr/lib/dotnet
+ENV PATH="/usr/lib/dotnet:${PATH}"
+
+# 7-Zip console (7zz) used by the assembler/packaging.
+RUN curl -fsSL https://www.7-zip.org/a/7z2501-linux-x64.tar.xz -o /tmp/7z.tar.xz \
+    && mkdir -p /tmp/7z && tar -xf /tmp/7z.tar.xz -C /tmp/7z \
+    && install -m755 /tmp/7z/7zz /usr/local/bin/7zz && rm -rf /tmp/7z /tmp/7z.tar.xz
+
+# CUDA 13.2 toolkit + TensorRT 11.0.0 from NVIDIA's apt repo (ubuntu2204).
+# TRT 11.0.0 members are pinned explicitly (the metapackage drags in Windows /
+# python bits, and minor-version resolution differs across apt versions).
+RUN curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -o /tmp/cuda-keyring.deb \
+    && dpkg -i /tmp/cuda-keyring.deb && rm /tmp/cuda-keyring.deb \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        cuda-nvcc-13-2 cuda-cudart-dev-13-2 cuda-nvrtc-13-2 \
+        cuda-driver-dev-13-2 \
+        libnvinfer11=11.0.0.114-1+cuda13.2 \
+        libnvinfer-plugin11=11.0.0.114-1+cuda13.2 \
+        libnvinfer-vc-plugin11=11.0.0.114-1+cuda13.2 \
+        libnvinfer-lean11=11.0.0.114-1+cuda13.2 \
+        libnvinfer-dispatch11=11.0.0.114-1+cuda13.2 \
+        libnvonnxparsers11=11.0.0.114-1+cuda13.2 \
+        libnvinfer-headers-dev=11.0.0.114-1+cuda13.2 \
+        libnvinfer-safe-headers-dev=11.0.0.114-1+cuda13.2 \
+        libnvinfer-headers-plugin-dev=11.0.0.114-1+cuda13.2 \
+        libnvinfer-dev=11.0.0.114-1+cuda13.2 \
+        libnvinfer-plugin-dev=11.0.0.114-1+cuda13.2 \
+        libnvonnxparsers-dev=11.0.0.114-1+cuda13.2 \
+        libnvinfer-bin=11.0.0.114-1+cuda13.2 \
+    && rm -rf /var/lib/apt/lists/*
+ENV PATH="/usr/local/cuda-13.2/bin:${PATH}"
+ENV CUDACXX=/usr/local/cuda-13.2/bin/nvcc
+
+# Where build-stack.sh installs the from-source stack (kept off /usr so it is
+# easy to collect for bundling).
+ENV PREFIX=/opt/animejanai
+ENV PKG_CONFIG_PATH="/opt/animejanai/lib/x86_64-linux-gnu/pkgconfig:/opt/animejanai/lib/pkgconfig"
+ENV LD_LIBRARY_PATH="/opt/animejanai/lib/x86_64-linux-gnu:/opt/animejanai/lib"
+RUN mkdir -p /opt/animejanai
+
+WORKDIR /work

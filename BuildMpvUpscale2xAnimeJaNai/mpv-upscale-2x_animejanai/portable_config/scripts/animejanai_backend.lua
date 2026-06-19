@@ -54,8 +54,17 @@ local function read_conf()
 end
 
 local function exists(rel)
-    local path = mp.command_native({'expand-path', '~~/../' .. rel})
-    return utils.file_info(path) ~= nil
+    -- the installed/writable tree (config-dir parent = install root)
+    if utils.file_info(mp.command_native({'expand-path', '~~/../' .. rel})) ~= nil then
+        return true
+    end
+    -- AppImage: the base runtime is bundled in the read-only payload, not under
+    -- the writable data dir. $APPDIR (set by the AppImage runtime) is its root.
+    local appdir = os.getenv('APPDIR')
+    if appdir and utils.file_info(appdir .. '/' .. rel) ~= nil then
+        return true
+    end
+    return false
 end
 
 -- Component-pack sanity: a slim install (or one slimmed with
@@ -64,7 +73,11 @@ end
 local function check_components(backend, rife_configured)
     local hints = {}
     if backend == 'tensorrt' then
-        if not exists('animejanai/inference/nvinfer_11.dll') then
+        -- TensorRT core library name differs per platform (Windows DLL vs
+        -- Linux versioned .so).
+        local nvinfer = mp.get_property('platform') == 'windows'
+            and 'nvinfer_11.dll' or 'libnvinfer.so.11'
+        if not exists('animejanai/inference/' .. nvinfer) then
             hints[#hints + 1] =
                 'TensorRT runtime not installed - press Ctrl+E to open ' ..
                 'AnimeJaNai Manager'
@@ -76,7 +89,9 @@ local function check_components(backend, rife_configured)
             local files = utils.readdir(inf, 'files') or {}
             local has_builder = false
             for _, n in ipairs(files) do
-                if n:match('^nvinfer_builder_resource_') then
+                -- matches both nvinfer_builder_resource_* (Windows) and
+                -- libnvinfer_builder_resource_* (Linux)
+                if n:match('nvinfer_builder_resource_') then
                     has_builder = true
                     break
                 end
@@ -133,7 +148,11 @@ end
 local backend_raw, rife_configured, default_slot = read_conf()
 local backend = (backend_raw or 'TensorRT'):lower()
 local hwdec = 'nvdec'
-if backend == 'directml' or backend == 'ncnn' then
+-- DirectML/ncnn use D3D11 frames (hwdec=d3d11va, gpu-api=d3d11). Windows-only:
+-- there is no D3D11 on Linux, where only the TensorRT (CUDA/nvdec) backend
+-- exists, so this branch is guarded behind the platform.
+if (backend == 'directml' or backend == 'ncnn')
+        and mp.get_property('platform') == 'windows' then
     hwdec = 'd3d11va'
     mp.set_property('gpu-api', 'd3d11')
 end
