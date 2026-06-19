@@ -233,13 +233,13 @@ async Task InstallInferenceRuntime()
         };
         foreach (var g in libGlobs)
             foreach (var f in Directory.GetFiles(trtLib, g))
-                CopyResolvingSymlink(f, Path.Combine(inferencePath, Path.GetFileName(f)));
+                CopyOrLink(f, Path.Combine(inferencePath, Path.GetFileName(f)));
         foreach (var f in Directory.GetFiles(cudaLib, "libcudart.so*"))
-            CopyResolvingSymlink(f, Path.Combine(inferencePath, Path.GetFileName(f)));
+            CopyOrLink(f, Path.Combine(inferencePath, Path.GetFileName(f)));
 
         var trtexecSrc = Path.Combine(trtBin, "trtexec");
         var trtexecDst = Path.Combine(inferencePath, "trtexec");
-        CopyResolvingSymlink(trtexecSrc, trtexecDst);
+        CopyOrLink(trtexecSrc, trtexecDst);
         await RunProcess("chmod", $"+x \"{trtexecDst}\"");
     }
 }
@@ -437,7 +437,7 @@ async Task InstallLinuxMpv()
         File.Copy(mpvBin, Path.Combine(mpvRoot, "mpv"), true);
         await RunProcess("chmod", $"+x \"{Path.Combine(mpvRoot, "mpv")}\"");
         foreach (var so in Directory.GetFiles(localBuild, "libmpv.so*"))
-            CopyResolvingSymlink(so, Path.Combine(mpvRoot, Path.GetFileName(so)));
+            CopyOrLink(so, Path.Combine(mpvRoot, Path.GetFileName(so)));
         // Bundle non-system deps that won't be present on a clean host. Full
         // ldd-based dependency bundling is the packaging step (Workstream F /
         // linuxdeploy); here we carry libplacebo, which is newer than any
@@ -446,7 +446,7 @@ async Task InstallLinuxMpv()
         if (!string.IsNullOrEmpty(extra))
             foreach (var dir in extra.Split(':', StringSplitOptions.RemoveEmptyEntries))
                 foreach (var so in Directory.GetFiles(dir, "libplacebo.so*"))
-                    CopyResolvingSymlink(so, Path.Combine(mpvRoot, Path.GetFileName(so)));
+                    CopyOrLink(so, Path.Combine(mpvRoot, Path.GetFileName(so)));
     }
     else
     {
@@ -720,11 +720,18 @@ void WriteVersionAndManifest()
 
 // Copy a file, resolving a symlink to its real target (so the package carries
 // real files, not dangling links to system paths). Keeps the link's own name.
-void CopyResolvingSymlink(string src, string dst)
+void CopyOrLink(string src, string dst)
 {
+    // Recreate a symlink as a (relative) symlink rather than materializing a full
+    // copy of its target, so a versioned-library chain (libnvinfer.so -> .so.11
+    // -> .so.11.0.0) stores the ~633 MB payload ONCE instead of three times.
+    // Regular files (e.g. trtexec) are copied as-is.
+    if (File.Exists(dst)) File.Delete(dst);
     var info = new FileInfo(src);
-    var real = info.LinkTarget != null ? Path.GetFullPath(info.ResolveLinkTarget(true)!.FullName) : src;
-    File.Copy(real, dst, true);
+    if (info.LinkTarget != null)
+        File.CreateSymbolicLink(dst, Path.GetFileName(info.LinkTarget));
+    else
+        File.Copy(src, dst, true);
 }
 
 void ExtractZip(string archivePath, string outFolder, ProgressChanged progressChanged)
@@ -953,7 +960,9 @@ async Task<List<string>> EmitComponentPacks()
         var psi = new ProcessStartInfo
         {
             FileName = sevenZ,
-            Arguments = $"a -spf2 -mx=3 \"{archive}\" {fileArgs}",
+            // -snl: store symlinks AS links (don't follow + duplicate the target),
+            // so the versioned TRT libs stay deduplicated in the pack.
+            Arguments = $"a -spf2 -snl -mx=3 \"{archive}\" {fileArgs}",
             WorkingDirectory = installDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,

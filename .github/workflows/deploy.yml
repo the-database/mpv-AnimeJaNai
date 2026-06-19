@@ -146,22 +146,20 @@ jobs:
         installer/linux/package-tarball.sh \
           "publish/mpv-upscale-2x_animejanai-v$VER" updater-publish/AnimeJaNaiUpdater "$VER" .
 
-    - name: Build AppImage (runtime + RIFE baked in; per-SM kernels fetched on first run)
+    - name: Build AppImage (only the TRT runtime baked in; RIFE + per-SM kernels fetched on demand)
       continue-on-error: true  # don't block the tarball release if AppImage tooling trips
-      # Reconstitute a tree with the inference runtime + RIFE (but NOT the ~1.8 GB
-      # of per-SM builder resources) so the single AppImage stays under GitHub's
-      # 2 GB asset limit; AppRun downloads the one pack matching the user's GPU on
-      # first run.
+      # Bake ONLY the base TensorRT runtime (the sole Linux backend, so cached
+      # engines run the moment it launches). RIFE (interpolation-only) and the
+      # GPU-matched per-SM builder are downloaded by AppRun on demand - keeping
+      # the AppImage small, SM-agnostic, and mirroring the Windows slim-install
+      # model. -snl restores the deduplicated symlinks.
       run: |
         full="appimage-tree/mpv-upscale-2x_animejanai-v$VER"
         mkdir -p "$full"
         cp -a "publish/mpv-upscale-2x_animejanai-v$VER/." "$full/"
         cp -f updater-publish/AnimeJaNaiUpdater "$full/AnimeJaNaiUpdater"
         chmod +x "$full/AnimeJaNaiUpdater"
-        for p in "publish/packs-v$VER/component-trt-runtime-linux-x64.7z" \
-                 "publish/packs-v$VER/component-rife-linux-x64.7z"; do
-          [ -f "$p" ] && 7zz x -y -o"$full" "$p"
-        done
+        7zz x -snl -y -o"$full" "publish/packs-v$VER/component-trt-runtime-linux-x64.7z"
         installer/linux/build-appimage.sh "$full" "$VER" .
 
     - name: Overlay archive + RID-suffixed manifest

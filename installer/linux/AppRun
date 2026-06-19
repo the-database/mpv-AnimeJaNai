@@ -27,10 +27,9 @@ if [ ! -f "$VER_DST" ] || ! cmp -s "$VER_SRC" "$VER_DST" 2>/dev/null; then
     cp -f  "$HERE/portable_config/input-animejanai.conf" "$DATA/portable_config/" 2>/dev/null || true
     cp -rf "$HERE/portable_config/scripts"               "$DATA/portable_config/" 2>/dev/null || true
     cp -rf "$HERE/portable_config/shaders"               "$DATA/portable_config/" 2>/dev/null || true
-    # onnx/rife: engines build next to the onnx, so these must be writable.
-    # (small models; copy if absent so user-added models survive updates)
+    # onnx models: engines build next to them, so they must be writable.
+    # (RIFE models are fetched on demand below, not baked into the AppImage.)
     cp -rn "$HERE/animejanai/onnx/."  "$DATA/animejanai/onnx/"  2>/dev/null || true
-    cp -rn "$HERE/animejanai/rife/."  "$DATA/animejanai/rife/"  2>/dev/null || true
     [ -f "$DATA/animejanai/animejanai.conf" ] || \
         cp -f "$HERE/animejanai/animejanai.conf" "$DATA/animejanai/animejanai.conf" 2>/dev/null || true
     cp -f "$VER_SRC" "$VER_DST" 2>/dev/null || true
@@ -50,29 +49,42 @@ if [ -f "$conf" ]; then
         "$conf"
 fi
 
-# The AppImage stays under GitHub's 2 GB asset limit by NOT baking in the ~1.8 GB
-# of per-SM TensorRT builder resources. On first run we fetch just the one pack
-# matching this GPU's compute capability into $DATA (writable) and add it to the
-# loader path, so trtexec can build engines. Cached engines work without it; a
-# fetch failure is non-fatal (engine builds for new resolutions just won't work
-# until the pack is present).
+# Component packs fetched on demand into $DATA (writable). Like the Windows
+# slim-install model, the AppImage bakes in ONLY the base TensorRT runtime; the
+# heavy, situational pieces are pulled only when actually needed. A fetch failure
+# is non-fatal (e.g. offline, or a draft release whose assets need auth).
 INFDATA="$DATA/animejanai/inference"
-mkdir -p "$INFDATA"
-sm="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' .')"
-if [ -n "$sm" ] && ! ls "$HERE/animejanai/inference"/libnvinfer_builder_resource_sm${sm}.so* "$INFDATA"/animejanai/inference/libnvinfer_builder_resource_sm${sm}.so* >/dev/null 2>&1; then
-    ver="$(cat "$HERE/version.txt" 2>/dev/null || echo "")"
-    pack="component-trt-sm${sm}-linux-x64.7z"
-    url="https://github.com/the-database/mpv-upscale-2x_animejanai/releases/download/${ver}/${pack}"
-    if [ -n "$ver" ] && command -v curl >/dev/null 2>&1; then
-        echo "AnimeJaNai: fetching TensorRT kernels for sm${sm} (one-time, ~250 MB)..." >&2
-        if curl -fSL "$url" -o "$DATA/$pack"; then
-            "$HERE/7zz" x -y -o"$DATA" "$DATA/$pack" >/dev/null 2>&1 || true
-            rm -f "$DATA/$pack"
-        else
-            echo "AnimeJaNai: could not fetch $pack (offline?); engine builds may fail." >&2
-        fi
+RIFEDATA="$DATA/animejanai/rife"
+mkdir -p "$INFDATA" "$RIFEDATA"
+ver="$(cat "$HERE/version.txt" 2>/dev/null || echo "")"
+relbase="https://github.com/the-database/mpv-upscale-2x_animejanai/releases/download/${ver}"
+
+fetch_pack() { # $1 = pack base (e.g. trt-sm120, rife); $2 = human note
+    pack="component-$1-linux-x64.7z"
+    { [ -n "$ver" ] && command -v curl >/dev/null 2>&1; } || return 0
+    echo "AnimeJaNai: fetching $2 (one-time)..." >&2
+    if curl -fSL "$relbase/$pack" -o "$DATA/$pack"; then
+        "$HERE/7zz" x -snl -y -o"$DATA" "$DATA/$pack" >/dev/null 2>&1 || true
+        rm -f "$DATA/$pack"
+    else
+        echo "AnimeJaNai: could not fetch $pack (offline / draft release?)." >&2
     fi
+}
+
+# Per-SM TensorRT builder (needed to BUILD new engines; cached engines run
+# without it) - just the one matching this GPU, on first run.
+sm="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' .')"
+if [ -n "$sm" ] && ! ls "$INFDATA"/libnvinfer_builder_resource_sm${sm}.so* >/dev/null 2>&1; then
+    fetch_pack "trt-sm${sm}" "TensorRT kernels for sm${sm} (~250 MB)"
 fi
 
-export LD_LIBRARY_PATH="$HERE/mpv:$HERE/animejanai/inference:$DATA/animejanai/inference:$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
+# RIFE models (interpolation only) - fetched only when the user's config enables
+# a RIFE chain, so pure-upscaling users never download them.
+if ! ls "$RIFEDATA"/*.onnx >/dev/null 2>&1 \
+   && grep -qiE '^[[:space:]]*rife[[:space:]]*=[[:space:]]*(yes|true|1)' \
+        "$DATA/animejanai/animejanai.conf" 2>/dev/null; then
+    fetch_pack "rife" "RIFE interpolation models (~450 MB)"
+fi
+
+export LD_LIBRARY_PATH="$HERE/mpv:$HERE/animejanai/inference:$INFDATA:$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
 exec "$HERE/mpv/mpv" --config-dir="$DATA/portable_config" "$@"
