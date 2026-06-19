@@ -76,8 +76,8 @@ VER_DST="$DATA/.seeded-version"
 if [ ! -f "$VER_DST" ] || ! cmp -s "$VER_SRC" "$VER_DST" 2>/dev/null; then
     # user-preservable config: only copy if absent
     cp -rn "$HERE/portable_config/." "$DATA/portable_config/" 2>/dev/null || true
-    # managed defaults: always refresh
-    cp -f  "$HERE/portable_config/mpv-animejanai.conf"   "$DATA/portable_config/" 2>/dev/null || true
+    # managed defaults: always refresh (mpv-animejanai.conf is refreshed every
+    # launch below, since its paths depend on the per-run mount)
     cp -f  "$HERE/portable_config/input-animejanai.conf" "$DATA/portable_config/" 2>/dev/null || true
     cp -rf "$HERE/portable_config/scripts"               "$DATA/portable_config/" 2>/dev/null || true
     cp -rf "$HERE/portable_config/shaders"               "$DATA/portable_config/" 2>/dev/null || true
@@ -89,10 +89,13 @@ if [ ! -f "$VER_DST" ] || ! cmp -s "$VER_SRC" "$VER_DST" 2>/dev/null; then
     cp -f "$VER_SRC" "$VER_DST" 2>/dev/null || true
 fi
 
-# Point the vf=@aji line at the right places: inference libs from the read-only
-# image ($HERE), writable model/rife/conf/log under $DATA. Idempotent (the
-# ~~/.. tokens only exist until first rewrite; re-seeded files get rewritten).
+# Refresh mpv-animejanai.conf from the image EVERY launch and repoint its paths.
+# The AppImage mount path ($HERE) changes each run, so a once-rewritten conf would
+# point at a dead mount. Inference libs come from the read-only image ($HERE);
+# writable model/rife/conf/log live under $DATA. (mpv-animejanai.conf is a managed
+# file, not user-edited, so overwriting it each launch is safe.)
 conf="$DATA/portable_config/mpv-animejanai.conf"
+cp -f "$HERE/portable_config/mpv-animejanai.conf" "$conf" 2>/dev/null || true
 if [ -f "$conf" ]; then
     sed -i \
         -e "s#~~/\.\./animejanai/inference#$HERE/animejanai/inference#g" \
@@ -102,6 +105,18 @@ if [ -f "$conf" ]; then
         -e "s#~~/\.\./animejanai/currentanimejanai.log#$DATA/animejanai/currentanimejanai.log#g" \
         "$conf"
 fi
+
+# The Manager + updater binaries live in the read-only image, but the config's
+# ~~/.. references resolve to $DATA. Symlink them into $DATA (re-linked every
+# launch, since $HERE changes per run) so Ctrl+E and the update check find them.
+for b in AnimeJaNaiManager AnimeJaNaiUpdater libSkiaSharp.so libHarfBuzzSharp.so; do
+    [ -e "$HERE/$b" ] && ln -sf "$HERE/$b" "$DATA/$b"
+done
+# The Manager resolves its data dir relative to its exe by default; on the
+# AppImage the exe is read-only, so point it at the writable tree. It inherits
+# this env when mpv launches it via Ctrl+E.
+export ANIMEJANAI_DATA_DIR="$DATA/animejanai"
+export ANIMEJANAI_ROOT="$DATA"
 
 # Component packs fetched on demand into $DATA (writable). Like the Windows
 # slim-install model, the AppImage bakes in ONLY the base TensorRT runtime; the

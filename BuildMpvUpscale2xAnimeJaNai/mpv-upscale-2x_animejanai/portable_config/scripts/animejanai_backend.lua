@@ -54,8 +54,17 @@ local function read_conf()
 end
 
 local function exists(rel)
-    local path = mp.command_native({'expand-path', '~~/../' .. rel})
-    return utils.file_info(path) ~= nil
+    -- the installed/writable tree (config-dir parent = install root)
+    if utils.file_info(mp.command_native({'expand-path', '~~/../' .. rel})) ~= nil then
+        return true
+    end
+    -- AppImage: the base runtime is bundled in the read-only payload, not under
+    -- the writable data dir. $APPDIR (set by the AppImage runtime) is its root.
+    local appdir = os.getenv('APPDIR')
+    if appdir and utils.file_info(appdir .. '/' .. rel) ~= nil then
+        return true
+    end
+    return false
 end
 
 -- Component-pack sanity: a slim install (or one slimmed with
