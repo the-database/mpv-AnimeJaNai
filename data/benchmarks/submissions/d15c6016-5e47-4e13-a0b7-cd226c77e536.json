@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "d15c6016-5e47-4e13-a0b7-cd226c77e536",
+  "submitted_at": "2026-06-20T15:47:21.512Z",
+  "app_version": "3.5.0",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon RX 9070 XT",
+  "vram_mb": 16189,
+  "gpu_power_w": 304,
+  "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
+  "cpu_mhz": 4700,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 65081,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.31019.2002",
+  "results": {
+    "Balanced": {
+      "480x360": 603,
+      "640x480": 403.2,
+      "768x576": 301.2,
+      "1280x720": 131.8,
+      "1920x1080": 55
+    },
+    "Performance": {
+      "480x360": 1228,
+      "640x480": 1214.5,
+      "768x576": 603.5,
+      "1280x720": 287.9,
+      "1920x1080": 100.6
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
