@@ -103,6 +103,7 @@ async Task CheckAsync()
     MigrateUserConf();
     SyncInputConf();
     MigrateAnimeJaNaiConf();
+    MigrateMpvConfProfile();
     var release = await GetLatestReleaseAsync();
     string local = ReadLocalVersion();
     if (IsNewer(release.Tag, local))
@@ -246,6 +247,57 @@ void MigrateUserConf()
         Console.WriteLine(settings.Count > 0
             ? $"USER_CONF_MIGRATED {settings.Count} setting(s) into mpv.conf"
             : "USER_CONF_RETIRED (no custom settings to migrate)");
+    }
+    catch { /* migration must never break --check */ }
+}
+
+// 3.5.x: the managed mpv-animejanai.conf moved its defaults out of top-level
+// options into a named [animejanai] profile. Top-level options in an included
+// file are appended to mpv's "default" profile and applied last, which silently
+// beat the user's own top-level line in mpv.conf (e.g. volume-max). With the new
+// layout mpv.conf must apply the profile itself, so inject `profile = animejanai`
+// right after the include and BEFORE the user's own lines, so their overrides
+// win. Gated on the new managed file (never fires against the old top-level
+// layout), idempotent, and a no-op on fresh installs (they already ship the line).
+void MigrateMpvConfProfile()
+{
+    try
+    {
+        string pc = Path.Combine(installDir, "portable_config");
+        string mpvConf = Path.Combine(pc, "mpv.conf");
+        string managed = Path.Combine(pc, "mpv-animejanai.conf");
+        if (!File.Exists(mpvConf) || !File.Exists(managed))
+        {
+            return;
+        }
+        string mpv = File.ReadAllText(mpvConf);
+        // Only the include-based mpv.conf; never a legacy managed mpv.conf.
+        if (!mpv.Contains("mpv-animejanai.conf"))
+        {
+            return;
+        }
+        // Only once the installed managed file uses the new [animejanai] layout,
+        // so we never apply a profile that isn't defined yet.
+        if (!File.ReadAllText(managed).Contains("[animejanai]"))
+        {
+            return;
+        }
+        string nl = mpv.Contains("\r\n") ? "\r\n" : "\n";
+        var lines = mpv.Replace("\r\n", "\n").Split('\n').ToList();
+        // Idempotent: leave it alone if a profile=animejanai line already exists.
+        if (lines.Any(l => Regex.IsMatch(l, @"^\s*profile\s*=\s*animejanai\s*(#.*)?$")))
+        {
+            return;
+        }
+        int inc = lines.FindIndex(l => l.TrimStart().StartsWith("include") &&
+                                       l.Contains("mpv-animejanai.conf"));
+        if (inc < 0)
+        {
+            return;  // unexpected layout; leave it alone
+        }
+        lines.Insert(inc + 1, "profile = animejanai");
+        File.WriteAllText(mpvConf, string.Join(nl, lines));
+        Console.WriteLine("MPV_CONF_MIGRATED (profile = animejanai applied; your mpv.conf overrides now win)");
     }
     catch { /* migration must never break --check */ }
 }
@@ -428,6 +480,10 @@ async Task<int> ApplyAsync()
         TryDelete(() => Directory.Delete(work, true));
     }
 
+    // Migrate the user-preserved mpv.conf now that the new managed file is in
+    // place (ApplyOver above copied it), BEFORE the relaunch reads config, so a
+    // config-layout migration never waits for the next --check. Idempotent.
+    MigrateMpvConfProfile();
     RelaunchMpv();
     return 0;
 }

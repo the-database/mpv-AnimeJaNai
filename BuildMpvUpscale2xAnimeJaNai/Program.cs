@@ -29,7 +29,7 @@ using static Downloader;
 // NOTE: v16.test1 is vs-mlrt's TRT 11 PRE-release - recheck for a stable
 // v16 tag before cutting the package release.
 const string VsMlrtCudaVersion    = "v16.test1";
-const string AjiVersion           = "v0.6.0";       // github.com/the-database/animejanai-inference release tag (DML 4:4:4 input; op21 SD preset; missing-model passthrough; configurable RIFE/upscale order; benchmark slots 1012/1013)
+const string AjiVersion           = "v0.7.0";       // github.com/the-database/animejanai-inference release tag (DML 4:4:4 input; op21 SD preset; missing-model passthrough; configurable RIFE/upscale order; benchmark slots 1012/1013)
 
 const string SevenZipVersion      = "2501";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
@@ -50,14 +50,14 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // + bump alongside AjiVersion when the filter changes.
 //
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
-// v7); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
+// v8); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-06-18-9bb5fe9680"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20260618";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "9bb5fe9680";   // git short hash (master; aji ABI v7)
+const string MpvForkVersion       = "2026-06-20-b903de7812"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20260620";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "b903de7812";   // git short hash (master; aji ABI v8)
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
-const string MpvForkLinuxVersion  = "2026-06-18-9bb5fe9680";
+const string MpvForkLinuxVersion  = "2026-06-20-b903de7";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor
