@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "405b38b3-61a2-49e1-84b5-b127176445d7",
+  "submitted_at": "2026-06-23T05:49:34.245Z",
+  "app_version": "3.5.0",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon RX 7900 XTX",
+  "vram_mb": 24517,
+  "gpu_power_w": 355,
+  "cpu": "AMD Ryzen 9 5950X 16-Core Processor",
+  "cpu_mhz": 4001,
+  "cpu_cores": 16,
+  "cpu_threads": 32,
+  "ram_mb": 32679,
+  "ram_speed_mhz": 3200,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.31021.1015",
+  "results": {
+    "Balanced": {
+      "480x360": 602.8,
+      "640x480": 401.3,
+      "768x576": 303.2,
+      "1280x720": 171.4,
+      "1920x1080": 68.2
+    },
+    "Performance": {
+      "480x360": 611.8,
+      "640x480": 607.8,
+      "768x576": 603.8,
+      "1280x720": 298,
+      "1920x1080": 131.5
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
