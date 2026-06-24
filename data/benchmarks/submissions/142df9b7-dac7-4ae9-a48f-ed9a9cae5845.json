@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "142df9b7-dac7-4ae9-a48f-ed9a9cae5845",
+  "submitted_at": "2026-06-24T00:27:31.002Z",
+  "app_version": "3.5.0",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon(TM) 860M Graphics",
+  "vram_mb": 4043,
+  "cpu": "AMD Ryzen AI 7 350 w/ Radeon 860M",
+  "cpu_mhz": 2000,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 28458,
+  "ram_speed_mhz": 4800,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.31021.1015",
+  "results": {
+    "Balanced": {
+      "480x360": 59.6,
+      "640x480": 33.5,
+      "768x576": 23.1,
+      "1280x720": 10.5,
+      "1920x1080": -1
+    },
+    "Performance": {
+      "480x360": 110.8,
+      "640x480": 64.1,
+      "768x576": 42.8,
+      "1280x720": 20.4,
+      "1920x1080": 9.2
+    }
+  },
+  "submitted_by": "TechnoStone",
+  "note": "Lenovo 16AKP10 but on slow RAM (4800 vs 5600 in stock)"
+}
