@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "f6d5e141-9470-42de-997c-b7f3fdeed2c9",
+  "submitted_at": "2026-06-24T21:38:55.352Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+  "vram_mb": 16376,
+  "gpu_power_w": 320,
+  "cpu": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+  "cpu_mhz": 3600,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32686,
+  "ram_speed_mhz": 3000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 1213,
+      "640x480": 605.5,
+      "768x576": 603.8,
+      "1280x720": 215.5,
+      "1920x1080": 90.4
+    },
+    "Performance": {
+      "480x360": 1230.5,
+      "640x480": 605.2,
+      "768x576": 603.2,
+      "1280x720": 301.4,
+      "1920x1080": 142.6
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
