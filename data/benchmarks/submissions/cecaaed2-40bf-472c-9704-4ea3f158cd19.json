@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "cecaaed2-40bf-472c-9704-4ea3f158cd19",
+  "submitted_at": "2026-06-17T09:10:39.290Z",
+  "app_version": "3.4.0",
+  "backend": "TensorRT",
+  "gpu": "AMD Radeon(TM) Graphics",
+  "vram_mb": 16303,
+  "gpu_power_w": 320,
+  "cpu": "AMD Ryzen 7 7700 8-Core Processor",
+  "cpu_mhz": 3801,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 31864,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.21036.18",
+  "results": {
+    "Balanced": {
+      "480x360": 1214.5,
+      "640x480": 604.2,
+      "768x576": 401.6,
+      "1280x720": 188.5,
+      "1920x1080": 82.3
+    },
+    "Performance": {
+      "480x360": 1216,
+      "640x480": 1213,
+      "768x576": 609.5,
+      "1280x720": 301.5,
+      "1920x1080": 136
+    }
+  },
+  "submitted_by": "Xenoahs",
+  "note": "GPU undervolted to 900mV, 2800 MHz"
+}
