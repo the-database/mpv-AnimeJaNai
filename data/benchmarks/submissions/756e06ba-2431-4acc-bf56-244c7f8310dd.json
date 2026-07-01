@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "756e06ba-2431-4acc-bf56-244c7f8310dd",
+  "submitted_at": "2026-07-01T02:54:24.795Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 3050",
+  "vram_mb": 6144,
+  "gpu_power_w": 70,
+  "cpu": "AMD Ryzen 5 7600X 6-Core Processor",
+  "cpu_mhz": 4701,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 15478,
+  "ram_speed_mhz": 5200,
+  "os": "Microsoft Windows 10.0.26100",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 172.8,
+      "640x480": 89.6,
+      "768x576": 70.8,
+      "1280x720": 34.2,
+      "1920x1080": 15
+    },
+    "Performance": {
+      "480x360": 298.8,
+      "640x480": 175.4,
+      "768x576": 122.2,
+      "1280x720": 57.2,
+      "1920x1080": 25.2
+    }
+  },
+  "submitted_by": "Bradjy",
+  "note": "1750 Mhz @ 806 mV ASUS LOW PREOFILE Card. Its funny how a 3050 can *ALMOST achieve the older models performance @ 1080p. Back then you needed a 3080 for *Balanced model and now you get really close to that 30 FPS on the Performance model. This was just a fun experiment haha"
+}
