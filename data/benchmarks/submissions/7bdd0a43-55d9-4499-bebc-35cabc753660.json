@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "7bdd0a43-55d9-4499-bebc-35cabc753660",
+  "submitted_at": "2026-07-04T13:14:18.750Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 3080",
+  "vram_mb": 10240,
+  "gpu_power_w": 320,
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "cpu_mhz": 3792,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32617,
+  "ram_speed_mhz": 4000,
+  "os": "Microsoft Windows 10.0.19044",
+  "driver": "32.0.15.9636",
+  "results": {
+    "Balanced": {
+      "480x360": 601.2,
+      "640x480": 300.8,
+      "768x576": 226.2,
+      "1280x720": 122.4,
+      "1920x1080": 59.2
+    },
+    "Performance": {
+      "480x360": 1224.5,
+      "640x480": 605,
+      "768x576": 402.2,
+      "1280x720": 216.5,
+      "1920x1080": 99.8
+    }
+  },
+  "submitted_by": "sabbateus",
+  "note": "CPU 10700K@4.7/4.3 | RAM 4000@CL15 | GPU 1900Mhz@950mV"
+}
