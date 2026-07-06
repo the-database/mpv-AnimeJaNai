@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "355436c9-cf8d-4371-8f71-d4d8dd4965a0",
+  "submitted_at": "2026-07-06T03:24:53.965Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "vram_mb": 6144,
+  "cpu": "13th Gen Intel(R) Core(TM) i5-13450HX",
+  "cpu_mhz": 2400,
+  "cpu_cores": 10,
+  "cpu_threads": 16,
+  "ram_mb": 16069,
+  "ram_speed_mhz": 4800,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 170.2,
+      "640x480": 109.8,
+      "768x576": 77.4,
+      "1280x720": 39,
+      "1920x1080": 18.5
+    },
+    "Performance": {
+      "480x360": 301.2,
+      "640x480": 195.2,
+      "768x576": 131.1,
+      "1280x720": 67.9,
+      "1920x1080": 28.2
+    }
+  },
+  "submitted_by": "Arsalan",
+  "note": "this is a gaming laptop"
+}
