@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "42b9d15f-2883-4109-8749-9f70aee9e9d7",
+  "submitted_at": "2026-07-06T23:45:13.200Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "vram_mb": 24576,
+  "gpu_power_w": 350,
+  "cpu": "AMD Ryzen 5 9600X 6-Core Processor",
+  "cpu_mhz": 3900,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 31831,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1062",
+  "results": {
+    "Balanced": {
+      "480x360": 602.5,
+      "640x480": 402.3,
+      "768x576": 281.1,
+      "1280x720": 139.2,
+      "1920x1080": 69
+    },
+    "Performance": {
+      "480x360": 1223,
+      "640x480": 604.8,
+      "768x576": 402,
+      "1280x720": 261.8,
+      "1920x1080": 125
+    }
+  },
+  "submitted_by": "Alexandros",
+  "note": ""
+}
