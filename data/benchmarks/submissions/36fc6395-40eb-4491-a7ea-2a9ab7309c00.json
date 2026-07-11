@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "36fc6395-40eb-4491-a7ea-2a9ab7309c00",
+  "submitted_at": "2026-07-11T02:04:25.643Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5090 Laptop GPU",
+  "vram_mb": 24463,
+  "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+  "cpu_mhz": 2700,
+  "cpu_cores": 24,
+  "cpu_threads": 24,
+  "ram_mb": 32189,
+  "ram_speed_mhz": 6400,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.15.9621",
+  "results": {
+    "Balanced": {
+      "480x360": 1223.5,
+      "640x480": 605.8,
+      "768x576": 401.6,
+      "1280x720": 164.5,
+      "1920x1080": 63.6
+    },
+    "Performance": {
+      "480x360": 1246.5,
+      "640x480": 1227,
+      "768x576": 602.2,
+      "1280x720": 301.1,
+      "1920x1080": 126.9
+    }
+  },
+  "submitted_by": "shiki",
+  "note": "lenovo legion pro 7 on preformance fan curve"
+}
