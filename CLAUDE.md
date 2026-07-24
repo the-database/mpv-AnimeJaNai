@@ -10,7 +10,10 @@ It contains:
 
 1. **`BuildMpvUpscale2xAnimeJaNai/`** — a C# console app (`Program.cs`, top-level statements) whose
    only job is to download the pieces and assemble them: mpv.net, a custom **libmpv fork** (carries
-   the `vf_animejanai` filter), the **`aji` native inference shim** (`aji.dll` + `aji_trt.dll` /
+   the `vf_animejanai` filter; from mpv-winbuild's *dev* archive) plus the matching **standalone
+   `mpv.exe`** (from the same release's *player* archive — a self-contained static build with the
+   filter compiled in, shipped next to `mpvnet.exe` for users who prefer plain mpv; it auto-detects
+   the same `portable_config/`), the **`aji` native inference shim** (`aji.dll` + `aji_trt.dll` /
    `aji_dml.dll`), the **TensorRT runtime + `trtexec`** (lifted from the vs-mlrt cuda archive),
    **ONNX Runtime DirectML + `DirectML.dll`**, RIFE models, `yt-dlp`, the AnimeJaNai Manager, and
    the AnimeJaNaiUpdater — then layers the runtime files in
