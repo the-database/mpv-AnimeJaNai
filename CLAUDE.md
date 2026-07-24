@@ -141,6 +141,11 @@ filter calling the `aji` engine. The chain when a user plays a video:
    worker, OSD render cap, persistent stats overlay). The Manager's "GPU Subtitle Rendering"
    checkbox writes `[global] sub_render_mode=gpu`, and `scripts/animejanai_backend.lua` applies
    the profile at startup. Keep the option list in the profile, not in the Lua or the Manager.
+   The script applies each option **only while it still holds the managed default** (read from
+   `profile-list`, falling back to `option-info/<key>/default-value`) — scripts run after the
+   config is parsed, so a blanket `apply-profile` would override the user's own `mpv.conf` lines
+   and break the "your settings win" contract that `mpv.conf` and `mpv-animejanai.conf` promise.
+   Any future script-applied preset must follow the same rule.
 
 ### Config (`animejanai.conf`)
 
