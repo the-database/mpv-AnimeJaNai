@@ -14,6 +14,12 @@
 -- gpu-api=vulkan,auto); this script overrides both for DirectML. Runs
 -- at startup, before the first file loads, so the first play already
 -- decodes and renders on the right path.
+--
+-- Also applies the opt-in subtitle rendering mode: the Manager writes
+-- [global] sub_render_mode=gpu into animejanai.conf, and this script applies
+-- the [subs-gpu] profile from mpv-animejanai.conf. The settings live in that
+-- profile (not here) so they can change with the player build without
+-- touching this script or the Manager.
 
 local mp = require 'mp'
 local msg = require 'mp.msg'
@@ -29,6 +35,7 @@ local function read_conf()
     end
     local backend
     local default_slot
+    local sub_render_mode
     local rife = false
     local in_global = false
     for line in f:lines() do
@@ -44,13 +51,17 @@ local function read_conf()
             if d then
                 default_slot = tonumber(d)
             end
+            local s = line:match('^sub_render_mode=([^%s]+)')
+            if s then
+                sub_render_mode = s
+            end
         end
         if line:match('^chain_%d+_rife=yes') or line:match('^chain_%d+_rife=true') then
             rife = true
         end
     end
     f:close()
-    return backend, rife, default_slot
+    return backend, rife, default_slot, sub_render_mode
 end
 
 local function exists(rel)
@@ -145,7 +156,7 @@ local function check_components(backend, rife_configured)
     end)
 end
 
-local backend_raw, rife_configured, default_slot = read_conf()
+local backend_raw, rife_configured, default_slot, sub_render_mode = read_conf()
 local backend = (backend_raw or 'TensorRT'):lower()
 local hwdec = 'nvdec'
 -- DirectML/ncnn use D3D11 frames (hwdec=d3d11va, gpu-api=d3d11). Windows-only:
@@ -159,6 +170,15 @@ end
 mp.set_property('hwdec', hwdec)
 msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
                        hwdec == 'd3d11va' and ', gpu-api=d3d11' or ''))
+
+-- Opt-in GPU subtitle rendering: only ever applied on top of the stable
+-- defaults, never the reverse, so a user who set any of these options in
+-- mpv.conf keeps them as long as the mode is off. Applied here rather than in
+-- mpv.conf so the Manager stays the single writer of animejanai.conf.
+if (sub_render_mode or ''):lower() == 'gpu' then
+    mp.commandv('apply-profile', 'subs-gpu')
+    msg.info('sub_render_mode gpu -> applied profile subs-gpu')
+end
 
 -- The Manager's "Set as Default Profile" stores the chosen slot here. mpv
 -- rebuilds the filter chain from the vf string (which bakes in Balanced, 1002)
