@@ -1019,12 +1019,23 @@ async Task<List<string>> EmitComponentPacks()
                     .Select(x => Path.GetRelativePath(installDirectory, x))
                 : new[] { f };
         }).Select(f => f.Replace('\\', '/')).ToArray();
+        // installed_bytes: what this pack occupies once extracted. The updater compares it against
+        // the files actually on disk to decide whether an install is genuinely current, instead of
+        // trusting components.json alone - a record can claim a component is up to date while the
+        // previous release's files are still there (that is how a TensorRT 11.0 runtime survived an
+        // upgrade to a package built for 11.1). Measured before SlimInstallTree removes them.
+        long installedBytes = allFiles.Sum(f =>
+        {
+            var fi = new FileInfo(Path.Combine(installDirectory, f));
+            return fi.Exists ? fi.Length : 0L;
+        });
         index.Add(new
         {
             name,
             dep,
             asset = Path.GetFileName(archive),
             bytes = new FileInfo(archive).Length,
+            installed_bytes = installedBytes,
             files = allFiles,
         });
         packedFiles.AddRange(allFiles);
