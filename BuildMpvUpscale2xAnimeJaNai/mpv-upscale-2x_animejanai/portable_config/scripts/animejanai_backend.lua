@@ -175,9 +175,74 @@ msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
 -- defaults, never the reverse, so a user who set any of these options in
 -- mpv.conf keeps them as long as the mode is off. Applied here rather than in
 -- mpv.conf so the Manager stays the single writer of animejanai.conf.
-if (sub_render_mode or ''):lower() == 'gpu' then
-    mp.commandv('apply-profile', 'subs-gpu')
+--
+-- A plain `apply-profile subs-gpu` would break mpv.conf's contract that your
+-- own lines win: the config is fully parsed before scripts run, so the profile
+-- would overwrite settings you made by hand. Instead each option is applied
+-- only while it still holds the managed default from [animejanai] (or, for an
+-- option that profile does not set, mpv's own default) - a different value can
+-- only have come from your mpv.conf, so it is left alone. Both value sets are
+-- read from profile-list, keeping the option lists in mpv-animejanai.conf.
+--
+-- Ambiguity worth knowing about: setting an option in mpv.conf to exactly the
+-- managed default is indistinguishable from not setting it at all (mpv does
+-- not record where a value came from), so that one does get the preset value.
+local function profile_options(list, name)
+    for _, p in ipairs(list) do
+        if p.name == name then
+            return p.options or {}
+        end
+    end
+    return nil
+end
+
+local function apply_subs_gpu()
+    local profiles = mp.get_property_native('profile-list') or {}
+    local preset = profile_options(profiles, 'subs-gpu')
+    if not preset then
+        msg.warn('sub_render_mode=gpu but no subs-gpu profile - ' ..
+                 'is mpv-animejanai.conf up to date?')
+        return
+    end
+    local managed = profile_options(profiles, 'animejanai') or {}
+
+    local function managed_value(key)
+        for _, o in ipairs(managed) do
+            if o.key == key then
+                return o.value
+            end
+        end
+        return mp.get_property('option-info/' .. key .. '/default-value')
+    end
+
+    local function norm(v)
+        return (tostring(v or ''):match('^%s*(.-)%s*$')):lower()
+    end
+
+    for _, o in ipairs(preset) do
+        if o.key == 'script-opts-append' then
+            -- One "key=value" script option. It shares the script-opts map with
+            -- everything else, so append it only when that key is unset.
+            local k, v = tostring(o.value):match('^([^=]+)=(.*)$')
+            local opts = mp.get_property_native('script-opts') or {}
+            if k and opts[k] == nil then
+                opts[k] = v
+                mp.set_property_native('script-opts', opts)
+            elseif k then
+                msg.info('subs-gpu: keeping your script-opt ' .. k .. '=' .. tostring(opts[k]))
+            end
+        elseif norm(mp.get_property(o.key)) == norm(managed_value(o.key)) then
+            mp.set_property(o.key, o.value)
+        else
+            msg.info(string.format('subs-gpu: keeping your %s=%s', o.key,
+                                   tostring(mp.get_property(o.key))))
+        end
+    end
     msg.info('sub_render_mode gpu -> applied profile subs-gpu')
+end
+
+if (sub_render_mode or ''):lower() == 'gpu' then
+    apply_subs_gpu()
 end
 
 -- The Manager's "Set as Default Profile" stores the chosen slot here. mpv
