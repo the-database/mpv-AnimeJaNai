@@ -418,6 +418,41 @@ async Task InstallCustomLibmpv()
     File.Delete(targetPath);
 }
 
+// Windows standalone player: mpv.exe from the SAME fork build as the libmpv
+// above (mpv-winbuild's player archive vs. its dev archive). This mpv.exe is
+// fully self-contained - statically linked, no libmpv-2.dll dependency - and
+// carries the vf_animejanai filter, so users who prefer plain mpv.exe over
+// mpv.net can launch it directly. Placed next to portable_config/ at the
+// install root, it auto-detects that config dir and runs the same managed
+// profiles/scripts/upscaling as mpvnet.exe. Shipped alongside mpv.net, not
+// instead of it (mpvnet.exe stays the default launcher in manifest.json).
+async Task InstallCustomMpvExe()
+{
+    Console.WriteLine("Downloading custom mpv.exe fork...");
+    var downloadUrl = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}/mpv-x86_64-{MpvForkBuildDate}-git-{MpvForkGitHash}.7z";
+    var targetPath = Path.GetFullPath("mpv-player.7z");
+    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
+    {
+        Console.WriteLine($"Downloading custom mpv.exe fork ({progress}%)...");
+    });
+
+    Console.WriteLine("Extracting custom mpv.exe fork...");
+    // Just the player entry points: mpv.exe (GUI) + mpv.com (console wrapper).
+    // Skip the archive's docs, updater.bat and file-association scripts.
+    var want = new[] { "mpv.exe", "mpv.com" };
+    using (ArchiveFile archiveFile = new(targetPath))
+    {
+        foreach (var entry in archiveFile.Entries)
+        {
+            if (want.Contains(entry.FileName, StringComparer.OrdinalIgnoreCase))
+            {
+                entry.Extract(Path.Combine(installDirectory, entry.FileName));
+            }
+        }
+    }
+    File.Delete(targetPath);
+}
+
 // Linux player: the mpv fork bundle (mpv + libmpv.so.2 carrying vf_animejanai,
 // plus the .so deps mpv needs). From a github.com/the-database/mpv release
 // (tar.zst) or a local meson build dir via MPV_LINUX_LOCAL. The portable_config
@@ -837,6 +872,7 @@ async Task Main()
     {
         await InstallMpvnet();
         await InstallCustomLibmpv();
+        await InstallCustomMpvExe();
     }
     else
     {
