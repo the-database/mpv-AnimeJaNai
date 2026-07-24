@@ -134,6 +134,18 @@ filter calling the `aji` engine. The chain when a user plays a video:
    backend on startup. (`ncnn` is retired and treated as DirectML by the shim.)
 7. **RIFE** interpolation runs after upscaling by default, or before it when a chain sets
    `rife_before_upscale`; RIFE model files live in `animejanai/rife/` (downloaded by `InstallRife()`).
+8. **Subtitle rendering** has two managed presets in `portable_config/mpv-animejanai.conf`: the
+   stable defaults inside `[animejanai]` (every GPU/threaded subtitle feature of the fork off —
+   note `sub-ass-render-threads=1` and `sub-present-guard-ms=0` are the *off* values; `0` and `-1`
+   mean auto/armed) and the opt-in `[subs-gpu]` profile (GPU glyph raster + blur, render-ahead
+   worker, OSD render cap, persistent stats overlay). The Manager's "GPU Subtitle Rendering"
+   checkbox writes `[global] sub_render_mode=gpu`, and `scripts/animejanai_backend.lua` applies
+   the profile at startup. Keep the option list in the profile, not in the Lua or the Manager.
+   The script applies each option **only while it still holds the managed default** (read from
+   `profile-list`, falling back to `option-info/<key>/default-value`) — scripts run after the
+   config is parsed, so a blanket `apply-profile` would override the user's own `mpv.conf` lines
+   and break the "your settings win" contract that `mpv.conf` and `mpv-animejanai.conf` promise.
+   Any future script-applied preset must follow the same rule.
 
 ### Config (`animejanai.conf`)
 
@@ -146,6 +158,10 @@ The `aji` engine parses `animejanai.conf` (the old Python `animejanai_config.rea
 - **User slots `1`–`9`** are parsed from `animejanai.conf` (`[slot_N]`,
   `chain_<n>_model_<m>_<field>` keys, `[global]` settings like `backend=`). The AnimeJaNai Manager
   writes this file.
+- **Player-only `[global]` keys.** `default_slot` and `sub_render_mode` are written by the Manager
+  and read by the Lua scripts, not by the engine (`aji_conf.cpp` looks up only the keys it knows, so
+  unknown ones are ignored). This is the pattern for any future "Manager configures mpv" setting:
+  a `[global]` key here, the actual mpv options in a managed profile.
 
 ### Stats overlay
 

@@ -33,7 +33,7 @@ const string AjiVersion           = "v0.8.0";       // github.com/the-database/a
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.4.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager)
+const string ManagerVersion       = "0.5.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; adds the GPU subtitle rendering toggle)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
