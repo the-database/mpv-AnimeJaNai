@@ -25,13 +25,13 @@ using static Downloader;
 // The inference runtime (TensorRT + trtexec) is reused from the vs-mlrt cuda
 // release archives on Windows; publicly downloadable, license-precedented, and
 // trtexec is version-matched to nvinfer by construction. aji_trt must be built
-// against the SAME TensorRT major.minor (v16.x == TensorRT 11.0).
-// NOTE: v16.test1 is vs-mlrt's TRT 11 PRE-release - recheck for a stable
+// against the SAME TensorRT major.minor (v16.1.x == TensorRT 11.1 / CUDA 13.3).
+// NOTE: v16.1.test1 is vs-mlrt's TRT 11.1 PRE-release - recheck for a stable
 // v16 tag before cutting the package release.
-const string VsMlrtCudaVersion    = "v16.test1";
-const string AjiVersion           = "v0.7.0";       // github.com/the-database/animejanai-inference release tag (DML 4:4:4 input; op21 SD preset; missing-model passthrough; configurable RIFE/upscale order; benchmark slots 1012/1013)
+const string VsMlrtCudaVersion    = "v16.1.test1";
+const string AjiVersion           = "v0.8.0";       // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.1; engine cache path handling fix for long / non-ASCII install paths)
 
-const string SevenZipVersion      = "2501";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
+const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
 const string ManagerVersion       = "0.4.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager)
 
@@ -52,12 +52,12 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
 // v8); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-06-20-b903de7812"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20260620";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "b903de7812";   // git short hash (master; aji ABI v8)
+const string MpvForkVersion       = "2026-07-23-7fc08d90c7"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20260723";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "7fc08d90c7";   // git short hash (master; aji ABI v8)
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
-const string MpvForkLinuxVersion  = "2026-06-20-b903de7";
+const string MpvForkLinuxVersion  = "2026-07-23-7fc08d9";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor
@@ -220,7 +220,7 @@ async Task InstallInferenceRuntime()
         var trtLib = Path.Combine(trtRoot, "lib", "x86_64-linux-gnu");
         var trtBin = Path.Combine(trtRoot, "bin");
         var cudaLib = Environment.GetEnvironmentVariable("CUDA_LINUX_LIB")
-                      ?? "/usr/local/cuda-13.2/lib64";
+                      ?? "/usr/local/cuda-13.3/lib64";
         Console.WriteLine($"Copying TensorRT runtime from {trtLib} + cudart from {cudaLib}...");
 
         // Versioned runtime libraries (and the unversioned/.11 symlinks) the
