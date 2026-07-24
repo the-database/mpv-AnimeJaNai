@@ -892,11 +892,45 @@ async Task<PackIndex> GetPackIndexAsync()
             assets.FirstOrDefault(a => a.Name == asset)?.Url,
             e.GetProperty("bytes").GetInt64(),
             files,
-            e.TryGetProperty("dep", out var d) ? d.GetString() : null));
+            e.TryGetProperty("dep", out var d) ? d.GetString() : null,
+            e.TryGetProperty("installed_bytes", out var ib) ? ib.GetInt64() : 0));
     }
     return new PackIndex(
         doc.RootElement.TryGetProperty("package_version", out var v)
             ? v.GetString() ?? "" : "", packs);
+}
+
+// Does the pack's content on disk actually match the published pack? components.json records only
+// what the updater BELIEVES it installed, and that record can be wrong - e.g. a component whose
+// download was skipped or failed while the record was still written, leaving the previous release's
+// files in place. That state is self-perpetuating: the record then says "current" forever and the
+// real files are never refreshed (this is how a TensorRT 11.0 runtime survived an upgrade to a
+// package built for 11.1). Comparing the total extracted size against the index catches it - a
+// different upstream build is a different size - and costs only a directory stat.
+// Older indexes carry no installed_bytes; there is nothing to verify against, so trust the record.
+bool PackContentMatches(Pack pack)
+{
+    if (pack.InstalledBytes <= 0)
+    {
+        return true;
+    }
+    long actual = 0;
+    foreach (var f in pack.Files)
+    {
+        var fi = new FileInfo(Path.Combine(installDir, f));
+        if (!fi.Exists)
+        {
+            return false;
+        }
+        actual += fi.Length;
+    }
+    if (actual != pack.InstalledBytes)
+    {
+        Console.WriteLine($"{pack.Name}: on-disk content does not match the published pack " +
+                          $"({actual:N0} vs {pack.InstalledBytes:N0} bytes); reinstalling.");
+        return false;
+    }
+    return true;
 }
 
 // Installed state: components.json, else inferred from what's on disk so
@@ -1082,7 +1116,7 @@ async Task<int> InstallComponentAsync(string name)
     string target = pack.Dep is null ? "" : ReadManifestDep(localManifest, pack.Dep);
     bool filesPresent = pack.Files.Count > 0 &&
         pack.Files.All(f => File.Exists(Path.Combine(installDir, f)));
-    if (filesPresent && target != "")
+    if (filesPresent && target != "" && PackContentMatches(pack))
     {
         string prev = pack.Dep is null ? "" :
             ReadManifestDep(Path.Combine(installDir, "manifest.prev.json"), pack.Dep);
@@ -1153,8 +1187,16 @@ async Task<int> AutoComponentsAsync()
     var (hasNvidia, sm, gpu) = DetectGpu();
     var rec = RecommendedPacks(index, hasNvidia, sm);
     var installed = ReadInstalledComponents(index);
+    // "Needs installing" is not just "absent": a pack already recorded as installed is stale when
+    // the dep that governs it moved (a TensorRT/RIFE bump) or when its files on disk are not this
+    // pack's content. Without this, --auto reports "everything is installed" after an upgrade and
+    // the old runtime is kept forever; InstallComponentAsync re-checks and still skips genuine no-ops.
     var missing = index.Packs
-        .Where(p => PreselectPack(p, installed, rec) && !installed.ContainsKey(p.Name))
+        .Where(p => PreselectPack(p, installed, rec))
+        .Where(p => !installed.TryGetValue(p.Name, out var recorded) ||
+                    (p.Dep is not null && ReadManifestDep(localManifest, p.Dep) is string t &&
+                     t != "" && recorded != t) ||
+                    !PackContentMatches(p))
         .Select(p => p.Name).ToList();
     if (missing.Count == 0)
     {
@@ -1229,5 +1271,9 @@ static class Nvml
 
 record Release(string Tag, List<Asset> Assets);
 record Asset(string Name, string Url);
-record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files, string? Dep);
+// InstalledBytes: the pack's total size once extracted (sum of its files on disk). Used to verify
+// that what is on disk really is this pack's content, since components.json bookkeeping alone can
+// be wrong. 0 when the index predates the field (older release) - verification is then skipped.
+record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files, string? Dep,
+            long InstalledBytes = 0);
 record PackIndex(string PackageVersion, List<Pack> Packs);
