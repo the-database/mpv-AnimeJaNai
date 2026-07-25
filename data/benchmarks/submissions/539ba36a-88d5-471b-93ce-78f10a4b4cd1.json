@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "539ba36a-88d5-471b-93ce-78f10a4b4cd1",
+  "submitted_at": "2026-07-25T06:22:01.378Z",
+  "app_version": "3.6.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4080 Laptop GPU",
+  "vram_mb": 12282,
+  "cpu": "AMD Ryzen 9 7940HS w/ Radeon 780M Graphics",
+  "cpu_mhz": 4001,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 31971,
+  "ram_speed_mhz": 4800,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1074",
+  "results": {
+    "Balanced": {
+      "480x360": 608.5,
+      "640x480": 403,
+      "768x576": 248.4,
+      "1280x720": 98.2,
+      "1920x1080": 43.2
+    },
+    "Performance": {
+      "480x360": 1219,
+      "640x480": 604.8,
+      "768x576": 402.5,
+      "1280x720": 171.5,
+      "1920x1080": 72
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
