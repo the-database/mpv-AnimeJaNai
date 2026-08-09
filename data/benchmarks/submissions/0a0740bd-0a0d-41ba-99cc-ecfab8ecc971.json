@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "0a0740bd-0a0d-41ba-99cc-ecfab8ecc971",
+  "submitted_at": "2026-08-09T01:23:20.655Z",
+  "app_version": "3.5.0",
+  "backend": "DirectML",
+  "gpu": "Intel(R) Arc(TM) B580 Graphics",
+  "vram_mb": 12118,
+  "cpu": "AMD Ryzen 7 8700F 8-Core Processor",
+  "cpu_mhz": 4101,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32423,
+  "ram_speed_mhz": 4800,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.101.8861",
+  "results": {
+    "Balanced": {
+      "480x360": 220.8,
+      "640x480": 131.5,
+      "768x576": 90.2,
+      "1280x720": 42.4,
+      "1920x1080": 17.2
+    },
+    "Performance": {
+      "480x360": 253.2,
+      "640x480": 237,
+      "768x576": 162.4,
+      "1280x720": 75.8,
+      "1920x1080": 31.8
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
