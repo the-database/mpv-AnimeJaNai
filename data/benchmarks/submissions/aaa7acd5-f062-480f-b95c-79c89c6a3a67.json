@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "aaa7acd5-f062-480f-b95c-79c89c6a3a67",
+  "submitted_at": "2026-08-08T12:39:38.940Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce GTX 1660 SUPER",
+  "vram_mb": 6144,
+  "gpu_power_w": 125,
+  "cpu": "Intel(R) Core(TM) i5-8400 CPU @ 2.80GHz",
+  "cpu_mhz": 2808,
+  "cpu_cores": 6,
+  "cpu_threads": 6,
+  "ram_mb": 16320,
+  "ram_speed_mhz": 2666,
+  "os": "Microsoft Windows 10.0.22631",
+  "driver": "32.0.16.1088",
+  "results": {
+    "Balanced": {
+      "480x360": 1234,
+      "640x480": 1254.5,
+      "768x576": 1255.5,
+      "1280x720": 1239,
+      "1920x1080": 602.2
+    },
+    "Performance": {
+      "480x360": 1260,
+      "640x480": 1231,
+      "768x576": 1259.5,
+      "1280x720": 1240.5,
+      "1920x1080": 604.8
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
