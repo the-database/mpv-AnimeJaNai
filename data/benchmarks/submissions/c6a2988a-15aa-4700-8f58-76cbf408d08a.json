@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "c6a2988a-15aa-4700-8f58-76cbf408d08a",
+  "submitted_at": "2026-08-18T23:03:54.308Z",
+  "app_version": "3.5.0",
+  "backend": "DirectML",
+  "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU",
+  "vram_mb": 8151,
+  "cpu": "AMD Ryzen 7 250 w/ Radeon 780M Graphics",
+  "cpu_mhz": 3301,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 15674,
+  "ram_speed_mhz": 5600,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.15.9636",
+  "results": {
+    "Balanced": {
+      "480x360": 70.6,
+      "640x480": 41.1,
+      "768x576": 28.8,
+      "1280x720": 12.8,
+      "1920x1080": -1
+    },
+    "Performance": {
+      "480x360": 99.2,
+      "640x480": 57.1,
+      "768x576": 39.9,
+      "1280x720": 17.5,
+      "1920x1080": 7.5
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
