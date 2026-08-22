@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "1b18bc17-d9d6-40bd-a304-480156c37676",
+  "submitted_at": "2026-08-22T21:02:55.225Z",
+  "app_version": "3.6.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+  "vram_mb": 16376,
+  "gpu_power_w": 320,
+  "cpu": "AMD Ryzen 7 7800X3D 8-Core Processor",
+  "cpu_mhz": 4201,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32344,
+  "ram_speed_mhz": 6200,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1088",
+  "results": {
+    "Balanced": {
+      "480x360": 1211,
+      "640x480": 607.5,
+      "768x576": 603.2,
+      "1280x720": 221,
+      "1920x1080": 89
+    },
+    "Performance": {
+      "480x360": 1245.5,
+      "640x480": 1215,
+      "768x576": 606.2,
+      "1280x720": 401.7,
+      "1920x1080": 145.5
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
