@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "d8c92de3-7aff-4e08-83d6-43d9a8a2e88d",
+  "submitted_at": "2026-09-01T12:28:08.342Z",
+  "app_version": "3.5.0",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon 760M Graphics",
+  "vram_mb": 4005,
+  "cpu": "AMD Ryzen 5 7640HS w/ Radeon 760M Graphics",
+  "cpu_mhz": 4301,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 12085,
+  "ram_speed_mhz": 4800,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.31041.1004",
+  "results": {
+    "Balanced": {
+      "480x360": 54.4,
+      "640x480": 30.8,
+      "768x576": 21.4,
+      "1280x720": 9.8,
+      "1920x1080": -1
+    },
+    "Performance": {
+      "480x360": 100.8,
+      "640x480": 58,
+      "768x576": 40.8,
+      "1280x720": 19.2,
+      "1920x1080": 7.9
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
