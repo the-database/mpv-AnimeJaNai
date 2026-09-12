@@ -127,10 +127,9 @@ Defaults from source: `--fps-floor` 8, `--slots` `1010,1011`; the install root f
 `mpv/mpv` on Linux. The csproj is deliberately RID-agnostic — RID and `--self-contained` come
 from the publish command.
 
-> **Gotcha:** `AnimeJaNaiBenchmark/bin` and `obj` are **tracked in git**, unlike
-> `BuildMpvUpscale2xAnimeJaNai` and `AnimeJaNaiUpdater`, which are both `.gitignore`d. A
-> `dotnet build` of this project shows build output as modified tracked files. Whether that is
-> intentional is not recorded anywhere in the repo.
+All three projects' `bin/` and `obj/` are `.gitignore`d. (`AnimeJaNaiBenchmark`'s were tracked
+until they were removed from the index; nothing consumed them — `deploy.yml` publishes the tool
+from source.)
 
 ### `benchmark-proxy/`
 
