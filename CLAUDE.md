@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Documentation map
+
+This file is the orientation doc: what the repo is, how the runtime fits together, and the
+conventions. The step-by-step procedures live next to it:
+
+- **[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)** — local dev loop: prerequisites, building
+  and running the assembler, the env-var overrides that swap in a locally built component
+  instead of downloading it, and the repo's gotchas.
+- **[`docs/RELEASE.md`](docs/RELEASE.md)** — the cross-repo release runbook: which sibling
+  workflow to dispatch in which order, which constant consumes each tag, and the full asset map.
+
+Sibling components are documented in their own repos: `the-database/mpv` (`CLAUDE.md` +
+`DOCS/animejanai-build-local.md` + `DOCS/animejanai-build-ci.md`), `the-database/libass`, `the-database/mpv-winbuild`,
+`the-database/animejanai-inference` (`docs/BUILD-WINDOWS.md` + `docs/BUILD-LINUX.md`), and
+`the-database/AnimeJaNaiManager`.
+
 ## What this repo is
 
 This repo does **not** contain the mpv player, the `vf_animejanai` mpv filter, the `aji` inference
@@ -42,10 +58,18 @@ libmpv fork and the aji release and bump **both** `MpvForkVersion` and `AjiVersi
 
 ## Platform support (read before adding tooling)
 
-The distribution is **Windows-only today** (it bundles mpv.net, a Windows libmpv fork, the
-vsmlrt-cuda Windows binaries, and the Windows `aji` / ONNX-Runtime / DirectML DLLs). **Linux builds
-are on the roadmap**, so when adding or changing build/runtime tooling, avoid baking in Windows-only
-assumptions where keeping it portable is cheap:
+**Both Windows and Linux ship.** The assembler takes `--target win-x64|linux-x64`
+(`SelectTarget`, `Program.cs`), `deploy.yml` has a `deploy-linux` job, and releases since
+3.5.0 carry `-linux-x64` assets plus an AppImage and a `tar.zst` alongside the Windows Setup
+exe and 7z package. The per-platform names/paths are centralised in the `Platform` descriptor
+at the bottom of `Program.cs`.
+
+Windows-only pieces (no Linux equivalent installed): mpv.net, the DirectML backend
+(`aji_dml.dll`, ONNX Runtime DirectML, `DirectML.dll` — `HasDirectML = false` on Linux), and
+the vsmlrt-cuda Windows binaries. Linux gets its mpv bundle from a `the-database/mpv` release
+and its TensorRT runtime from the build container.
+
+When adding or changing build/runtime tooling, keep it portable:
 
 - Prefer cross-platform languages/runtimes already in use (.NET cross-compiles to `linux-x64`;
   mpv/Lua run on Linux; the `aji` engine and the filter are portable C/C++). Do **not** introduce a
@@ -54,8 +78,9 @@ assumptions where keeping it portable is cheap:
 - Drive platform-specific names/paths (player executable, archive tool, exe suffix, etc.) from data
   like `manifest.json` rather than hardcoding `mpvnet.exe` / `7z.exe` / `.exe`. The updater
   (`AnimeJaNaiUpdater/`) already does this as the reference pattern.
-- It's fine to ship Windows-only for now and defer the actual Linux build/packaging — just don't
-  design something that *can't* extend to Linux without a rewrite.
+- A new component must land on both legs. `PortConfigsForTarget()` rewrites the config paths
+  for Linux (`aji.dll`→`libaji.so`, `trtexec.exe`→`trtexec`, `'Segoe UI'`→`'sans-serif'`); add
+  to it rather than forking the config files.
 
 ## Building and releasing
 
@@ -78,10 +103,14 @@ The download/version pins are constants at the top of `Program.cs` (`AjiVersion`
 `VsMlrtCudaVersion`, `OrtDmlVersion`, `DirectMLVersion`, `RifeModelsVersion`, `MpvNetVersion`,
 `ManagerVersion`). Bumping a component = bump its constant.
 
-The csproj targets **net10.0**, but `.github/workflows/deploy.yml` pins `dotnet-version: '8.x'` —
-keep this in mind if the workflow fails after a TFM bump.
+All three csproj target **net10.0**, and `.github/workflows/deploy.yml` pins
+`dotnet-version: '10.x'` in both legs — keep them in sync after a TFM bump. There is no
+`global.json`.
 
 There is no test suite and no linter configured.
+
+See `docs/DEVELOPMENT.md` for the full assembler CLI (`--target`, `--packs`, `--packs-only`)
+and the local-component override env vars, and `docs/RELEASE.md` for the release runbook.
 
 ## Benchmarks
 
