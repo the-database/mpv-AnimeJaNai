@@ -1,0 +1,70 @@
+# AJN addon foundation — developer preview
+
+This is the first working part of the AJN addon framework. It combines the earlier proposals' lifecycle, declarative settings/actions, JSON-RPC, and developer replay with an enforced Wasm sandbox. It is developed on `feature/addon-foundation` independently of the 3.6.1 player fixes.
+
+**Working now:** compile a JavaScript addon, inspect/install an unsigned development package with explicit permissions, run it in an isolated worker, save private addon data, change typed settings, invoke declared actions, replay events, restore the previous package, and disable its registration. The host library consolidates activation sources and enforces processing-session ownership. Tests cover both library behavior and actual Windows workers.
+
+**Not connected yet:** Manager's addon screen and persistent background service, native playback/session adapters, GPU frame production, media encoding/output, device/network access, credentials, website catalog/signatures, automatic updates, and Linux worker enforcement. The processing provider and latest-frame queue are tested contracts/fixtures, not working video features. Neither the Plex addon nor the lighting addon is implemented here.
+
+API 1.0 is a **preview contract**, not a frozen public compatibility promise. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+
+## Try it on Windows x64
+
+Install .NET SDK 10. From this repository, run PowerShell:
+
+```powershell
+./addons/tools/bootstrap.ps1
+dotnet build ./addons/src/AnimeJaNai.Addons -c Release
+$ajn = './addons/src/AnimeJaNai.Addons/bin/Release/net10.0/ajn-addon.dll'
+$tools = Get-Content ./addons/.tools/tools.json -Raw | ConvertFrom-Json
+
+dotnet $ajn new ./my-first-addon org.example.first
+dotnet $ajn build ./my-first-addon $tools.javy.path ./first.ajnaddon
+dotnet $ajn inspect ./first.ajnaddon
+dotnet $ajn install-dev ./first.ajnaddon ./addon-data 'log.write,storage.read,storage.write'
+dotnet $ajn run org.example.first ./addon-data $tools.wasmtime.path
+dotnet $ajn run org.example.first ./addon-data $tools.wasmtime.path
+```
+
+The second run returns `starts: 2`. Engine files, mpv, a GPU, and an AJN installation are not needed for this example. `new` creates the source, manifest, and editor types. Edit `onEvent` in `addon.js`, change the version, and build to a **new** package filename.
+
+There are no permissions by default. `install-dev` deliberately installs an unsigned local package; list the permissions you approve after inspecting it. Grants belong to that exact package hash. Installing an update does not silently inherit grants. A hash verifies integrity, not publisher identity.
+
+Configure the example or run its declared action:
+
+```powershell
+'{"greeting":"Good evening"}' | Set-Content ./greeting.json -Encoding utf8NoBOM
+dotnet $ajn configure org.example.first ./addon-data ./greeting.json
+dotnet $ajn settings org.example.first ./addon-data
+dotnet $ajn action org.example.first ./addon-data $tools.wasmtime.path status
+dotnet $ajn replay org.example.first ./addon-data $tools.wasmtime.path ./addons/examples/counter/events.json
+```
+
+An action starts an idle addon temporarily, sends `start`, then `action`, then `stop`. An action on a running library-managed addon shares its worker. Settings are host-owned and read-only to addons. A standalone CLI configuration command affects the next call to `settings.get`; the embedding controller also delivers `settings.changed` to its active worker.
+
+After installing two versions:
+
+```powershell
+dotnet $ajn rollback org.example.first ./addon-data
+dotnet $ajn disable org.example.first ./addon-data
+```
+
+Rollback switches code and its previously approved grant. Settings and private storage are retained. Incompatible saved settings stop activation with an actionable error; no settings migration scripts run automatically. `disable` removes the registration for future CLI starts. A persistent embedding host must also call its activation controller's `StopAsync` to stop an active worker; the CLI does not control another process.
+
+## Develop and test
+
+```powershell
+./addons/tools/test.ps1
+# Contract/library tests without downloading the Windows runtimes:
+./addons/tools/test.ps1 -UnitOnly
+```
+
+The default suite builds and executes real Javy/Wasmtime fixtures, including hangs and malformed messages. Results are saved in `.work/validation/run-*/results.json`. `.tools`, `.work`, compiled packages, and build outputs are ignored by Git. GitHub Actions runs the full suite on Windows Server 2022.
+
+The SDK is a convenience layer, not an access boundary. Authors can replace it or use another language that produces a compatible core Wasm module and implements the documented protocol. This first JavaScript SDK uses synchronous event callbacks; Node.js packages, browser APIs, arbitrary native executables, and asynchronous JavaScript promises are not supported.
+
+## Runtime maintenance
+
+The bootstrap script downloads official **Wasmtime 48.0.2** and **Javy 9.1.0**, checking pinned archive hashes. The host verifies the runtime executable hash at launch; the builder verifies the compiler. Upgrade those pins together with the real-worker test results. Runtime vulnerabilities remain part of the maintenance responsibility; isolation is not a guarantee that defects can never exist.
+
+The runtime and its dependencies are third-party components with their own licenses. The source repository's existing license applies to AJN code. [Wasmtime](https://github.com/bytecodealliance/wasmtime/tree/v48.0.2), [Javy](https://github.com/bytecodealliance/javy/tree/v9.1.0).

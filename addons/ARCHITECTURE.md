@@ -1,0 +1,47 @@
+# Combined addon architecture
+
+The June proposals provide useful product structure: a host independent of Manager's window, isolated addon lifetimes, declarative UI, activation sources, package metadata, and developer replay. The implementation adopts those ideas and replaces unrestricted addon service executables with portable Wasm workers. JavaScript is the first SDK; JSON-RPC and capability semantics remain language-independent.
+
+```mermaid
+flowchart LR
+    UI[Trusted Manager / developer CLI] --> Life[Activation and package registry]
+    Life --> Host[Trusted broker]
+    Guest[Wasm addon worker] <-->|Bounded JSON-RPC| Host
+    Host --> Data[Addon storage / settings]
+    Host -. future adapter .-> Sessions[Native AJN processing sessions]
+    Sessions -. bounded samples .-> Host
+    Host -. future granted destinations .-> Devices[Services / devices]
+```
+
+Solid connections exist in the developer foundation. The Manager screen and native/network adapters remain future integration work. The CLI uses the same package, grant, settings, broker, and worker classes that a persistent service will embed.
+
+## Ownership
+
+One activation controller manages one addon ID. Each manager window, player, or manual request contributes a distinct activation key; repeated acquisition of the same key does not start duplicate workers. Releasing the last key sends a bounded stop event and closes the worker. A one-shot declared action temporarily starts an inactive addon. Crashed workers are not endlessly restarted: recovery is an explicit controller stop/reacquire.
+
+The worker's broker owns its granted permissions and session owner. It never accepts an addon ID or permission set from a guest RPC call. Provider calls do not hold the registry-wide lock. Per-session gates serialize operations on that session while other sessions remain usable. Pending opens reserve capacity and are cancelled when the owner closes. Failed session close retains its entry/capacity rather than claiming the resource was released.
+
+Each worker is a verified native Wasmtime runtime behind a small trusted launcher. The launcher waits for a gate byte until the parent has attached its Windows Job Object. Wasmtime then inherits that job. Closing the job terminates descendants if the host itself crashes; normal supervision explicitly terminates the job and waits for it to empty before removing temporary files. A short bounded retry handles delayed Windows directory-handle release.
+
+## Data and updates
+
+Installed code is stored by package digest. `active.json` selects the current and previous code/grant pairs, and is replaced atomically after package validation. Settings and private storage live in separate per-addon directories and are not part of the package. The host checks for directory links/junctions and never extracts arbitrary package paths or runs installation scripts.
+
+This boundary assumes the OS account, AJN host, verified sandbox runtime, and native providers are trusted. Checks for links are defense in depth, not a claim that an already-compromised same-user native process can be contained by pathname checks. Addons themselves receive no direct filesystem or process-launch capabilities.
+
+Automatic catalog updates must eventually bind publisher identity, addon ID, version, artifact digest, and approval. A package digest alone is not a publisher signature. Permission expansion and publisher changes must never inherit consent silently. User data remains under host ownership across uninstall/update/rollback, with explicit future migration and reset policies.
+
+## Media and networking
+
+Keep inference, decoding, frame ownership, sampling/downscaling, encoding, and GPU synchronization in trusted native components. Addon code must not run in the render callback. Control messages can use JSON; continuous pixels or encoded media require a separately bounded binary transport with ownership, cancellation, and backpressure rules.
+
+The existing latest-frame queue only proves that a producer can discard stale samples without waiting and can copy payloads with defined ownership. Its current 320x180 cap is a test/prototype bound, not a final sampling contract. Final sampling must negotiate resolution/rate/stage and carry timestamps and color metadata. Post-filter frames are not automatically the final tone-mapped, subtitle-composited display image.
+
+Network permissions need user-selected destinations, protocols, operation limits, and separate listening/discovery grants. The guest runtime remains without general network access; broker adapters enforce each destination. Credential storage and scoped service operations belong in trusted code. Existing proposals' localhost ports, single Plex stream, optional external configuration executables, and Plex-specific UI are not platform requirements.
+
+## Sources used for runtime design
+
+- [Wasmtime security model](https://docs.wasmtime.dev/security.html): host-provided imports and WASI capability access.
+- [JSON-RPC specification](https://www.jsonrpc.org/specification): standard request, result, and error envelopes.
+- [Windows job termination](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject) and [job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information): lifetime supervision and active-process accounting.
+- [AppContainer isolation](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation): possible later OS-level defense for the runtime process.

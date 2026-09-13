@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/AnimeJaNai.Addons/AnimeJaNai.Addons.csproj" /></ItemGroup>
+</Project>

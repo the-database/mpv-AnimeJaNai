@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>ajn-addon</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../sdk/ajn.js" LogicalName="sdk.js" />
+    <EmbeddedResource Include="../../sdk/ajn.d.ts" LogicalName="sdk.d.ts" />
+    <EmbeddedResource Include="../../examples/counter/addon.js" LogicalName="example.js" />
+  </ItemGroup>
+</Project>
