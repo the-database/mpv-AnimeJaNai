@@ -60,7 +60,21 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         }
         finally
         {
-            try { if (created is not null) await created.DisposeAsync(); }
+            try
+            {
+                if (created is not null)
+                {
+                    try { await created.DisposeAsync(); }
+                    catch
+                    {
+                        // A cancelled open can still produce a resource if its
+                        // provider is late to observe cancellation. If release
+                        // fails, retain ownership/capacity for cleanup retry.
+                        lock (sync) sessions.Add(Guid.NewGuid().ToString("N"), new(owner, created));
+                        throw;
+                    }
+                }
+            }
             finally
             {
                 lock (sync)

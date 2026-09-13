@@ -2,7 +2,7 @@
 
 This standalone Windows x64 developer preview exercises the addon host. It does not change your AJN installation or provide video, Plex, or lighting functionality yet. .NET is included; no SDK or GPU setup is required to run the bundled example.
 
-Extract the ZIP to a writable folder. Open PowerShell there and run:
+Extract the ZIP to a writable folder. Open PowerShell 7 there and run:
 
 ```powershell
 ./tools/run-example.ps1

@@ -10,7 +10,7 @@ API 1.0 is a **preview contract**, not a frozen public compatibility promise. Se
 
 ## Try it on Windows x64
 
-Install .NET SDK 10. From this repository, run PowerShell:
+Install .NET SDK 10. From this repository, run PowerShell 7:
 
 ```powershell
 ./addons/tools/bootstrap.ps1

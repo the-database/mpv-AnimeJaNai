@@ -71,7 +71,7 @@ catch (AddonException error)
     return 1;
 }
 catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or PlatformNotSupportedException
-    or OperationCanceledException or TimeoutException or System.ComponentModel.Win32Exception)
+    or OperationCanceledException or TimeoutException or System.ComponentModel.Win32Exception or ArgumentException)
 {
     Print(new { error = new { code = "host_error", message = error.Message } });
     return 1;

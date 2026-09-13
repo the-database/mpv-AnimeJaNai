@@ -316,6 +316,18 @@ internal static class Checks
             try { await opening; throw new Exception("Expected canceled open"); } catch (OperationCanceledException) { }
             await registry.ReleaseOwnerAsync(two);
         });
+        await Test("Failed cleanup of a cancelled open retains capacity until released", async () =>
+        {
+            var provider = new LateProvider(); var registry = new SessionRegistry(provider, 1, 1);
+            var one = registry.CreateOwner(); var two = registry.CreateOwner();
+            using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+            await Error("cleanup_failed", () => registry.OpenAsync(one, "late", null, cancelled.Token));
+            await Error("capacity_exceeded", () => registry.OpenAsync(two, "another", null, default));
+            provider.Session.FailClose = false;
+            await registry.ReleaseOwnerAsync(one);
+            _ = await registry.OpenAsync(two, "another", null, default);
+            await registry.ReleaseOwnerAsync(two);
+        });
         await Test("Latest frame queue copies input and drops old samples", async () =>
         {
             var queue = new LatestFrameQueue(); byte[] pixel = [1, 2, 3, 255];
@@ -480,5 +492,20 @@ internal static class Checks
         public bool Disposed;
         public Task<JsonObject> GetStatusAsync(CancellationToken cancellationToken) => Task.FromResult(new JsonObject { ["source"] = source });
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+    }
+    private sealed class LateProvider : IProcessingSessionProvider
+    {
+        public readonly FailingCloseSession Session = new();
+        public Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken cancellationToken) => Task.FromResult<IProcessingSession>(Session);
+    }
+    private sealed class FailingCloseSession : IProcessingSession
+    {
+        public bool FailClose = true;
+        public Task<JsonObject> GetStatusAsync(CancellationToken cancellationToken) => Task.FromResult(new JsonObject());
+        public ValueTask DisposeAsync()
+        {
+            if (FailClose) throw new AddonException("cleanup_failed", "Fixture could not release resource");
+            return ValueTask.CompletedTask;
+        }
     }
 }

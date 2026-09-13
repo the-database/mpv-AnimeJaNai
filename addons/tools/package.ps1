@@ -1,3 +1,4 @@
+#requires -Version 7
 param(
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [string]$Dotnet = 'dotnet'
