@@ -1,5 +1,21 @@
 # AJN addon foundation — developer preview
 
+## Start here
+
+| Your goal | Guide |
+| --- | --- |
+| Install, use or troubleshoot an addon | [User guide](USER-GUIDE.md) |
+| Make your first addon | [Creator tutorial](CREATOR-GUIDE.md) — build, permissions, saved data, settings, update and rollback |
+| Add video, image samples, service access or output | [Recipes and complete examples](CREATOR-RECIPES.md) |
+| Look up protocol, limits and compatibility | [API reference](API.md) and [SDK types](sdk/ajn.d.ts) |
+| Resolve a specific error | [Troubleshooting](TROUBLESHOOTING.md) |
+
+Full previews and developer bundles include offline HTML guides as well as this
+source documentation. In Manager, open **Addons → Help**. Opening Addons prepares
+local support automatically; there is no manual connection step.
+
+## Implementation status
+
 This is the first working part of the AJN addon framework. It combines the earlier proposals' lifecycle, declarative settings/actions, JSON-RPC, and developer replay with an enforced Wasm sandbox. It is developed on `feature/addon-foundation` independently of the 3.6.1 player fixes.
 
 **Working now:** compile a JavaScript addon, inspect/install an unsigned development package with explicit permissions, run it in an isolated worker, save private addon data, change typed settings, invoke declared actions, replay events, restore the previous package, and disable its registration. A persistent per-user host and the companion Manager Addons tab share one activation controller per addon. Tests cover library behavior, real Windows workers, the private management connection, and rendered Manager controls.
@@ -71,7 +87,7 @@ The companion `AnimeJaNaiManager` branch `feature/addon-manager` provides the Ad
 
 Manager reviews a local package before installation, starts permission checkboxes unchecked, and binds the approval to the exact reviewed archive hash. It renders typed settings, declared actions, worker status and bounded logs. Removing an addon stops it and retains its settings/storage. A manually started addon continues after Manager closes; `on_manager` activation ends when the last relevant Manager connection closes.
 
-**Host settings** lets you save a processing-session limit from 1 to 16 across
+**Performance limits** lets you save a processing-session limit from 1 to 16 across
 all addons (default two). An addon chooses its requested session count within
 that limit. Lowering the host limit does not interrupt existing work; it limits
 new admissions until sessions close. An explicit `serve` capacity argument is

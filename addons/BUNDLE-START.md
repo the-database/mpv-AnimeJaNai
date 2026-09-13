@@ -1,5 +1,9 @@
 # Try the addon foundation
 
+For a step-by-step first addon, open **CREATOR-GUIDE.html** in your browser.
+It runs entirely from this bundle with PowerShell 7 and the downloaded compiler.
+For installation and Manager controls, read **USER-GUIDE.html**.
+
 This standalone Windows x64 developer preview exercises the addon host. .NET is included; no SDK or GPU setup is required to run the counter example. Native sessions and frame samples additionally require a matching AJN installation and explicit media/profile approvals; see `NATIVE-MEDIA.md` and `FRAMES.md`, or use the integrated preview. The generic sample inspector exercises binary image samples and host timers. Plex and lighting addons are not included.
 
 The service inspector exercises approved HTTP/UDP destinations and optional

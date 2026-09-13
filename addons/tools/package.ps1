@@ -39,11 +39,13 @@ foreach ($folder in $assets.packageFolders.PSObject.Properties.Name) {
 if (-not $runtimePackageDirectory) { throw 'Could not locate the .NET runtime license and notices.' }
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'LICENSE.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-LICENSE.TXT')
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-THIRD-PARTY-NOTICES.TXT')
-foreach ($name in @('README.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'LIFECYCLE.md', 'NATIVE-MEDIA.md', 'NATIVE-OUTPUT.md', 'OUTPUTS.md', 'REMOTE-INPUTS.md', 'FRAMES.md', 'PLAYER-FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
+foreach ($name in @('README.md', 'USER-GUIDE.md', 'CREATOR-GUIDE.md', 'CREATOR-RECIPES.md', 'TROUBLESHOOTING.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'LIFECYCLE.md', 'NATIVE-MEDIA.md', 'NATIVE-OUTPUT.md', 'OUTPUTS.md', 'REMOTE-INPUTS.md', 'FRAMES.md', 'PLAYER-FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
     Copy-Item -LiteralPath (Join-Path $addonRoot $name) -Destination $outputRoot
 }
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/bootstrap.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/run-example.ps1') -Destination (Join-Path $outputRoot 'tools')
+Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/test-tutorial.ps1') -Destination (Join-Path $outputRoot 'tools')
+Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/render-docs.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'BUNDLE-START.md') -Destination (Join-Path $outputRoot 'START-HERE.md')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/counter') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/session-controller') -Destination (Join-Path $outputRoot 'examples') -Recurse
@@ -79,5 +81,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Output inspector compilation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Remote inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/player-inspector') $metadata.javy.path (Join-Path $outputRoot 'player-inspector.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'Player inspector compilation failed.' }
+& (Join-Path $addonRoot 'tools/render-docs.ps1') -Directory $outputRoot
 [IO.Compression.ZipFile]::CreateFromDirectory($outputRoot, $archive, [IO.Compression.CompressionLevel]::Optimal, $false)
 Get-FileHash -LiteralPath $archive -Algorithm SHA256 | Format-List

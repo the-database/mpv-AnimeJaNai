@@ -19,6 +19,7 @@ public sealed class HostLease : IDisposable
         SafeFiles.CheckParents(path);
         try { held = new(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
         catch (IOException) { throw new AddonException("host_running", "An addon host is already using this data directory. Manage it through Manager or use another development directory."); }
+        WorkerFiles.Recover(root);
     }
     public void Dispose() => held.Dispose();
 }

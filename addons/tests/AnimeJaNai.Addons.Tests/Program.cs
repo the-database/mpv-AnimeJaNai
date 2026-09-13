@@ -539,6 +539,27 @@ internal static partial class Checks
 
     private static async Task ManagementChecks()
     {
+        await Test("Restart cleans interrupted worker modules only under an exclusive lease", () =>
+        {
+            string directory = Area();
+            string Worker() => Directory.CreateDirectory(Path.Combine(directory, "workers", "worker-" + Guid.NewGuid().ToString("N"))).FullName;
+            string stale = Worker(), empty = Worker(), unfamiliar = Worker(), locked = Worker();
+            File.WriteAllBytes(Path.Combine(stale, "module.wasm"), EmptyModule);
+            File.WriteAllText(Path.Combine(unfamiliar, "keep.txt"), "Preserve this file");
+            string lockedModule = Path.Combine(locked, "module.wasm");
+            using (var handle = new FileStream(lockedModule, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+            {
+                using var lease = new HostLease(directory);
+                True(!Directory.Exists(stale) && !Directory.Exists(empty));
+                True(File.Exists(Path.Combine(unfamiliar, "keep.txt")) && File.Exists(lockedModule));
+                string active = Worker(); File.WriteAllBytes(Path.Combine(active, "module.wasm"), EmptyModule);
+                try { using var other = new HostLease(directory); throw new Exception("Expected an exclusive lease"); }
+                catch (AddonException error) when (error.Code == "host_running") { }
+                True(File.Exists(Path.Combine(active, "module.wasm")), "A second launch must not clean active workers");
+            }
+            using var retry = new HostLease(directory);
+            True(!Directory.Exists(locked) && File.Exists(Path.Combine(unfamiliar, "keep.txt")));
+        });
         await Test("Management connections share activation and disconnect releases only their source", async () =>
         {
             string directory = Area(); var package = AddonPackage.Create(SettingsManifest(), EmptyModule);

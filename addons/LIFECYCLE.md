@@ -45,7 +45,7 @@ process; no claim of zero memory overhead is made for this active case.
 
 ## Optional Windows startup
 
-Manager's **Login startup** dialog is off by default. Saving an enabled choice
+Manager's **Windows startup** dialog is off by default. Saving an enabled choice
 registers the console-free launcher for the current Windows user. Only addons
 declaring `on_login` activate at the next sign-in. Registration is independent
 of permission grants and cannot be changed through the guest API. Enabling it

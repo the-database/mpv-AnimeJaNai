@@ -29,6 +29,15 @@ jobs:
       - name: Build the Windows lifecycle launcher
         shell: pwsh
         run: dotnet build ./addons/src/AnimeJaNai.Addons.Launcher -c Release
+      - name: Validate the creator tutorial and offline documentation
+        shell: pwsh
+        run: |
+          ./addons/tools/check-docs.ps1
+          $tools = Get-Content ./addons/.tools/tools.json -Raw | ConvertFrom-Json
+          ./addons/tools/test-tutorial.ps1 -HostExecutable ./addons/src/AnimeJaNai.Addons/bin/Release/net10.0/ajn-addon.exe -Compiler $tools.javy.path -Runtime $tools.wasmtime.path -OutputDirectory ./addons/.work/tutorial
+          New-Item -ItemType Directory ./addons/.work/docs | Out-Null
+          Copy-Item ./addons/*.md ./addons/.work/docs
+          ./addons/tools/render-docs.ps1 -Directory ./addons/.work/docs
       - name: Preserve test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -37,4 +46,6 @@ jobs:
           path: |
             addons/.work/validation/**/results.json
             addons/.work/validation/**/control-latency.json
+            addons/.work/tutorial/results.json
+            addons/.work/docs/*.html
           if-no-files-found: warn
