@@ -1,6 +1,12 @@
 # Approved service and device access
 
 API 1.3 adds `network` capability 1.0 and Windows `credentials` capability 1.0.
+
+API 1.4 can also send encoded media to an approved HTTP/HTTPS service through
+the separate `outputs` capability and `media.output` permission. Manager
+discloses media delivery when that permission is granted. These outputs use
+their own streaming limits; ordinary HTTP/UDP calls below retain their existing
+bounds. See [OUTPUTS.md](OUTPUTS.md).
 Wasm still has no socket, DNS or HTTP imports. `network.connect` alone approves
 no destination.
 

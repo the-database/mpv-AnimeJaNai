@@ -7,7 +7,7 @@ namespace AnimeJaNai.Addons.Native;
 // Constructed only after the trusted host resolves approved source/profile ids.
 // Each instance owns its native process; a codec or driver failure does not run
 // in the Manager, the service, or another session's process.
-internal sealed class MediaProcess : IControllableProcessingSession, IFrameProcessingSession
+internal sealed class MediaProcess : IControllableProcessingSession, IFrameProcessingSession, IEncodedProcessingSession
 {
     private readonly Process process;
     private readonly WindowsJob job;
@@ -26,6 +26,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
     private readonly NativeFrameBuffer? frames;
     private readonly NativeEncodedPipe? encoded;
     internal Stream EncodedOutput => encoded?.Reader ?? throw new AddonException("feature_unavailable", "This session has no encoded output.");
+    Stream IEncodedProcessingSession.EncodedOutput => EncodedOutput;
 
     private MediaProcess(Process process, WindowsJob job, string directory, string workRoot, NativeFrameBuffer? frames, NativeEncodedPipe? encoded)
     {

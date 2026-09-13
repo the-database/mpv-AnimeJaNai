@@ -38,12 +38,7 @@ public sealed class NetworkAccess(AddonPackage package, PermissionGrant grant, N
         string method = Contract.Text(parameters, "method", 16);
         Contract.Require(method is "GET" or "HEAD" or "POST" or "PUT" or "PATCH" or "DELETE" or "OPTIONS", "invalid_request", "Unsupported HTTP method.");
         string path = Contract.Text(parameters, "path", 2048);
-        Contract.Require(path.StartsWith('/') && !path.StartsWith("//", StringComparison.Ordinal) && !path.Contains('\\') &&
-            !path.Contains('#') && !path.Any(char.IsControl), "invalid_request", "Use a service-relative path beginning with a single slash.");
-        Contract.Require(Uri.TryCreate(destination.Destination.Origin + path, UriKind.Absolute, out var target) &&
-            target.Scheme == destination.Destination.Scheme && target.IdnHost.Trim('[', ']').Equals(destination.Destination.Host, StringComparison.OrdinalIgnoreCase) &&
-            target.Port == destination.Destination.Port && target.UserInfo.Length == 0,
-            "invalid_request", "The request must remain at its approved service.");
+        var target = RequestTarget(destination.Destination, path);
         byte[] body = Decode(parameters, MaxRequestBytes);
         Contract.Require(method is not ("GET" or "HEAD") || body.Length == 0, "invalid_request", "GET and HEAD requests cannot include a body.");
         Contract.Require(parameters["headers"] is JsonObject { Count: <= 16 }, "invalid_request", "Use at most sixteen request headers.");
@@ -147,13 +142,7 @@ public sealed class NetworkAccess(AddonPackage package, PermissionGrant grant, N
     {
         try
         {
-            using var handler = new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false, UseProxy = false, UseCookies = false, Credentials = null,
-                AutomaticDecompression = DecompressionMethods.None, MaxResponseHeadersLength = 16,
-                ConnectTimeout = TimeSpan.FromSeconds(5), MaxConnectionsPerServer = 1,
-                ConnectCallback = (context, cancellation) => ConnectAsync(destination, context.DnsEndPoint, cancellation),
-            };
+            using var handler = CreateHandler(destination);
             using var client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
             using var request = new HttpRequestMessage(new HttpMethod(method), target) { Version = HttpVersion.Version11, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
             if (body.Length > 0 || method is "POST" or "PUT" or "PATCH") request.Content = new ByteArrayContent(body);
@@ -194,6 +183,25 @@ public sealed class NetworkAccess(AddonPackage package, PermissionGrant grant, N
 
     private static BrokerResponse Failure(string code, string message) => new(new JsonObject
         { ["state"] = "failed", ["error"] = new JsonObject { ["code"] = code, ["message"] = message }, ["byteLength"] = 0 });
+
+    internal static Uri RequestTarget(NetworkDestination destination, string path)
+    {
+        Contract.Require(path.Length is > 0 and <= 2048 && path.StartsWith('/') && !path.StartsWith("//", StringComparison.Ordinal) && !path.Contains('\\') &&
+            !path.Contains('#') && !path.Any(char.IsControl), "invalid_request", "Use a service-relative path beginning with a single slash.");
+        Contract.Require(Uri.TryCreate(destination.Origin + path, UriKind.Absolute, out var target) &&
+            target.Scheme == destination.Scheme && target.IdnHost.Trim('[', ']').Equals(destination.Host, StringComparison.OrdinalIgnoreCase) &&
+            target.Port == destination.Port && target.UserInfo.Length == 0,
+            "invalid_request", "The request must remain at its approved service.");
+        return target;
+    }
+
+    internal static SocketsHttpHandler CreateHandler(NetworkDestination destination) => new()
+    {
+        AllowAutoRedirect = false, UseProxy = false, UseCookies = false, Credentials = null,
+        AutomaticDecompression = DecompressionMethods.None, MaxResponseHeadersLength = 16,
+        ConnectTimeout = TimeSpan.FromSeconds(5), MaxConnectionsPerServer = 1,
+        ConnectCallback = (context, cancellation) => ConnectAsync(destination, context.DnsEndPoint, cancellation),
+    };
 
     private static async ValueTask<Stream> ConnectAsync(NetworkDestination destination, DnsEndPoint endpoint, CancellationToken token)
     {

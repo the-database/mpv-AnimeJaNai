@@ -1,4 +1,23 @@
-/** AJN addon API 1.3 preview. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.4 preview. Plain JavaScript, with optional editor type checking. */
+interface AjnOutputOptions {
+    encoding: {
+        videoCodec: "h264" | "hevc" | "av1"; container: "matroska" | "mpegts" | "fragmentedMp4";
+        videoKbps: number; audioCodec?: "none" | "aac" | "opus"; audioKbps?: number;
+        keyframeFrames?: number; lengthSeconds?: number;
+    };
+    destination: {
+        type?: "httpUpload"; destinationId: string; path?: string; method?: "POST" | "PUT";
+        useCredential?: boolean;
+    };
+}
+interface AjnOutputFormats {
+    encoders: string[]; requires: string; videoCodecs: string[]; containers: string[]; audioCodecs: string[]; destinations: string[];
+    mpegtsVideoCodecs: string[]; mpegtsAudioCodecs: string[];
+    minimumVideoKbps: number; maximumVideoKbps: number; minimumAudioKbps: number; maximumAudioKbps: number;
+    minimumKeyframeFrames: number; maximumKeyframeFrames: number;
+    maximumWallSeconds: number; maximumBytes: number; maximumBytesPerSecond: number; maximumHostBytesPerSecond: number;
+    maximumConcurrentSessions: number; softwareSubtitles: boolean;
+}
 interface AjnNetworkDestination {
     id: string; name: string; origin: string; protocol: "http" | "https" | "udp";
     addresses: string[]; hasCredential: boolean; credentialHeader: string | null;
@@ -59,6 +78,14 @@ interface AjnApi {
     log(message: string): void;
     /** Host-owned declarative settings. Only the user/host can change them. */
     settings: { get(): Record<string, boolean | number | string> };
+    /** Requires media.output, sessions.manage, network.connect and output
+     * capability 1.0. Source/profile/service consent is checked independently.
+     * Returned IDs use sessions.status/pause/requestClose; seek needs a new
+     * stream. Encoded bytes flow in trusted code, never through this SDK. */
+    outputs: {
+        formats(): AjnOutputFormats;
+        open(sourceId: string, profileId: string | null, options: AjnOutputOptions): { sessionId: string };
+    };
     /** Requires network.connect plus destination consent. Saved credentials
      * also require credentials.use. No redirects, cookies or OS credentials. */
     network: {

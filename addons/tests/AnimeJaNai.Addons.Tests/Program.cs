@@ -66,11 +66,13 @@ internal static partial class Checks
         await FrameAndTimerChecks();
         await NetworkChecks();
         await EncodingChecks();
+        await OutputChecks();
         if (OperatingSystem.IsWindows()) await ManagementChecks();
         if (args.Length == 4) await RuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await FrameRuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await NetworkRuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await ServiceInspectorChecks(args[1], args[2], args[3]);
+        if (args.Length == 4) await OutputRuntimeChecks(args[1], args[2], args[3]);
         string report = Path.Combine(root, "results.json");
         await File.WriteAllTextAsync(report, JsonSerializer.Serialize(new { passed = results.Count - failed, failed, results }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"{results.Count - failed} passed; {failed} failed. {report}");

@@ -1,4 +1,4 @@
-# Addon API 1.3 preview
+# Addon API 1.4 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -67,6 +67,13 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 | `network.result` | `{ requestId }` | `network.connect` | Pending/completed/failed status and `byteLength`, then binary body |
 | `network.cancel` | `{ requestId }` | `network.connect` | `null`; read terminal result to free the slot |
 | `network.sendDatagram` | `{ destinationId, bodyBase64 }` | `network.connect` | `{ bytesSent }`; approved UDP destination only |
+| `outputs.formats` | `{}` | `media.output` + `sessions.manage` | Adapter options and resource bounds; outputs 1.0 |
+| `outputs.open` | `{ sourceId, profileId, encoding, destination }` | `media.output` + `sessions.manage` + `network.connect`; `credentials.use` when requested | Owned `{ sessionId }`; reviewed source/profile and HTTP upload receiver |
+
+API 1.4 adds typed encoded output controls without changing the binary transport.
+Encoded bytes remain in the trusted host; `sessions.status/pause/requestClose`
+manage the owned output. See [OUTPUTS.md](OUTPUTS.md) for exact choices,
+destination consent, completion semantics and limits.
 
 Private storage is separated by addon ID: maximum 256 keys, 32 KiB per value, 1 MiB total. A stored null and a missing key both read as null in this preview. Saving one key is atomic; a read-modify-write sequence is not a transaction across distinct worker instances. The embedding host should create one activation controller per addon ID.
 

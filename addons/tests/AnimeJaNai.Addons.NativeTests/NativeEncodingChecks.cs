@@ -101,7 +101,7 @@ internal static class NativeEncodingChecks
         }
         throw new TimeoutException("Native output state deadline: " + await session.GetStatusAsync(default));
     }
-    private static async Task<string> FixtureAsync(string root, string output)
+    internal static async Task<string> FixtureAsync(string root, string output)
     {
         string audio = Path.Combine(output, "sine.wav"), video = Path.Combine(output, "pattern-av.mkv");
         const int rate = 48000, samples = rate * 8, dataBytes = samples * 2;
@@ -117,7 +117,7 @@ internal static class NativeEncodingChecks
             "--vf=format=colormatrix=bt.709:primaries=bt.709:gamma=bt.1886", "av://lavfi:testsrc2=size=480x360:rate=24:duration=8"]);
         return video;
     }
-    private static async Task VerifyAsync(string root, string output, string name, string source, List<JsonObject> evidence)
+    internal static async Task VerifyAsync(string root, string output, string name, string source, List<JsonObject> evidence)
     {
         string checksums = Path.Combine(output, name + ".md5"), script = Path.Combine(output, name + ".lua");
         File.WriteAllText(script, "local mp=require 'mp'; local u=require 'mp.utils'; mp.observe_property('video-params','native',function(_,v) if v then print('AJN_ENCODED_INFO '..u.format_json(v)) end end)\n");

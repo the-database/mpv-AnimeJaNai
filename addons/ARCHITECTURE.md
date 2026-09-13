@@ -14,7 +14,7 @@ flowchart LR
     Sessions -->|Private encoded stream adapter| Host
 ```
 
-Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes trusted management over a Windows named pipe. Native sessions, SDR DirectML samples and scoped HTTP/UDP are integrated. A private native encoding adapter now streams into a bounded host pipe; its guest capability and destination consent remain work. The CLI and service use the same package, grant, settings, broker, and worker classes.
+Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes trusted management over a Windows named pipe. Native sessions, SDR DirectML samples, scoped HTTP/UDP and owned encoded HTTP outputs are integrated. The CLI and service use the same package, grant, settings, broker, and worker classes.
 
 The management pipe permits its Windows owner and explicitly denies network logons. The complete ACL is applied at creation, and the initial listener uses FirstPipeInstance. Both ends verify ownership. The host holds an exclusive data-directory lease; eight management connections share its addon controllers, and list responses are paginated. Manager commands are never exposed on a guest worker's channel. See [MANAGEMENT.md](MANAGEMENT.md).
 
@@ -38,7 +38,7 @@ Automatic catalog updates must eventually bind publisher identity, addon ID, ver
 
 Keep inference, decoding, frame ownership, sampling/downscaling, encoding, and GPU synchronization in trusted native components. Addon code must not run in the render callback. Control messages can use JSON; continuous pixels or encoded media require a separately bounded binary transport with ownership, cancellation, and backpressure rules.
 
-The private output adapter retains the upstream hardware frame pool and sends encoded bytes over an unnamed pipe to the trusted host. It supports audio/muxing and backpressures only its own producer. It is not yet a guest output API; its validation, limits and remaining consent/delivery work are described in [NATIVE-OUTPUT.md](NATIVE-OUTPUT.md).
+The private output adapter retains the upstream hardware frame pool and sends encoded bytes over an unnamed pipe to the trusted host. It supports audio/muxing and backpressures only its own producer. The versioned guest controls bind each output to an owned session, approved source/profile and receiver; continuous bytes stay out of Wasm. [OUTPUTS.md](OUTPUTS.md) describes consent, delivery and cleanup; [NATIVE-OUTPUT.md](NATIVE-OUTPUT.md) covers the native path and hardware limitations.
 
 The first real producer negotiates processed BGRA8 SDR samples up to 320x180 and 60 Hz. Its private D3D11 filter preserves the original frame, retains at most one sample source through GPU completion, and skips when busy. An unnamed mapping connects only the trusted native worker and host; validated binary copies reach Wasm. Subscription ownership follows session ownership, seeks invalidate old epochs, and unsubscribe/close disables capture. Host timers serialize periodic callbacks and coalesce missed ticks. Post-filter frames are not automatically the final tone-mapped, subtitle-composited display image. [FRAMES.md](FRAMES.md) records the exact semantics and remaining format limits.
 

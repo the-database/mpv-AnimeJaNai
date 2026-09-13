@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/AnimeJaNai.Addons/AnimeJaNai.Addons.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="../HttpFixture.cs" Link="HttpFixture.cs" /></ItemGroup>
   <ItemGroup><None Include="../fixtures/counter-api-1.0.ajnaddon" Link="fixtures/counter-api-1.0.ajnaddon" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/service-inspector/*" Link="service-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/output-inspector/*" Link="output-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

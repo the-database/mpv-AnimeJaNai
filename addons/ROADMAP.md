@@ -11,7 +11,7 @@ The developer foundation is not the completed community addon product. The follo
 | Manager | Addon controls, exact-file/profile consent, service/credential review, revocation and rendered tests | Other transport consent, community catalog flow |
 | Sessions | Native provider, approved local sources/profiles, admission, asynchronous open/close, independent pause/seek, real concurrent DirectML tests | TensorRT/RIFE validation, more source types, host capacity UI and hardware matrix |
 | Frame samples | Native GPU-reduced SDR DirectML samples, negotiated size/rate, PTS/epoch/color/geometry metadata, bounded binary transport, actual Wasm/concurrent-session tests | Final-display and HDR stages, CUDA/TensorRT producer, shared player observation, broader GPU/performance matrix |
-| Media output | Private native GPU encoding, audio/muxing and bounded pipe tested; no guest output capability yet | Negotiated output API, owned destination consent, streaming delivery and longer A/V timing / format matrix |
+| Media output | Versioned owned output API, reviewed HTTP receiver, native GPU encoding/audio/muxing and bounded delivery; real Wasm/native tests | Other receiver transports, remote sources, longer A/V timing and format/hardware matrix |
 | Device/service I/O | Pinned approved HTTP/HTTPS and UDP, async requests, protected scoped header credentials | TCP/TLS/WebSockets; authorized listeners/discovery; OAuth and remote media |
 | Website links | Design requirement | Signed catalog identity resolution and Manager review flow; never arbitrary link-to-execution |
 

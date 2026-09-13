@@ -1,4 +1,4 @@
-// AJN API 1.3 transport, compatible with the 1.0 JSON-only methods. The host independently
+// AJN API 1.4 transport, compatible with the 1.0 JSON-only methods. The host independently
 // validates every message and permission even when an addon replaces this code.
 const __ajnSdk = (() => {
     const maximum = 128 * 1024;
@@ -89,6 +89,14 @@ const __ajnSdk = (() => {
         info: () => request("host.info"),
         log: message => request("log.write", { message: String(message) }),
         settings: Object.freeze({ get: () => request("settings.get") }),
+        outputs: Object.freeze({
+            formats: () => request("outputs.formats"),
+            open: (sourceId, profileId, options) => request("outputs.open", {
+                sourceId, profileId: profileId || null,
+                encoding: Object.assign({audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0}, options.encoding),
+                destination: Object.assign({type: "httpUpload", method: "POST", path: "/", useCredential: false}, options.destination),
+            }),
+        }),
         network: Object.freeze({
             selections: () => request("network.selections"),
             request: (destinationId, options = {}) => request("network.request", {

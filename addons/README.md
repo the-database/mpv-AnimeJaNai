@@ -10,11 +10,11 @@ This is the first working part of the AJN addon framework. It combines the earli
 
 **Service access now works:** Manager reviews HTTP/HTTPS/UDP destinations, and the broker enforces their pinned addresses, deadlines and limits. HTTP is asynchronous with bounded binary responses. Optional headers are protected for the Windows user and attached only to their approved service. See [NETWORK.md](NETWORK.md) and the service inspector.
 
-**Native output adapter tested:** the trusted worker can encode GPU video with optional audio into a bounded private pipe. Three codecs/containers, concurrent encoders, consumer failure and blocked-output cleanup have been exercised. Its guest capability and destination consent are still being integrated; see [NATIVE-OUTPUT.md](NATIVE-OUTPUT.md).
+**Encoded output now works:** addons can request owned GPU video/audio outputs to approved HTTP receivers. Encoding and continuous transport stay in trusted code. Tests decode received streams, check three codecs, run concurrent outputs and revoke active access. See [OUTPUTS.md](OUTPUTS.md), the output inspector, and [NATIVE-OUTPUT.md](NATIVE-OUTPUT.md) for hardware and format limits.
 
-**Remaining integration:** public media output/destinations, TCP/TLS/WebSockets, listeners/discovery, player/login activation, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+**Remaining integration:** remote media and other output transports, TCP/TLS/WebSockets, listeners/discovery, player/login activation, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
 
-API 1.3 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0/1.1/1.2 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+API 1.4 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0/1.1/1.2/1.3 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 

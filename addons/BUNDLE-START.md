@@ -6,6 +6,11 @@ The service inspector exercises approved HTTP/UDP destinations and optional
 saved header credentials. Use Manager to review access before invoking its
 request action. It sends nothing on startup; see `NETWORK.md` for its limits.
 
+The output inspector exercises processed video/audio delivery to an approved
+HTTP receiver. It requires the matching integrated native output runtime and
+NVIDIA encoding hardware. It sends nothing until its explicit action is used.
+See `OUTPUTS.md` for source/profile/receiver permissions and supported formats.
+
 Extract the ZIP to a writable folder. Open PowerShell 7 there and run:
 
 ```powershell

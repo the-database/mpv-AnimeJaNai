@@ -258,6 +258,7 @@ public sealed class AddonService : IAsyncDisposable
         ["mediaPermission"] = entry.Grant!.Allowed.Contains("sessions.manage", StringComparer.Ordinal),
         ["networkPermission"] = entry.Grant!.Allowed.Contains("network.connect", StringComparer.Ordinal),
         ["credentialPermission"] = entry.Grant!.Allowed.Contains("credentials.use", StringComparer.Ordinal),
+        ["outputPermission"] = entry.Grant!.Allowed.Contains("media.output", StringComparer.Ordinal),
     };
 
     private static async Task AutoActivateAsync(Entry entry, string client, CancellationToken token)

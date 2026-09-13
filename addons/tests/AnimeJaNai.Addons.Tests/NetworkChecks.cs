@@ -1,3 +1,4 @@
+using AnimeJaNai.Addons.TestSupport;
 using AnimeJaNai.Addons;
 using System.Diagnostics;
 using System.Net;
@@ -293,57 +294,4 @@ internal static partial class Checks
         });
     }
 
-    private sealed record HttpInput(string Path, Dictionary<string, string> Headers, byte[] Body);
-    private sealed record HttpReply(int Status, byte[] Body, string Headers = "", bool Chunked = false);
-    private sealed class HttpFixture : IAsyncDisposable
-    {
-        private readonly TcpListener listener = new(IPAddress.Loopback, 0);
-        private readonly CancellationTokenSource stop = new();
-        private readonly Task loop;
-        private readonly List<Task> clients = [];
-        private readonly Func<HttpInput, CancellationToken, Task<HttpReply>> handler;
-        public HttpInput? Last;
-        public int Requests;
-        public int Port => ((IPEndPoint)listener.LocalEndpoint).Port;
-        public HttpFixture(Func<HttpInput, CancellationToken, Task<HttpReply>> handler)
-        { this.handler = handler; listener.Start(); loop = AcceptAsync(); }
-        private async Task AcceptAsync()
-        {
-            try { while (!stop.IsCancellationRequested) { var client = await listener.AcceptTcpClientAsync(stop.Token); clients.Add(ServeAsync(client)); } }
-            catch (OperationCanceledException) { }
-        }
-        private async Task ServeAsync(TcpClient client)
-        {
-            using (client)
-            try
-            {
-                var stream = client.GetStream(); using var header = new MemoryStream(); byte[] single = new byte[1];
-                while (true)
-                {
-                    if (await stream.ReadAsync(single, stop.Token) == 0) return; header.WriteByte(single[0]);
-                    True(header.Length <= 32768, "Fixture request header limit");
-                    var buffer = header.GetBuffer(); int n = (int)header.Length;
-                    if (n >= 4 && buffer.AsSpan(n - 4, 4).SequenceEqual("\r\n\r\n"u8)) break;
-                }
-                string[] lines = Encoding.ASCII.GetString(header.ToArray()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-                var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (string line in lines.Skip(1)) { int colon = line.IndexOf(':'); headers[line[..colon]] = line[(colon + 1)..].Trim(); }
-                int length = headers.TryGetValue("Content-Length", out var size) ? int.Parse(size) : 0;
-                True(length is >= 0 and <= 32768); byte[] body = new byte[length]; await stream.ReadExactlyAsync(body, stop.Token);
-                Last = new(lines[0].Split(' ')[1], headers, body); Interlocked.Increment(ref Requests);
-                var reply = await handler(Last, stop.Token);
-                string prefix = $"HTTP/1.1 {reply.Status} Test\r\nConnection: close\r\n" + reply.Headers +
-                    (reply.Chunked ? "Transfer-Encoding: chunked\r\n" : $"Content-Length: {reply.Body.Length}\r\n") + "\r\n";
-                await stream.WriteAsync(Encoding.ASCII.GetBytes(prefix), stop.Token);
-                if (reply.Chunked) await stream.WriteAsync(Encoding.ASCII.GetBytes(reply.Body.Length.ToString("X") + "\r\n"), stop.Token);
-                await stream.WriteAsync(reply.Body, stop.Token);
-                if (reply.Chunked) await stream.WriteAsync("\r\n0\r\n\r\n"u8.ToArray(), stop.Token);
-            }
-            catch (Exception error) when (error is OperationCanceledException or IOException or SocketException) { }
-        }
-        public async ValueTask DisposeAsync()
-        {
-            stop.Cancel(); listener.Stop(); await loop; await Task.WhenAll(clients); stop.Dispose();
-        }
-    }
 }

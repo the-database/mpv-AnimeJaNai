@@ -34,7 +34,8 @@ public sealed class Broker : IAsyncDisposable
 
     private string[] AvailableCapabilities() => ["host", "storage", "logging", "settings", "timers", "network",
         .. OperatingSystem.IsWindows() ? new[] { "credentials" } : [],
-        .. sessions is null ? [] : sessions.SupportsFrames(owner!) ? new[] { "sessions", "frames" } : ["sessions"]];
+        .. sessions is null ? [] : sessions.SupportsFrames(owner!) ? new[] { "sessions", "frames" } : ["sessions"],
+        .. sessions?.SupportsOutputs(owner!) == true ? new[] { "outputs" } : []];
     private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
@@ -71,6 +72,14 @@ public sealed class Broker : IAsyncDisposable
         {
             case "host.info": return Info();
             case "settings.get": return settings.Get();
+            case "outputs.formats":
+                grant.Demand("media.output"); grant.Demand("sessions.manage");
+                return Sessions().OutputFormats(owner!);
+            case "outputs.open":
+                grant.Demand("media.output"); grant.Demand("sessions.manage"); grant.Demand("network.connect");
+                return new JsonObject { ["sessionId"] = await Sessions().OpenOutputAsync(owner!,
+                    Contract.Text(parameters, "sourceId", 128), parameters["profileId"] is null ? null : Contract.Text(parameters, "profileId", 128),
+                    OutputRequest.Parse(parameters), cancellationToken) };
             case "network.selections": return network.List();
             case "network.request": return new JsonObject { ["requestId"] = network.Request(parameters) };
             case "network.result": throw new AddonException("binary_transport_required", "Network results require the binary response transport.");

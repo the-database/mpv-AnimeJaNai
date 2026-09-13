@@ -7,4 +7,6 @@
     <ProjectReference Include="../../src/AnimeJaNai.Addons/AnimeJaNai.Addons.csproj" />
     <None Include="../../examples/sample-inspector/**" Link="sample-inspector/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup><Compile Include="../HttpFixture.cs" Link="HttpFixture.cs" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/output-inspector/*" Link="output-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

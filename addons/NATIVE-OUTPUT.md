@@ -1,10 +1,9 @@
 # Native encoded output adapter
 
-This is a trusted integration component under development. The guest API does
-not yet advertise an output capability. Community addons cannot pass encoder
-options, output paths, descriptors or pipe handles. The next layer must bind
-encoding to an owned session and an explicitly approved destination before
-making it available through the SDK.
+This trusted integration component backs the optional [outputs capability](OUTPUTS.md)
+in API 1.4. The guest chooses validated codec/container settings and approved
+resource IDs. It cannot pass raw encoder flags, output paths, descriptors or
+pipe handles. Each output belongs to one addon session and an approved receiver.
 
 ## Implemented path
 
@@ -24,8 +23,8 @@ and containers through capability negotiation.
 The private option bounds are 256–50,000 kbit/s video, 32–512 kbit/s audio,
 1–600 frames between keyframes, and an optional duration up to 24 hours. NVENC
 uses its low-latency tuning, with B frames and lookahead disabled. This has not
-yet been certified for an end-to-end streaming latency target. A public API
-must distinguish requested parameters from actual hardware support and host
+yet been certified for an end-to-end streaming latency target. The public API
+distinguishes adapter options from actual hardware support and host
 resource admission. DirectML processing and NVIDIA encoding are separate
 hardware requirements; a DirectML-capable AMD or Intel GPU does not imply NVENC.
 
@@ -42,7 +41,7 @@ disables subtitles. It forwards color primaries, transfer, matrix, range and
 chroma location to the encoder; this does not perform HDR tone mapping or
 certify Dolby Vision metadata, interlacing, rotation, CUDA/TensorRT, RIFE or
 every surface format. Those need their own supported-format checks and tests
-before public output capability claims.
+before expanding the validated output matrix.
 
 The handoff follows the upstream [FFmpeg NVENC implementation](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/nvenc.c),
 which requires an associated hardware frame context for GPU input, and
@@ -74,8 +73,8 @@ Closing an output allows three seconds for native shutdown, then terminates
 that session's job if needed. Other sessions keep their own jobs and pipes.
 Loss of a consumer is an output failure. Completion is reported after native
 flush/destruction and pipe EOF. Seeking a muxed stream requires a new output
-session; the existing stream cannot silently reset its timeline. The future
-public owner must retain capacity until both producer and destination cleanup
+session; the existing stream cannot silently reset its timeline. The
+public owner retains capacity until both producer and destination cleanup
 complete, including retryable failures.
 
 Ownership follows [Microsoft's `_open_osfhandle` contract](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/open-osfhandle?view=msvc-170)
@@ -94,7 +93,9 @@ decoding, preserved SDR color/dimensions, two concurrent encoders, a broken
 consumer, and an unread output alongside independent playback. The latter
 remained bounded and closed in about 3.1 seconds on the test machine. The short
 audio fixture checks timestamps within 150 ms; it is not a long-running A/V
-synchronization, seek, packet-loss or streaming latency certification.
+synchronization, seek, packet-loss or streaming latency certification. The public
+integration also exercises real Wasm controls, HTTP delivery followed by full
+decoding, two owned uploads, and active source/destination revocation.
 
 Run the GPU adapter checks with a matching native build and installed models:
 
@@ -102,7 +103,6 @@ Run the GPU adapter checks with a matching native build and installed models:
 dotnet run --project addons/tests/AnimeJaNai.Addons.NativeTests -c Release -- <AJN-root> <new-results-directory> <dotnet.exe> --encoding-only
 ```
 
-Next: negotiated output descriptors, owned destinations and user consent;
-bounded delivery to approved services or listener responses; remote media
-sources; error/format reporting; longer A/V timing checks and the hardware
+Next: additional delivery adapters and listener responses; remote media
+sources; deeper error/format reporting; longer A/V timing checks and the hardware
 matrix. No Plex bridge or lighting addon is implemented by this component.
