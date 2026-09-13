@@ -1,4 +1,22 @@
-/** AJN addon API 1.2 preview. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.3 preview. Plain JavaScript, with optional editor type checking. */
+interface AjnNetworkDestination {
+    id: string; name: string; origin: string; protocol: "http" | "https" | "udp";
+    addresses: string[]; hasCredential: boolean; credentialHeader: string | null;
+}
+interface AjnHttpOptions {
+    method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
+    path?: string; headers?: Record<string, string>;
+    /** At most 32 KiB. Strings are encoded as UTF-8. */
+    body?: Uint8Array | string;
+    useCredential?: boolean;
+}
+interface AjnNetworkResult {
+    state: "pending" | "completed" | "failed";
+    status?: number; headers?: Record<string, string>;
+    error?: { code: string; message: string };
+    /** At most 64 KiB. Empty while pending or failed. */
+    body: Uint8Array;
+}
 interface AjnFrame {
     frameId: string;
     epoch: string;
@@ -41,6 +59,18 @@ interface AjnApi {
     log(message: string): void;
     /** Host-owned declarative settings. Only the user/host can change them. */
     settings: { get(): Record<string, boolean | number | string> };
+    /** Requires network.connect plus destination consent. Saved credentials
+     * also require credentials.use. No redirects, cookies or OS credentials. */
+    network: {
+        selections(): { destinations: AjnNetworkDestination[] };
+        request(destinationId: string, options?: AjnHttpOptions): { requestId: string };
+        /** A completed/failed result is consumed exactly once and frees its slot. */
+        result(requestId: string): AjnNetworkResult;
+        /** Poll the terminal result to release the cancelled request's slot. */
+        cancel(requestId: string): void;
+        /** At most 16 KiB; success means sent, not acknowledged by the device. */
+        sendDatagram(destinationId: string, bytes: Uint8Array | string): { bytesSent: number };
+    };
     /** Timer events have data {timerId, elapsedMs, missedTicks}. All callbacks are
      * serialized. Missed ticks coalesce; eight timers and 60 background events/s. */
     timers: {

@@ -1,4 +1,4 @@
-// AJN API 1.2 transport, compatible with the 1.0 JSON-only methods. The host independently
+// AJN API 1.3 transport, compatible with the 1.0 JSON-only methods. The host independently
 // validates every message and permission even when an addon replaces this code.
 const __ajnSdk = (() => {
     const maximum = 128 * 1024;
@@ -60,6 +60,11 @@ const __ajnSdk = (() => {
         if (!frameResponse) return result;
         if (!result || !Number.isInteger(result.byteLength) || result.byteLength < 0 || result.byteLength > 320 * 180 * 4)
             throw new Error("Invalid AJN binary response length");
+        if (frameResponse === "network") {
+            if (result.byteLength > 65536 || !["pending", "completed", "failed"].includes(result.state) ||
+                (result.state !== "completed" && result.byteLength !== 0)) throw new Error("Invalid AJN network result");
+            return Object.assign({}, result, { body: readBytes(result.byteLength) });
+        }
         if (result.frame === null && result.byteLength === 0) return null;
         const frame = result.frame;
         if (!frame || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || frame.width < 1 || frame.width > 320 ||
@@ -67,10 +72,33 @@ const __ajnSdk = (() => {
             throw new Error("Invalid AJN sample metadata");
         return Object.assign({}, frame, { pixels: readBytes(result.byteLength) });
     }
+    function base64(bytes) {
+        if (typeof bytes === "string") bytes = encoder.encode(bytes);
+        if (!(bytes instanceof Uint8Array) || bytes.length > 32768) throw new Error("Expected at most 32768 network bytes");
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let text = "";
+        for (let i = 0; i < bytes.length; i += 3) {
+            const a = bytes[i], b = bytes[i + 1] || 0, c = bytes[i + 2] || 0;
+            text += alphabet[a >> 2] + alphabet[((a & 3) << 4) | (b >> 4)] +
+                (i + 1 < bytes.length ? alphabet[((b & 15) << 2) | (c >> 6)] : "=") +
+                (i + 2 < bytes.length ? alphabet[c & 63] : "=");
+        }
+        return text;
+    }
     const api = Object.freeze({
         info: () => request("host.info"),
         log: message => request("log.write", { message: String(message) }),
         settings: Object.freeze({ get: () => request("settings.get") }),
+        network: Object.freeze({
+            selections: () => request("network.selections"),
+            request: (destinationId, options = {}) => request("network.request", {
+                destinationId, method: options.method || "GET", path: options.path || "/", headers: options.headers || {},
+                bodyBase64: base64(options.body || new Uint8Array(0)), useCredential: options.useCredential === true,
+            }),
+            result: requestId => request("network.result", { requestId }, "network"),
+            cancel: requestId => request("network.cancel", { requestId }),
+            sendDatagram: (destinationId, bytes) => request("network.sendDatagram", { destinationId, bodyBase64: base64(bytes) }),
+        }),
         timers: Object.freeze({
             set: (timerId, intervalMs, repeat = true) => request("timers.set", { timerId, intervalMs, repeat }),
             clear: timerId => request("timers.clear", { timerId }),

@@ -17,6 +17,7 @@ public sealed class AddonService : IAsyncDisposable
         public PermissionGrant? Grant;
         public IAddonInstance? Worker;
         public string? Failure;
+        public (string Id, string Hash, NetworkDestination Destination, DateTime Expires)? DestinationReview;
         public readonly Queue<string> Logs = new();
         // 32 x 512 UTF-16 units fit the management response even when every
         // character needs a six-byte JSON escape.
@@ -25,17 +26,19 @@ public sealed class AddonService : IAsyncDisposable
     private readonly string root;
     private readonly AddonRegistry registry;
     private readonly MediaSelections? media;
+    private readonly NetworkSelections network;
     private readonly Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start;
     private readonly ConcurrentDictionary<string, Entry> entries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> clients = new(StringComparer.Ordinal);
     public bool HasRunningWorkers => entries.Values.Any(e => e.Worker is { IsStopped: false });
 
-    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null)
+    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null, NetworkSelections? networkSelections = null)
     {
         this.root = root;
         registry = new(root);
         this.start = start;
         this.media = media;
+        network = networkSelections ?? new(root);
     }
 
     public async Task<JsonNode?> InvokeAsync(string client, string method, JsonObject parameters, CancellationToken token)
@@ -49,7 +52,7 @@ public sealed class AddonService : IAsyncDisposable
                     try { await WithAsync(id, async entry => { await AutoActivateAsync(entry, client, token); return null; }, token); }
                     catch (Exception error) when (error is AddonException or IOException or UnauthorizedAccessException) { }
                 }
-            return new JsonObject { ["major"] = 1, ["minor"] = 1, ["nativeMediaAvailable"] = media is not null };
+            return new JsonObject { ["major"] = 1, ["minor"] = 2, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true, ["credentialsAvailable"] = OperatingSystem.IsWindows() };
         }
         Contract.Require(clients.ContainsKey(client), "handshake_required", "Complete manager.hello first.");
         switch (method)
@@ -92,7 +95,7 @@ public sealed class AddonService : IAsyncDisposable
             case "addons.stop":
                 return await WithAsync(Id(parameters), async entry => { await entry.Activation!.StopAsync(); return Summary(entry); }, token);
             case "addons.remove":
-                return await WithAsync(Id(parameters), async entry => { await ResetAsync(entry); new MediaSelections(root).Clear(Id(parameters)); registry.Disable(Id(parameters)); return null; }, token, load: false);
+                return await WithAsync(Id(parameters), async entry => { await ResetAsync(entry); new MediaSelections(root).Clear(Id(parameters)); network.Clear(Id(parameters)); registry.Disable(Id(parameters)); return null; }, token, load: false);
             case "addons.rollback":
                 return await WithAsync(Id(parameters), async entry =>
                 {
@@ -124,6 +127,47 @@ public sealed class AddonService : IAsyncDisposable
                 {
                     lock (entry.Logs) return Task.FromResult<JsonNode?>(new JsonArray(entry.Logs.Select(l => (JsonNode?)JsonValue.Create(l)).ToArray()));
                 }, token, load: false);
+            case "network.selections":
+                return await WithAsync(Id(parameters), entry => Task.FromResult<JsonNode?>(network.List(entry.Package!, entry.Grant!)), token);
+            case "network.inspectDestination":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters); entry.Grant!.Demand("network.connect");
+                    var destination = await NetworkDestination.InspectAsync(Contract.Text(parameters, "origin", 512), token);
+                    string reviewId = Guid.NewGuid().ToString("N");
+                    entry.DestinationReview = (reviewId, entry.Package!.Hash, destination, DateTime.UtcNow.AddMinutes(3));
+                    var description = destination.Describe(); description["reviewId"] = reviewId; return description;
+                }, token);
+            case "network.approveDestination":
+                return await WithAsync(Id(parameters), entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    var review = entry.DestinationReview;
+                    Contract.Require(review is not null && review.Value.Id == Contract.Text(parameters, "reviewId", 64) &&
+                        review.Value.Hash == entry.Package!.Hash && review.Value.Expires > DateTime.UtcNow,
+                        "review_expired", "Review the service address again before approving it.");
+                    string selected = network.Approve(entry.Package!, entry.Grant!, Contract.Text(parameters, "name", 100), review.Value.Destination);
+                    entry.DestinationReview = null; return Task.FromResult<JsonNode?>(new JsonObject { ["destinationId"] = selected });
+                }, token);
+            case "network.setCredential":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters); entry.Grant!.Demand("credentials.use");
+                    string selected = Contract.Text(parameters, "destinationId", 64), header = Contract.Text(parameters, "header", 64), value = Contract.Text(parameters, "value", 4096);
+                    network.ValidateCredential(entry.Package!, entry.Grant!, selected, header, value);
+                    await entry.Activation!.StopAsync();
+                    network.SetCredential(entry.Package!, entry.Grant!, selected, header, value);
+                    return null;
+                }, token);
+            case "network.revoke":
+            case "network.removeCredential":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    string selected = Contract.Text(parameters, "destinationId", 64);
+                    await entry.Activation!.StopAsync(); network.Revoke(entry.Package!, entry.Grant!, selected, method == "network.removeCredential");
+                    return null;
+                }, token);
             case "media.selections":
                 return await WithAsync(Id(parameters), entry => Task.FromResult<JsonNode?>(Media().List(entry.Package!, entry.Grant!, includePaths: true)), token);
             case "media.approveSource":
@@ -212,6 +256,8 @@ public sealed class AddonService : IAsyncDisposable
         ["hash"] = entry.Package.Hash, ["running"] = entry.Worker is { IsStopped: false }, ["error"] = entry.Failure ?? (entry.Worker as AddonWorker)?.Failure,
         ["manual"] = (entry.Package.Manifest.Activation ?? ["manual"]).Contains("manual", StringComparer.Ordinal),
         ["mediaPermission"] = entry.Grant!.Allowed.Contains("sessions.manage", StringComparer.Ordinal),
+        ["networkPermission"] = entry.Grant!.Allowed.Contains("network.connect", StringComparer.Ordinal),
+        ["credentialPermission"] = entry.Grant!.Allowed.Contains("credentials.use", StringComparer.Ordinal),
     };
 
     private static async Task AutoActivateAsync(Entry entry, string client, CancellationToken token)
@@ -236,7 +282,7 @@ public sealed class AddonService : IAsyncDisposable
     private static async Task ResetAsync(Entry entry)
     {
         if (entry.Activation is not null) await entry.Activation.DisposeAsync();
-        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Grant = null; entry.Failure = null;
+        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Grant = null; entry.Failure = null; entry.DestinationReview = null;
     }
 
     public async ValueTask DisposeAsync()

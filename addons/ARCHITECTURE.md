@@ -13,7 +13,7 @@ flowchart LR
     Host -. future granted destinations .-> Devices[Services / devices]
 ```
 
-Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes a separate trusted management protocol over a Windows named pipe. Native sessions and SDR DirectML samples are integrated; network and media-output adapters remain work. The CLI and service use the same package, grant, settings, broker, and worker classes.
+Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes trusted management over a Windows named pipe. Native sessions, SDR DirectML samples and scoped HTTP/UDP are integrated; media output and other transports remain work. The CLI and service use the same package, grant, settings, broker, and worker classes.
 
 The management pipe permits its Windows owner and explicitly denies network logons. The complete ACL is applied at creation, and the initial listener uses FirstPipeInstance. Both ends verify ownership. The host holds an exclusive data-directory lease; eight management connections share its addon controllers, and list responses are paginated. Manager commands are never exposed on a guest worker's channel. See [MANAGEMENT.md](MANAGEMENT.md).
 
@@ -39,7 +39,7 @@ Keep inference, decoding, frame ownership, sampling/downscaling, encoding, and G
 
 The first real producer negotiates processed BGRA8 SDR samples up to 320x180 and 60 Hz. Its private D3D11 filter preserves the original frame, retains at most one sample source through GPU completion, and skips when busy. An unnamed mapping connects only the trusted native worker and host; validated binary copies reach Wasm. Subscription ownership follows session ownership, seeks invalidate old epochs, and unsubscribe/close disables capture. Host timers serialize periodic callbacks and coalesce missed ticks. Post-filter frames are not automatically the final tone-mapped, subtitle-composited display image. [FRAMES.md](FRAMES.md) records the exact semantics and remaining format limits.
 
-Network permissions need user-selected destinations, protocols, operation limits, and separate listening/discovery grants. The guest runtime remains without general network access; broker adapters enforce each destination. Credential storage and scoped service operations belong in trusted code. Existing proposals' localhost ports, single Plex stream, optional external configuration executables, and Plex-specific UI are not platform requirements.
+Network permissions use user-selected destinations, protocols and limits. HTTP/UDP adapters pin reviewed addresses and enforce ownership, cancellation and bounded payloads. HTTP header credentials use Windows DPAPI and their approved service. Wasm remains without general network access. Other transports and listening/discovery need separate capabilities and consent. See [NETWORK.md](NETWORK.md). Earlier proposals' fixed localhost ports, single Plex stream and external configuration executables are not platform requirements.
 
 ## Sources used for runtime design
 

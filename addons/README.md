@@ -8,9 +8,11 @@ This is the first working part of the AJN addon framework. It combines the earli
 
 **Frame samples now work:** an optional native filter reduces SDR DirectML images on the GPU and sends bounded binary samples through the host to Wasm. Host timers provide serialized callbacks, with missed ticks coalesced. Tests exercise actual moving images, two concurrent upscaling sessions, independent pause/seek, permission checks and cleanup. See [FRAMES.md](FRAMES.md) and the generic sample inspector.
 
-**Not connected yet:** media encoding/output, device/network access, credentials, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux worker enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+**Service access now works:** Manager reviews HTTP/HTTPS/UDP destinations, and the broker enforces their pinned addresses, deadlines and limits. HTTP is asynchronous with bounded binary responses. Optional headers are protected for the Windows user and attached only to their approved service. See [NETWORK.md](NETWORK.md) and the service inspector.
 
-API 1.2 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0/1.1 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+**Not connected yet:** media encoding/output, TCP/TLS/WebSockets, listeners/discovery, player/login activation, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+
+API 1.3 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0/1.1/1.2 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 

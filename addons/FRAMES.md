@@ -62,7 +62,8 @@ the original video image from continuing through the pipeline.
 
 ## Binary wire extension
 
-Only a successful `frames.read` response opts into binary framing:
+Frame reads opt into binary framing on a successful `frames.read` response
+(API 1.3 also uses this envelope for [network results](NETWORK.md)):
 
 ```json
 {"jsonrpc":"2.0","id":3,"result":{"frame":{"width":64,"height":36,"format":"bgra8","stage":"processed"},"byteLength":9216}}

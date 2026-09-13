@@ -2,6 +2,10 @@
 
 This standalone Windows x64 developer preview exercises the addon host. .NET is included; no SDK or GPU setup is required to run the counter example. Native sessions and frame samples additionally require a matching AJN installation and explicit media/profile approvals; see `NATIVE-MEDIA.md` and `FRAMES.md`, or use the integrated preview. The generic sample inspector exercises binary image samples and host timers. Plex and lighting addons are not included.
 
+The service inspector exercises approved HTTP/UDP destinations and optional
+saved header credentials. Use Manager to review access before invoking its
+request action. It sends nothing on startup; see `NETWORK.md` for its limits.
+
 Extract the ZIP to a writable folder. Open PowerShell 7 there and run:
 
 ```powershell

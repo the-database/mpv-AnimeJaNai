@@ -1,4 +1,4 @@
-# Trusted management protocol 1.1 preview
+# Trusted management protocol 1.2 preview
 
 This protocol connects AJN Manager to the persistent host. It is **not** an addon capability. Guests only receive their private broker channel and cannot install packages, edit grants, or control another addon through it.
 
@@ -32,6 +32,18 @@ Messages use the guest protocol's bounded JSON-RPC profile: UTF-8 JSON objects, 
 | `media.approveSource` | `{id,expectedHash,path}` | Approve one local file for the reviewed addon package |
 | `media.approveProfile` | `{id,expectedHash,name,slot,backend,configuration}` | Save an immutable profile configuration snapshot |
 | `media.revoke` | `{id,expectedHash,kind,selectionId}` | Stop and drain the addon before removing one source/profile approval |
+| `network.selections` | `{id}` | Approved destinations and credential metadata, never values |
+| `network.inspectDestination` | `{id,expectedHash,origin}` | Resolve and return a canonical destination plus a single-use three-minute review ID |
+| `network.approveDestination` | `{id,expectedHash,reviewId,name}` | Approve the reviewed protocol, origin and pinned addresses |
+| `network.setCredential` | `{id,expectedHash,destinationId,header,value}` | Validate, stop addon and protect the header for this service |
+| `network.removeCredential` | `{id,expectedHash,destinationId}` | Stop/drain; remove only the saved header |
+| `network.revoke` | `{id,expectedHash,destinationId}` | Stop/drain; remove destination and credential |
+
+Management 1.2 adds `networkAvailable` and `credentialsAvailable` hello flags,
+and `networkPermission`/`credentialPermission` summary fields. These are trusted
+UI operations, distinct from guest `network.*` methods. Reviewed addresses stay
+in host memory until approval; client parameters cannot replace them. See
+[NETWORK.md](NETWORK.md) for the authority and credential limits.
 
 The four media operations require a configured native provider and the addon's `sessions.manage` grant. `manager.hello` includes `nativeMediaAvailable`; addon summaries include `mediaPermission`. The standalone client exposes a copy of the hello result in `ServerInfo`. Resource consent uses the currently reviewed addon hash, so changing the installed version while a dialog is open causes rejection. See [NATIVE-MEDIA.md](NATIVE-MEDIA.md) for provider setup and resource limits.
 

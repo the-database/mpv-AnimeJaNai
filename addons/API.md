@@ -1,4 +1,4 @@
-# Addon API 1.2 preview
+# Addon API 1.3 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -37,7 +37,7 @@ While processing it, the guest may issue broker requests and wait for their repl
 
 The SDK handles `host.ping` internally. User handlers receive `start`, `stop`, `action` with `{ id }`, `settings.changed`, requested `timer` events, and explicit developer replay events. Additive event-data fields must be ignored unless used. Callback failures stop that worker. A host heartbeat every five seconds detects a guest that stops servicing messages after an event.
 
-API 1.2 adds a binary tail only for successful `frames.read` responses. The JSON result declares `byteLength`; exactly that many raw bytes follow the newline. All other messages remain JSON-only. See [FRAMES.md](FRAMES.md) for framing, sample metadata, supported stages and timer scheduling.
+API 1.2 adds a binary tail for successful `frames.read` responses; API 1.3 adds one for `network.result`. The JSON declares `byteLength`; exactly that many bytes follow the newline. Other messages remain JSON-only. See [FRAMES.md](FRAMES.md) and [NETWORK.md](NETWORK.md).
 
 Errors use standard integer JSON-RPC error codes and an AJN-specific string at `error.data.code`, such as `permission_denied`, `storage_quota`, `capacity_exceeded`, or `feature_unavailable`. Invalid transport/protocol messages stop the worker; valid broker requests that are denied receive a structured error and may be handled by the addon. The JavaScript SDK exposes the string as `error.code`.
 
@@ -62,6 +62,11 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 | `frames.unsubscribe` | `{ subscriptionId }` | `frames.read` + `sessions.manage` | `null`; releases the sample subscription |
 | `timers.set` | `{ timerId, intervalMs, repeat }` | None | `null`; creates/replaces a bounded timer; timers 1.0 |
 | `timers.clear` | `{ timerId }` | None | `null`; cancels the timer |
+| `network.selections` | `{}` | `network.connect` | Approved destination IDs and metadata; network 1.0 |
+| `network.request` | `{ destinationId, method, path, headers, bodyBase64, useCredential }` | `network.connect`; `credentials.use` when requested | `{ requestId }`; bounded asynchronous HTTP |
+| `network.result` | `{ requestId }` | `network.connect` | Pending/completed/failed status and `byteLength`, then binary body |
+| `network.cancel` | `{ requestId }` | `network.connect` | `null`; read terminal result to free the slot |
+| `network.sendDatagram` | `{ destinationId, bodyBase64 }` | `network.connect` | `{ bytesSent }`; approved UDP destination only |
 
 Private storage is separated by addon ID: maximum 256 keys, 32 KiB per value, 1 MiB total. A stored null and a missing key both read as null in this preview. Saving one key is atomic; a read-modify-write sequence is not a transaction across distinct worker instances. The embedding host should create one activation controller per addon ID.
 

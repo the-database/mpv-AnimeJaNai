@@ -11,10 +11,11 @@ public sealed class Broker : IAsyncDisposable
     private readonly SessionRegistry? sessions;
     private readonly Action<string> log;
     private readonly SessionRegistry.Owner? owner;
+    private readonly NetworkAccess network;
     private volatile bool disposed;
     internal AddonTimers Timers { get; } = new();
 
-    public Broker(AddonPackage package, PermissionGrant grant, string dataRoot, Action<string>? log = null, SessionRegistry? sessions = null)
+    public Broker(AddonPackage package, PermissionGrant grant, string dataRoot, Action<string>? log = null, SessionRegistry? sessions = null, NetworkSelections? networkSelections = null)
     {
         Contract.Require(package.Hash == grant.PackageHash, "invalid_grant", "Permissions belong to a different package.");
         this.package = package;
@@ -22,6 +23,7 @@ public sealed class Broker : IAsyncDisposable
         this.log = log ?? (_ => { });
         this.sessions = sessions;
         owner = sessions?.CreateOwner(package, grant);
+        network = new(package, grant, networkSelections ?? new(dataRoot));
         foreach (var (name, requirement) in package.Manifest.RequiredCapabilities ?? [])
             Contract.Require(AvailableCapabilities().Contains(name) && requirement.Major == 1 && requirement.MinMinor <= CapabilityMinor(name),
                 "missing_capability", $"Required capability is unavailable: {name}.");
@@ -30,8 +32,9 @@ public sealed class Broker : IAsyncDisposable
         _ = settings.Get();
     }
 
-    private string[] AvailableCapabilities() => sessions is null ? ["host", "storage", "logging", "settings", "timers"] :
-        sessions.SupportsFrames(owner!) ? ["host", "storage", "logging", "settings", "timers", "sessions", "frames"] : ["host", "storage", "logging", "settings", "timers", "sessions"];
+    private string[] AvailableCapabilities() => ["host", "storage", "logging", "settings", "timers", "network",
+        .. OperatingSystem.IsWindows() ? new[] { "credentials" } : [],
+        .. sessions is null ? [] : sessions.SupportsFrames(owner!) ? new[] { "sessions", "frames" } : ["sessions"]];
     private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
@@ -46,6 +49,12 @@ public sealed class Broker : IAsyncDisposable
 
     public async Task<BrokerResponse> InvokeTransportAsync(string method, JsonObject parameters, CancellationToken token)
     {
+        if (method == "network.result")
+        {
+            token.ThrowIfCancellationRequested();
+            Contract.Require(!disposed, "owner_closed", "Addon instance has stopped.");
+            return network.Result(Contract.Text(parameters, "requestId", 64));
+        }
         if (method != "frames.read") return new(await InvokeAsync(method, parameters, token));
         token.ThrowIfCancellationRequested();
         Contract.Require(!disposed, "owner_closed", "Addon instance has stopped.");
@@ -62,6 +71,11 @@ public sealed class Broker : IAsyncDisposable
         {
             case "host.info": return Info();
             case "settings.get": return settings.Get();
+            case "network.selections": return network.List();
+            case "network.request": return new JsonObject { ["requestId"] = network.Request(parameters) };
+            case "network.result": throw new AddonException("binary_transport_required", "Network results require the binary response transport.");
+            case "network.cancel": network.Cancel(Contract.Text(parameters, "requestId", 64)); return null;
+            case "network.sendDatagram": return new JsonObject { ["bytesSent"] = await network.SendDatagramAsync(parameters, cancellationToken) };
             case "timers.set":
                 long interval = Contract.Number(parameters, "intervalMs");
                 Contract.Require(interval is >= 16 and <= 3_600_000 && parameters["repeat"] is JsonValue repeat && repeat.TryGetValue<bool>(out _), "invalid_request", "Invalid timer interval or repeat value.");
@@ -139,6 +153,6 @@ public sealed class Broker : IAsyncDisposable
     {
         disposed = true;
         Timers.Close();
-        if (sessions is not null) await sessions.ReleaseOwnerAsync(owner!);
+        await Task.WhenAll(network.DisposeAsync().AsTask(), sessions is null ? Task.CompletedTask : sessions.ReleaseOwnerAsync(owner!));
     }
 }

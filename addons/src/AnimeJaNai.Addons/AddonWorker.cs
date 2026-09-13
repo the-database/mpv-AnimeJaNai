@@ -38,7 +38,7 @@ public sealed class AddonWorker : IAddonInstance
 
     public static async Task<AddonWorker> StartAsync(AddonPackage package, PermissionGrant grant, string runtime,
         string workRoot, string dataRoot, WorkerCommand command, Action<string>? log = null,
-        SessionRegistry? sessions = null, TimeSpan? eventTimeout = null, CancellationToken cancellationToken = default)
+        SessionRegistry? sessions = null, TimeSpan? eventTimeout = null, CancellationToken cancellationToken = default, NetworkSelections? networkSelections = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("This host currently enforces worker resource limits on Windows only.");
         WorkerBridge.VerifyRuntime(runtime);
@@ -51,7 +51,7 @@ public sealed class AddonWorker : IAddonInstance
         AddonWorker? worker = null;
         try
         {
-            broker = new Broker(package, grant, dataRoot, log, sessions);
+            broker = new Broker(package, grant, dataRoot, log, sessions, networkSelections);
             job = new WindowsJob();
             directory = SafeFiles.DirectoryPath(workRoot, "worker-" + Guid.NewGuid().ToString("N"));
             string module = Path.Combine(directory, "module.wasm");
@@ -146,10 +146,14 @@ public sealed class AddonWorker : IAddonInstance
                 ReadOnlyMemory<byte> binary = default;
                 try
                 {
-                    var result = await Task.Run(() => broker.InvokeTransportAsync(method, (JsonObject)message["params"]!, token), token).WaitAsync(token);
                     if (Stopwatch.GetElapsedTime(binaryWindow) >= TimeSpan.FromSeconds(1)) { binaryWindow = Stopwatch.GetTimestamp(); binaryBytes = 0; }
+                    // HTTP results are consumed once. Reserve their maximum
+                    // before consuming, so sample traffic cannot discard one.
+                    if (method == "network.result") Contract.Require(binaryBytes + NetworkAccess.MaxResponseBytes <= 16 * 1024 * 1024,
+                        "bandwidth_exceeded", "Binary response budget is full. Read the network result after reducing sample traffic.");
+                    var result = await Task.Run(() => broker.InvokeTransportAsync(method, (JsonObject)message["params"]!, token), token).WaitAsync(token);
                     Contract.Require(result.Binary.Length <= FrameRequest.MaxBytes && binaryBytes + result.Binary.Length <= 16 * 1024 * 1024,
-                        "bandwidth_exceeded", "Addon binary samples exceeded 16 MiB in this one-second window. Reduce the sample size or rate.");
+                        "bandwidth_exceeded", "Addon binary responses exceeded 16 MiB in this one-second window. Reduce the size or rate.");
                     binaryBytes += result.Binary.Length;
                     response = JsonRpc.Result(id, result.Result);
                     binary = result.Binary;

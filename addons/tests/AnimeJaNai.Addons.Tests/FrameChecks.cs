@@ -124,7 +124,7 @@ internal static partial class Checks
 
     private static async Task FrameRuntimeChecks(string runtime, string compiler, string dotnet)
     {
-        await Test("Previously distributed API 1.0 binary runs unchanged on API 1.2 and preserves saved state", async () =>
+        await Test("Previously distributed API 1.0 binary runs unchanged on the current host and preserves saved state", async () =>
         {
             var old = AddonPackage.Load(Path.Combine(AppContext.BaseDirectory, "fixtures", "counter-api-1.0.ajnaddon"));
             True(old.Hash == "a3aa62100ff02639763294c4963e7ad335db78052a7b58c9def1617857e21317" && old.Manifest.Api.MinMinor == 0);
