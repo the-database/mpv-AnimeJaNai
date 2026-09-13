@@ -340,20 +340,22 @@ void SyncInputConf()
         {
             var binds = File.ReadAllLines(userConf)
                 .Where(l => l.Trim().Length > 0 && !l.TrimStart().StartsWith("#")).ToList();
-            if (binds.Count > 0)
+            const string migrationMarker = "# Migrated from input-user.conf (retired in 3.4.0):";
+            int previous = userSection.LastIndexOf(migrationMarker);
+            bool alreadyMigrated = previous >= 0 &&
+                userSection.Skip(previous + 1).Take(binds.Count).SequenceEqual(binds);
+            if (binds.Count > 0 && !alreadyMigrated)
             {
                 userSection.Add("");
-                userSection.Add("# Migrated from input-user.conf (retired in 3.4.0):");
+                userSection.Add(migrationMarker);
                 userSection.AddRange(binds);
             }
-            try { File.Delete(userConf); } catch { }
             migrated = true;
         }
-        // The loader script that applied input-user.conf is no longer needed.
-        try { File.Delete(Path.Combine(pc, "scripts", "animejanai_userinput.lua")); } catch { }
 
         if (currentBlock == newBlock && !migrated)
         {
+            try { File.Delete(Path.Combine(pc, "scripts", "animejanai_userinput.lua")); } catch { }
             return;  // block already current and nothing to migrate
         }
 
@@ -362,12 +364,33 @@ void SyncInputConf()
         rebuilt.AddRange(newBlock.Split('\n'));
         rebuilt.Add(lines[end]);                         // the END marker line
         rebuilt.AddRange(userSection);
-        File.WriteAllText(inputConf, string.Join(nl, rebuilt));
+        // Keep the old bindings and loader until the replacement is on disk.
+        // Writing beside the destination also avoids truncating it on failure.
+        string pending = inputConf + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(pending, string.Join(nl, rebuilt));
+            File.Move(pending, inputConf, overwrite: true);
+        }
+        finally
+        {
+            try { File.Delete(pending); } catch { }
+        }
+        if (migrated)
+        {
+            try { File.Delete(userConf); } catch { }
+        }
+        try { File.Delete(Path.Combine(pc, "scripts", "animejanai_userinput.lua")); } catch { }
         Console.WriteLine(migrated
-            ? "INPUT_CONF_SYNCED (managed block refreshed; input-user.conf folded in and retired)"
+            ? File.Exists(userConf)
+                ? "INPUT_CONF_SYNCED (bindings migrated; input-user.conf retirement will be retried)"
+                : "INPUT_CONF_SYNCED (managed block refreshed; input-user.conf folded in and retired)"
             : "INPUT_CONF_SYNCED (managed keybindings block refreshed)");
     }
-    catch { /* must never break --check */ }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"INPUT_CONF_SYNC_FAILED (original bindings retained): {ex.Message}");
+    }
 }
 
 // The SD model was re-exported at ONNX opset 21 (the op23 build fell back to the
@@ -754,11 +777,29 @@ string ReadLocalVersion()
     return File.Exists(path) ? File.ReadAllText(path).Trim() : "0.0.0";
 }
 
-async Task<Release> GetLatestReleaseAsync()
+Task<Release> GetLatestReleaseAsync() => GetReleaseAsync(apiLatest);
+
+// A test/core-only package may reuse an explicitly pinned component release
+// when its inference/runtime/model dependencies are unchanged. Normal packages
+// omit this field and resolve components against their own installed version.
+string ReadComponentVersion() => ReadManifestString(
+    localManifest, "component_package_version", ReadLocalVersion()).Trim();
+
+Task<Release> GetInstalledReleaseAsync()
 {
-    using var client = new HttpClient();
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("AnimeJaNaiUpdater");
-    string json = await client.GetStringAsync(apiLatest);
+    string tag = ReadComponentVersion();
+    if (string.IsNullOrWhiteSpace(tag) || tag == "0.0.0")
+    {
+        throw new InvalidOperationException(
+            "Cannot select component packs: the installed component version is missing or empty.");
+    }
+    return GetReleaseAsync($"https://api.github.com/repos/{Repo}/releases/tags/{Uri.EscapeDataString(tag)}");
+}
+
+async Task<Release> GetReleaseAsync(string url)
+{
+    using var client = NewClient();
+    string json = await client.GetStringAsync(url);
     using var doc = JsonDocument.Parse(json);
     var root = doc.RootElement;
     string tag = root.GetProperty("tag_name").GetString() ?? "";
@@ -865,7 +906,9 @@ async Task<PackIndex> GetPackIndexAsync()
     }
     else
     {
-        var release = await GetLatestReleaseAsync();
+        // Packs must match this installation, including prereleases and older
+        // versions. The latest endpoint is only for updating the application.
+        var release = await GetInstalledReleaseAsync();
         // packs index is RID-suffixed on Linux (packs-linux-x64.json) so it can
         // coexist with the Windows packs.json on a shared release; its "asset"
         // fields already carry the matching component-*-<rid>.7z names.
@@ -873,7 +916,7 @@ async Task<PackIndex> GetPackIndexAsync()
         var idx = release.Assets.FirstOrDefault(a => a.Name == packsName)
             ?? release.Assets.FirstOrDefault(a => a.Name == "packs.json")
             ?? throw new InvalidOperationException(
-                "The latest release publishes no component packs (packs.json missing).");
+                $"Release {release.Tag} publishes no component packs (packs.json missing).");
         using var client = NewClient();
         json = await client.GetStringAsync(idx.Url);
         assets = release.Assets;
@@ -973,9 +1016,9 @@ void WriteInstalledComponents(Dictionary<string, string> installed)
 
 string? PackVersionMismatch(PackIndex index)
 {
-    string localVersion = ReadManifestString(localManifest, "package_version", "");
+    string localVersion = ReadComponentVersion();
     return localVersion != "" && index.PackageVersion != "" && localVersion != index.PackageVersion
-        ? $"Installed package is v{localVersion} but the published packs are for v{index.PackageVersion}."
+        ? $"This installation selects component release v{localVersion} but the published packs are for v{index.PackageVersion}."
         : null;
 }
 
@@ -1093,7 +1136,7 @@ async Task<int> InstallComponentAsync(string name)
     }
     if (pack.Url is null)
     {
-        Console.WriteLine($"Pack '{name}' has no downloadable asset on the latest release.");
+        Console.WriteLine($"Pack '{name}' has no downloadable asset on the selected release.");
         return 1;
     }
     if (PackVersionMismatch(index) is string warn)
