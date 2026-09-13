@@ -103,7 +103,6 @@ public sealed class AddonActivation : IAsyncDisposable
     private async Task StopInstanceAsync(string reason)
     {
         var closing = instance;
-        instance = null;
         if (closing is null) return;
         try
         {
@@ -115,6 +114,9 @@ public sealed class AddonActivation : IAsyncDisposable
         }
         catch (Exception error) when (error is AddonException or OperationCanceledException or IOException) { }
         finally { await closing.DisposeAsync(); }
+        // Keep the stopped instance if disposal fails so a later stop/revoke
+        // can retry cleanup instead of losing ownership of native resources.
+        instance = null;
     }
 
     public async ValueTask DisposeAsync()

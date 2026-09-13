@@ -14,6 +14,7 @@ public sealed class AddonService : IAsyncDisposable
         public int Users;
         public AddonActivation? Activation;
         public AddonPackage? Package;
+        public PermissionGrant? Grant;
         public IAddonInstance? Worker;
         public string? Failure;
         public readonly Queue<string> Logs = new();
@@ -23,16 +24,18 @@ public sealed class AddonService : IAsyncDisposable
     }
     private readonly string root;
     private readonly AddonRegistry registry;
+    private readonly MediaSelections? media;
     private readonly Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start;
     private readonly ConcurrentDictionary<string, Entry> entries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> clients = new(StringComparer.Ordinal);
     public bool HasRunningWorkers => entries.Values.Any(e => e.Worker is { IsStopped: false });
 
-    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start)
+    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null)
     {
         this.root = root;
         registry = new(root);
         this.start = start;
+        this.media = media;
     }
 
     public async Task<JsonNode?> InvokeAsync(string client, string method, JsonObject parameters, CancellationToken token)
@@ -46,7 +49,7 @@ public sealed class AddonService : IAsyncDisposable
                     try { await WithAsync(id, async entry => { await AutoActivateAsync(entry, client, token); return null; }, token); }
                     catch (Exception error) when (error is AddonException or IOException or UnauthorizedAccessException) { }
                 }
-            return new JsonObject { ["major"] = 1, ["minor"] = 0, ["nativeMediaAvailable"] = false };
+            return new JsonObject { ["major"] = 1, ["minor"] = 1, ["nativeMediaAvailable"] = media is not null };
         }
         Contract.Require(clients.ContainsKey(client), "handshake_required", "Complete manager.hello first.");
         switch (method)
@@ -89,7 +92,7 @@ public sealed class AddonService : IAsyncDisposable
             case "addons.stop":
                 return await WithAsync(Id(parameters), async entry => { await entry.Activation!.StopAsync(); return Summary(entry); }, token);
             case "addons.remove":
-                return await WithAsync(Id(parameters), async entry => { await ResetAsync(entry); registry.Disable(Id(parameters)); return null; }, token, load: false);
+                return await WithAsync(Id(parameters), async entry => { await ResetAsync(entry); new MediaSelections(root).Clear(Id(parameters)); registry.Disable(Id(parameters)); return null; }, token, load: false);
             case "addons.rollback":
                 return await WithAsync(Id(parameters), async entry =>
                 {
@@ -121,11 +124,42 @@ public sealed class AddonService : IAsyncDisposable
                 {
                     lock (entry.Logs) return Task.FromResult<JsonNode?>(new JsonArray(entry.Logs.Select(l => (JsonNode?)JsonValue.Create(l)).ToArray()));
                 }, token, load: false);
+            case "media.selections":
+                return await WithAsync(Id(parameters), entry => Task.FromResult<JsonNode?>(Media().List(entry.Package!, entry.Grant!, includePaths: true)), token);
+            case "media.approveSource":
+                return await WithAsync(Id(parameters), entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    return Task.FromResult<JsonNode?>(new JsonObject { ["sourceId"] = Media().ApproveSource(entry.Package!, entry.Grant!, Contract.Text(parameters, "path", 1024)) });
+                }, token);
+            case "media.approveProfile":
+                return await WithAsync(Id(parameters), entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    long slot = Contract.Number(parameters, "slot");
+                    Contract.Require(slot is >= 1 and <= 1013, "invalid_profile", "Invalid slot.");
+                    return Task.FromResult<JsonNode?>(new JsonObject { ["profileId"] = Media().ApproveProfile(entry.Package!, entry.Grant!,
+                        Contract.Text(parameters, "name", 128), (int)slot, Contract.Text(parameters, "backend", 32), Contract.Text(parameters, "configuration", 50000)) });
+                }, token);
+            case "media.revoke":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    var selectedMedia = Media();
+                    string kind = Contract.Text(parameters, "kind", 16), selectedId = Contract.Text(parameters, "selectionId", 64);
+                    Contract.Require(kind is "source" or "profile", "invalid_request", "Unknown media approval kind.");
+                    await entry.Activation!.StopAsync();
+                    selectedMedia.Revoke(entry.Package!, entry.Grant!, kind, selectedId);
+                    return null;
+                }, token);
             default: throw new AddonException("unknown_method", "Unknown management operation.");
         }
     }
 
     private static string Id(JsonObject parameters) => Contract.Text(parameters, "id", 100);
+    private MediaSelections Media() => media ?? throw new AddonException("feature_unavailable", "This host does not include native media sessions.");
+    private static void DemandReviewed(Entry entry, JsonObject parameters) => Contract.Require(
+        entry.Package!.Hash == Contract.Text(parameters, "expectedHash", 64), "integrity_mismatch", "Addon changed since resource consent was reviewed. Refresh and review it again.");
 
     private async Task<JsonNode?> WithAsync(string id, Func<Entry, Task<JsonNode?>> action, CancellationToken token, bool load = true)
     {
@@ -162,6 +196,7 @@ public sealed class AddonService : IAsyncDisposable
     {
         var (package, grant) = registry.Load(id);
         entry.Package = package;
+        entry.Grant = grant;
         entry.Activation = new(package, async token =>
         {
             entry.Failure = null;
@@ -176,6 +211,7 @@ public sealed class AddonService : IAsyncDisposable
         ["id"] = entry.Package!.Manifest.Id, ["name"] = entry.Package.Manifest.Name, ["version"] = entry.Package.Manifest.Version,
         ["hash"] = entry.Package.Hash, ["running"] = entry.Worker is { IsStopped: false }, ["error"] = entry.Failure ?? (entry.Worker as AddonWorker)?.Failure,
         ["manual"] = (entry.Package.Manifest.Activation ?? ["manual"]).Contains("manual", StringComparer.Ordinal),
+        ["mediaPermission"] = entry.Grant!.Allowed.Contains("sessions.manage", StringComparer.Ordinal),
     };
 
     private static async Task AutoActivateAsync(Entry entry, string client, CancellationToken token)
@@ -200,7 +236,7 @@ public sealed class AddonService : IAsyncDisposable
     private static async Task ResetAsync(Entry entry)
     {
         if (entry.Activation is not null) await entry.Activation.DisposeAsync();
-        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Failure = null;
+        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Grant = null; entry.Failure = null;
     }
 
     public async ValueTask DisposeAsync()

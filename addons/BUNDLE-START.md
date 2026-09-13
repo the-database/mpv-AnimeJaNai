@@ -1,6 +1,6 @@
 # Try the addon foundation
 
-This standalone Windows x64 developer preview exercises the addon host. It does not change your AJN installation or provide video, Plex, or lighting functionality yet. .NET is included; no SDK or GPU setup is required to run the bundled example.
+This standalone Windows x64 developer preview exercises the addon host. .NET is included; no SDK or GPU setup is required to run the counter example. Native sessions additionally require a matching AJN installation and explicit media/profile approvals; see `NATIVE-MEDIA.md` or use the integrated native-media preview. Plex and lighting addons are not included.
 
 Extract the ZIP to a writable folder. Open PowerShell 7 there and run:
 

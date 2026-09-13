@@ -12,7 +12,7 @@ using System.Security.Principal;
 
 return await Checks.RunAsync(args);
 
-internal static class Checks
+internal static partial class Checks
 {
     private static readonly List<object> results = [];
     private static string root = "";
@@ -62,6 +62,7 @@ internal static class Checks
         await SettingsAndActivationChecks();
         await ChannelChecks();
         await SessionChecks();
+        await MediaSelectionChecks();
         if (OperatingSystem.IsWindows()) await ManagementChecks();
         if (args.Length == 4) await RuntimeChecks(args[1], args[2], args[3]);
         string report = Path.Combine(root, "results.json");
@@ -112,7 +113,8 @@ internal static class Checks
         await Test("Manifest compatibility and optional metadata", async () =>
         {
             await Error("incompatible_api", () => (Manifest() with { Api = new() { Major = 2, MinMinor = 0 } }).Validate());
-            await Error("incompatible_api", () => (Manifest() with { Api = new() { Major = 1, MinMinor = 1 } }).Validate());
+            (Manifest() with { Api = new() { Major = 1, MinMinor = Contract.Minor } }).Validate();
+            await Error("incompatible_api", () => (Manifest() with { Api = new() { Major = 1, MinMinor = Contract.Minor + 1 } }).Validate());
             await Error("invalid_manifest", () => Manifest(permissions: ["files.write"]).Validate());
             var obj = Contract.ParseObject(ManifestBytes()); obj["futureOptionalMetadata"] = new JsonObject { ["description"] = "accepted" };
             True(AddonPackage.Read(Zip(("manifest.json", Encoding.UTF8.GetBytes(obj.ToJsonString()), 0), ("module.wasm", EmptyModule, 0))).Manifest.Metadata!.ContainsKey("futureOptionalMetadata"));
@@ -445,6 +447,25 @@ internal static class Checks
             Same(JsonValue.Create(true), await worker.SendEventAsync("idlehang"));
             for (int i = 0; i < 450 && !worker.IsStopped; i++) await Task.Delay(20);
             True(worker.IsStopped, "Idle worker was not stopped by its heartbeat");
+        });
+        await Test("Actual worker retries failed processing cleanup without losing resource ownership", async () =>
+        {
+            var provider = new LateProvider(); var sessions = new SessionRegistry(provider, 1, 1);
+            var worker = await AddonWorker.StartAsync(fixture, new(fixture, ["sessions.manage"]), runtime,
+                Path.Combine(directory, "workers"), directory, command, sessions: sessions);
+            try
+            {
+                _ = await worker.SendEventAsync("open");
+                try { await worker.DisposeAsync(); throw new Exception("Expected failed processing cleanup"); }
+                catch (AggregateException) { }
+                var owner = sessions.CreateOwner();
+                await Error("capacity_exceeded", () => sessions.OpenAsync(owner, "selected", null, default));
+                provider.Session.FailClose = false;
+                await worker.DisposeAsync();
+                _ = await sessions.OpenAsync(owner, "selected", null, default);
+                await sessions.ReleaseOwnerAsync(owner);
+            }
+            finally { provider.Session.FailClose = false; await worker.DisposeAsync(); }
         });
         await Test("Invalid startup cleans up and does not consume worker capacity", async () =>
         {

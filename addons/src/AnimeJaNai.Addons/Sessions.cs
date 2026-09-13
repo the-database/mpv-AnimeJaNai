@@ -10,9 +10,29 @@ public interface IProcessingSession : IAsyncDisposable
     Task<JsonObject> GetStatusAsync(CancellationToken cancellationToken);
 }
 
+public interface IControllableProcessingSession : IProcessingSession
+{
+    Task PauseAsync(bool paused, CancellationToken cancellationToken);
+    Task SeekAsync(double seconds, CancellationToken cancellationToken);
+}
+
+public interface IProcessingSelectionProvider
+{
+    JsonObject ListSelections();
+}
+
+// A provider can hand cleanup ownership back even if starting the resource
+// failed. The registry retains the resource if cleanup also needs a retry.
+public sealed class ProcessingSessionStartException(IProcessingSession session, Exception cause) : Exception("Processing session start needs cleanup.", cause)
+{
+    public IProcessingSession Session { get; } = session;
+}
+
 public interface IProcessingSessionProvider
 {
+    int ApiMinor => 0;
     Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken cancellationToken);
+    IProcessingSessionProvider ForAddon(AddonPackage package, PermissionGrant grant) => this;
 }
 
 public sealed class SessionRegistry(IProcessingSessionProvider provider, int totalLimit = 16, int perOwnerLimit = 4)
@@ -23,16 +43,28 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         internal readonly TaskCompletionSource Drained = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal int Pending;
         internal bool Closing;
-        internal Owner() { }
+        internal readonly IProcessingSessionProvider Provider;
+        internal Owner(IProcessingSessionProvider provider) { Provider = provider; }
     }
     private sealed record OwnedSession(Owner Owner, IProcessingSession Session)
     {
         public SemaphoreSlim Gate { get; } = new(1, 1);
+        public Task? Closing;
+        public string? CleanupError;
     }
     private readonly Dictionary<string, OwnedSession> sessions = new(StringComparer.Ordinal);
     private readonly object sync = new();
     private int pending;
-    public Owner CreateOwner() => new();
+    public Owner CreateOwner() => new(provider);
+    public Owner CreateOwner(AddonPackage package, PermissionGrant grant) => new(provider.ForAddon(package, grant));
+    public int CapabilityMinor(Owner owner) => owner.Provider.ApiMinor;
+
+    public JsonObject Selections(Owner owner)
+    {
+        lock (sync) Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
+        return owner.Provider is IProcessingSelectionProvider selections ? selections.ListSelections()
+            : throw new AddonException("feature_unavailable", "This provider does not offer selected media.");
+    }
 
     public async Task<string> OpenAsync(Owner owner, string source, string? profile, CancellationToken cancellationToken)
     {
@@ -47,7 +79,7 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         try
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, owner.Lifetime.Token);
-            created = await provider.OpenAsync(source, profile, linked.Token);
+            created = await owner.Provider.OpenAsync(source, profile, linked.Token);
             string id = Guid.NewGuid().ToString("N");
             lock (sync)
             {
@@ -57,6 +89,11 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
                 created = null;
                 return id;
             }
+        }
+        catch (ProcessingSessionStartException error)
+        {
+            created = error.Session;
+            throw new AddonException("session_start", "Processing could not start. Its resource cleanup will be retried when the addon stops.");
         }
         finally
         {
@@ -89,7 +126,11 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
     public async Task<JsonObject> StatusAsync(Owner owner, string id, CancellationToken cancellationToken)
     {
         OwnedSession item;
-        lock (sync) item = Owned(owner, id);
+        lock (sync)
+        {
+            item = Owned(owner, id);
+            if (item.Closing is not null) return new() { ["state"] = item.CleanupError is null ? "closing" : "cleanup_failed", ["error"] = item.CleanupError };
+        }
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, owner.Lifetime.Token);
         await item.Gate.WaitAsync(linked.Token);
         try
@@ -105,6 +146,44 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         OwnedSession item;
         lock (sync) item = Owned(owner, id);
         await CloseItemAsync(id, item, cancellationToken);
+    }
+
+    public void RequestClose(Owner owner, string id)
+    {
+        lock (sync)
+        {
+            var item = Owned(owner, id);
+            if (item.Closing is { IsCompleted: false }) return;
+            item.CleanupError = null;
+            item.Closing = Task.Run(async () =>
+            {
+                try { await CloseItemAsync(id, item, CancellationToken.None); }
+                catch { lock (sync) item.CleanupError = "Session cleanup needs a retry. Close this session again or stop the addon."; }
+            });
+        }
+    }
+
+    public async Task ControlAsync(Owner owner, string id, bool? paused, double? seconds, CancellationToken cancellationToken)
+    {
+        Contract.Require(paused.HasValue != seconds.HasValue && (seconds is null || double.IsFinite(seconds.Value) && seconds >= 0 && seconds <= 315576000),
+            "invalid_request", "Choose one valid session control.");
+        OwnedSession item;
+        lock (sync) item = Owned(owner, id);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, owner.Lifetime.Token);
+        await item.Gate.WaitAsync(linked.Token);
+        try
+        {
+            lock (sync)
+            {
+                _ = Owned(owner, id);
+                Contract.Require(item.Closing is null, "session_closed", "Session is closing.");
+            }
+            Contract.Require(item.Session is IControllableProcessingSession, "feature_unavailable", "Session controls are unavailable.");
+            var control = (IControllableProcessingSession)item.Session;
+            if (paused.HasValue) await control.PauseAsync(paused.Value, linked.Token);
+            else await control.SeekAsync(seconds!.Value, linked.Token);
+        }
+        finally { item.Gate.Release(); }
     }
 
     private async Task CloseItemAsync(string id, OwnedSession item, CancellationToken cancellationToken)
@@ -132,13 +211,12 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         await owner.Drained.Task;
         KeyValuePair<string, OwnedSession>[] owned;
         lock (sync) owned = sessions.Where(s => s.Value.Owner == owner).ToArray();
-        List<Exception> errors = [];
-        foreach (var item in owned)
+        var errors = await Task.WhenAll(owned.Select(async item =>
         {
-            try { await CloseItemAsync(item.Key, item.Value, CancellationToken.None); }
-            catch (Exception error) { errors.Add(error); }
-        }
-        if (errors.Count != 0) throw new AggregateException("Processing session cleanup failed.", errors);
+            try { await CloseItemAsync(item.Key, item.Value, CancellationToken.None); return (Exception?)null; }
+            catch (Exception error) { return error; }
+        }));
+        if (errors.Any(e => e is not null)) throw new AggregateException("Processing session cleanup failed.", errors.Where(e => e is not null).Cast<Exception>());
     }
 
     private OwnedSession Owned(Owner owner, string id)

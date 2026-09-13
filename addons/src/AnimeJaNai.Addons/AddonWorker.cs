@@ -22,6 +22,7 @@ public sealed class AddonWorker : IAddonInstance
     private volatile bool stopped;
     private readonly object stateLock = new();
     private Task? cleanup;
+    private bool processReleased;
     private string? failure;
     private int recentCalls;
     private long rateWindow = Stopwatch.GetTimestamp();
@@ -205,23 +206,28 @@ public sealed class AddonWorker : IAddonInstance
     public ValueTask DisposeAsync()
     {
         Stop("Addon worker was closed.");
-        lock (stateLock) return new(cleanup!);
+        lock (stateLock)
+        {
+            if (cleanup!.IsFaulted) cleanup = Task.Run(CleanupAsync);
+            return new(cleanup);
+        }
     }
 
     private async Task CleanupAsync()
     {
-        try
+        List<Exception> errors = [];
+        if (!processReleased)
         {
-            await Task.WhenAll(process.WaitForExitAsync(), job.WaitForEmptyAsync(), stderr, heartbeat, broker.DisposeAsync().AsTask())
-                .WaitAsync(TimeSpan.FromSeconds(10));
+            try { await Task.WhenAll(process.WaitForExitAsync(), job.WaitForEmptyAsync(), stderr, heartbeat).WaitAsync(TimeSpan.FromSeconds(10)); }
+            catch (Exception error) { errors.Add(error); }
+            finally
+            {
+                process.Dispose(); job.Dispose(); processReleased = true; WorkerSlots.Release();
+            }
         }
-        finally
-        {
-            process.Dispose();
-            job.Dispose();
-            try { await CleanupDirectoryAsync(directory); }
-            finally { WorkerSlots.Release(); }
-        }
+        try { await broker.DisposeAsync(); } catch (Exception error) { errors.Add(error); }
+        try { await CleanupDirectoryAsync(directory); } catch (Exception error) { errors.Add(error); }
+        if (errors.Count > 0) throw new AggregateException("Addon resource cleanup failed; retry stopping the addon.", errors);
     }
 
     private static async Task CleanupDirectoryAsync(string directory)

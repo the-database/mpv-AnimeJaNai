@@ -5,15 +5,20 @@ using AnimeJaNai.Addons;
 try
 {
     if (args.Length == 3 && args[0] == "worker") return await WorkerBridge.RunAsync(args[1], args[2]);
+    if (args.Length == 1 && args[0] == "media-worker") return await AnimeJaNai.Addons.Native.MediaWorker.RunAsync();
     if (args.Length == 0) { Help(); return 0; }
     using var offlineLease = args.Length >= 3 && args[0] is "install-dev" or "rollback" or "disable" or "configure" or "action" or "replay" or "run"
         ? new HostLease(args[2]) : null;
     switch (args[0])
     {
-        case "serve" when args.Length == 3:
+        case "serve" when args.Length is >= 3 and <= 5:
             WorkerBridge.VerifyRuntime(args[2]);
+            MediaSelections? media = args.Length >= 4 ? new(args[1]) : null;
+            int capacity = 2;
+            if (args.Length == 5) Contract.Require(int.TryParse(args[4], out capacity) && capacity is >= 1 and <= 16, "invalid_request", "Media capacity must be between 1 and 16.");
+            SessionRegistry? nativeSessions = media is null ? null : new(new AnimeJaNai.Addons.Native.NativeSessionProvider(args[3], args[1], media, WorkerCommand.Current(), capacity), perOwnerLimit: 16);
             var service = new AddonService(args[1], async (p, g, log, token) => await AddonWorker.StartAsync(p, g, args[2],
-                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, cancellationToken: token));
+                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token), media);
             using (var shutdown = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, e) => { e.Cancel = true; shutdown.Cancel(); };
@@ -92,11 +97,11 @@ catch (Exception error) when (error is IOException or UnauthorizedAccessExceptio
 static string[] Grants(string csv) => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 static void Print(object? value) => Console.WriteLine(JsonSerializer.Serialize(value, Contract.Json));
 static void Help() => Console.WriteLine("""
-AJN addon developer host (API 1.0 preview)
+AJN addon developer host (API 1.1 preview)
   new <new-directory> <reverse.domain.id>
   build <source-directory> <javy.exe> <new-package.ajnaddon>
   inspect <package.ajnaddon>
-  serve <data-directory> <wasmtime.exe>
+  serve <data-directory> <wasmtime.exe> [trusted-AJN-root] [maximum-media-sessions]
   install-dev <package.ajnaddon> <data-directory> [permission,permission]
   run <addon-id> <data-directory> <wasmtime.exe> [event-name]
   settings <addon-id> <data-directory>

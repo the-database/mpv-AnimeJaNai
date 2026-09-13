@@ -8,7 +8,7 @@ flowchart LR
     Life --> Host[Trusted broker]
     Guest[Wasm addon worker] <-->|Bounded JSON-RPC| Host
     Host --> Data[Addon storage / settings]
-    Host -. future adapter .-> Sessions[Native AJN processing sessions]
+    Host --> Sessions[Supervised native AJN sessions]
     Sessions -. bounded samples .-> Host
     Host -. future granted destinations .-> Devices[Services / devices]
 ```

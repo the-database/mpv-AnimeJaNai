@@ -37,13 +37,14 @@ foreach ($folder in $assets.packageFolders.PSObject.Properties.Name) {
 if (-not $runtimePackageDirectory) { throw 'Could not locate the .NET runtime license and notices.' }
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'LICENSE.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-LICENSE.TXT')
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-THIRD-PARTY-NOTICES.TXT')
-foreach ($name in @('README.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md')) {
+foreach ($name in @('README.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'NATIVE-MEDIA.md')) {
     Copy-Item -LiteralPath (Join-Path $addonRoot $name) -Destination $outputRoot
 }
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/bootstrap.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/run-example.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'BUNDLE-START.md') -Destination (Join-Path $outputRoot 'START-HERE.md')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/counter') -Destination (Join-Path $outputRoot 'examples') -Recurse
+Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/session-controller') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -Path (Join-Path $addonRoot 'sdk/*') -Destination (Join-Path $outputRoot 'sdk') -Recurse
 # Include buildable AJN source without caches, binaries, or user data.
 $sourceRoot = Join-Path $outputRoot 'source'
@@ -57,5 +58,7 @@ foreach ($source in Get-ChildItem -LiteralPath $addonRoot -Recurse -File) {
 Copy-Item -LiteralPath $ajnLicense -Destination (Join-Path $sourceRoot 'LICENSE')
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/counter') $metadata.javy.path (Join-Path $outputRoot 'counter.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'Example compilation failed.' }
+& (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/session-controller') $metadata.javy.path (Join-Path $outputRoot 'session-controller.ajnaddon')
+if ($LASTEXITCODE -ne 0) { throw 'Session controller compilation failed.' }
 [IO.Compression.ZipFile]::CreateFromDirectory($outputRoot, $archive, [IO.Compression.CompressionLevel]::Optimal, $false)
 Get-FileHash -LiteralPath $archive -Algorithm SHA256 | Format-List

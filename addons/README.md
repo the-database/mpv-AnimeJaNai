@@ -4,9 +4,11 @@ This is the first working part of the AJN addon framework. It combines the earli
 
 **Working now:** compile a JavaScript addon, inspect/install an unsigned development package with explicit permissions, run it in an isolated worker, save private addon data, change typed settings, invoke declared actions, replay events, restore the previous package, and disable its registration. A persistent per-user host and the companion Manager Addons tab share one activation controller per addon. Tests cover library behavior, real Windows workers, the private management connection, and rendered Manager controls.
 
-**Not connected yet:** native playback/session adapters, GPU frame production, media encoding/output, device/network access, credentials, website catalog/signatures, automatic updates, and Linux worker enforcement. The processing provider and latest-frame queue are tested contracts/fixtures, not working video features. Neither the Plex addon nor the lighting addon is implemented here.
+**Native sessions now work:** the optional Windows provider runs independent GPU processing sessions from explicitly approved local media and saved profile snapshots. Manager provides resource consent and revocation. Real Wasm-to-DirectML tests cover concurrent 2× upscaling and independent controls. See [NATIVE-MEDIA.md](NATIVE-MEDIA.md) for setup, supported formats, limits, and the session-controller example.
 
-API 1.0 is a **preview contract**, not a frozen public compatibility promise. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+**Not connected yet:** GPU frame delivery, media encoding/output, device/network access, credentials, website catalog/signatures, automatic updates, and Linux worker enforcement. The latest-frame queue remains a fixture. Neither the Plex addon nor the lighting addon is implemented here.
+
+API 1.1 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 

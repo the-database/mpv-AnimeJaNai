@@ -1,4 +1,4 @@
-# Addon API 1.0 preview
+# Addon API 1.1 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -51,12 +51,16 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 | `sessions.open` | `{ sourceId, profileId? }` | `sessions.manage` | `{ sessionId }`; only if a trusted provider is connected |
 | `sessions.status` | `{ sessionId }` | `sessions.manage` | Provider's public JSON status |
 | `sessions.close` | `{ sessionId }` | `sessions.manage` | `null` after release |
+| `sessions.selections` | `{}` | `sessions.manage` | Approved source/profile IDs and labels; sessions capability 1.1 |
+| `sessions.pause` | `{ sessionId, paused }` | `sessions.manage` | `null` after accepting the control; sessions 1.1 |
+| `sessions.seek` | `{ sessionId, seconds }` | `sessions.manage` | `null` after accepting an absolute seek; sessions 1.1 |
+| `sessions.requestClose` | `{ sessionId }` | `sessions.manage` | `null` after scheduling cleanup; sessions 1.1 |
 
 Private storage is separated by addon ID: maximum 256 keys, 32 KiB per value, 1 MiB total. A stored null and a missing key both read as null in this preview. Saving one key is atomic; a read-modify-write sequence is not a transaction across distinct worker instances. The embedding host should create one activation controller per addon ID.
 
 Settings are distinct from private storage. Only trusted UI/CLI code can change them. Unknown saved settings survive removal from a new schema for rollback, but are hidden from the active addon. Invalid/corrupt settings and storage are preserved for recovery. Persistent version-to-version data migrations are intentionally not implicit.
 
-`sourceId` and `profileId` are opaque references supplied by a trusted integration, never an instruction to open an arbitrary path or execute commands. Each worker has an unforgeable host-owned session owner. Session IDs cannot be used by another worker. Closing or failing an addon cancels pending opens and releases its sessions. The prototype defaults are 16 sessions per registry and four per worker, configurable by the host constructor; a real provider must also apply GPU/media admission limits. No native provider is registered in the CLI.
+`sourceId` and `profileId` are opaque references supplied by a trusted integration, never an instruction to open an arbitrary path or execute commands. Each worker has an unforgeable host-owned session owner. Session IDs cannot be used by another worker. Closing or failing an addon cancels pending opens and releases its sessions. The library defaults are 16 sessions per registry and four per worker; the native service applies a separate operator-configurable 1–16 session limit (default two). No native capability is advertised unless a trusted AJN runtime is configured. [NATIVE-MEDIA.md](NATIVE-MEDIA.md) specifies approvals, status, and failure semantics. Native consumers should use the new `requestClose` method; legacy `close` retains its synchronous behavior.
 
 ## Limits and failure semantics
 

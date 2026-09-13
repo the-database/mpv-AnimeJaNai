@@ -53,9 +53,13 @@ const __ajnSdk = (() => {
             set: (key, value) => request("storage.set", { key, value }),
         }),
         sessions: Object.freeze({
+            selections: () => request("sessions.selections"),
             open: (sourceId, profileId = null) => request("sessions.open", { sourceId, profileId }),
             status: sessionId => request("sessions.status", { sessionId }),
+            pause: (sessionId, paused) => request("sessions.pause", { sessionId, paused }),
+            seek: (sessionId, seconds) => request("sessions.seek", { sessionId, seconds }),
             close: sessionId => request("sessions.close", { sessionId }),
+            requestClose: sessionId => request("sessions.requestClose", { sessionId }),
         }),
     });
     return {

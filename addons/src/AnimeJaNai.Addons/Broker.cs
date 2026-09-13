@@ -20,9 +20,9 @@ public sealed class Broker : IAsyncDisposable
         this.grant = grant;
         this.log = log ?? (_ => { });
         this.sessions = sessions;
-        owner = sessions?.CreateOwner();
+        owner = sessions?.CreateOwner(package, grant);
         foreach (var (name, requirement) in package.Manifest.RequiredCapabilities ?? [])
-            Contract.Require(AvailableCapabilities().Contains(name) && requirement.Major == 1 && requirement.MinMinor == 0,
+            Contract.Require(AvailableCapabilities().Contains(name) && requirement.Major == 1 && requirement.MinMinor <= CapabilityMinor(name),
                 "missing_capability", $"Required capability is unavailable: {name}.");
         storage = new(dataRoot, package.Manifest.Id);
         settings = new(dataRoot, package.Manifest);
@@ -30,6 +30,7 @@ public sealed class Broker : IAsyncDisposable
     }
 
     private string[] AvailableCapabilities() => sessions is null ? ["host", "storage", "logging", "settings"] : ["host", "storage", "logging", "settings", "sessions"];
+    private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
     {
@@ -38,7 +39,7 @@ public sealed class Broker : IAsyncDisposable
         ["permissions"] = new JsonArray(grant.Allowed.Order(StringComparer.Ordinal).Select(p => (JsonNode?)JsonValue.Create(p)).ToArray()),
         ["features"] = new JsonArray(AvailableCapabilities().Select(p => (JsonNode?)JsonValue.Create(p)).ToArray()),
         ["capabilities"] = new JsonObject(AvailableCapabilities().Select(p => new KeyValuePair<string, JsonNode?>(p,
-            new JsonObject { ["major"] = 1, ["minor"] = 0 }))),
+            new JsonObject { ["major"] = 1, ["minor"] = CapabilityMinor(p) }))),
     };
 
     public async Task<JsonNode?> InvokeAsync(string method, JsonObject parameters, CancellationToken cancellationToken)
@@ -68,12 +69,32 @@ public sealed class Broker : IAsyncDisposable
                 string source = Contract.Text(parameters, "sourceId", 128);
                 string? profile = parameters["profileId"] is null ? null : Contract.Text(parameters, "profileId", 128);
                 return new JsonObject { ["sessionId"] = await registry.OpenAsync(owner!, source, profile, cancellationToken) };
+            case "sessions.selections":
+                grant.Demand("sessions.manage");
+                return Sessions().Selections(owner!);
+            case "sessions.pause":
+                grant.Demand("sessions.manage");
+                Contract.Require(parameters["paused"] is JsonValue paused && paused.TryGetValue<bool>(out _), "invalid_request", "Expected a pause state.");
+                await Sessions().ControlAsync(owner!, Contract.Text(parameters, "sessionId", 64), parameters["paused"]!.GetValue<bool>(), null, cancellationToken);
+                return null;
+            case "sessions.seek":
+                grant.Demand("sessions.manage");
+                Contract.Require(parameters["seconds"] is JsonValue seconds && seconds.TryGetValue<double>(out _), "invalid_request", "Expected a seek position.");
+                await Sessions().ControlAsync(owner!, Contract.Text(parameters, "sessionId", 64), null, parameters["seconds"]!.GetValue<double>(), cancellationToken);
+                return null;
             case "sessions.status":
                 grant.Demand("sessions.manage");
                 return await Sessions().StatusAsync(owner!, Contract.Text(parameters, "sessionId", 64), cancellationToken);
             case "sessions.close":
                 grant.Demand("sessions.manage");
                 await Sessions().CloseAsync(owner!, Contract.Text(parameters, "sessionId", 64), cancellationToken);
+                return null;
+            case "sessions.requestClose":
+                grant.Demand("sessions.manage");
+                var closingRegistry = Sessions();
+                string closingId = Contract.Text(parameters, "sessionId", 64);
+                Contract.Require(closingRegistry.CapabilityMinor(owner!) >= 1, "feature_unavailable", "Asynchronous session close is unavailable.");
+                closingRegistry.RequestClose(owner!, closingId);
                 return null;
             default: throw new AddonException("unknown_method", "Method is not available in this API.");
         }

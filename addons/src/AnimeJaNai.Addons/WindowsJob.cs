@@ -10,7 +10,7 @@ namespace AnimeJaNai.Addons;
 internal sealed class WindowsJob : IDisposable
 {
     private readonly SafeFileHandle handle;
-    public WindowsJob()
+    public WindowsJob(nuint processMemory = 512u * 1024 * 1024, nuint jobMemory = 768u * 1024 * 1024, uint cpuRate = 2500)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Worker supervision currently supports Windows.");
         handle = CreateJobObjectW(IntPtr.Zero, null);
@@ -18,14 +18,14 @@ internal sealed class WindowsJob : IDisposable
         var info = new ExtendedLimits
         {
             Basic = new BasicLimits { Flags = 0x2000 | 0x100 | 0x200 | 0x8, ActiveProcesses = 2 },
-            ProcessMemory = 512u * 1024 * 1024,
-            JobMemory = 768u * 1024 * 1024,
+            ProcessMemory = processMemory,
+            JobMemory = jobMemory,
         };
-        var cpu = new CpuLimits { Flags = 0x1 | 0x4, Rate = 2500 };
+        var cpu = new CpuLimits { Flags = 0x1 | 0x4, Rate = cpuRate };
         try
         {
             if (!SetLimits(handle, 9, ref info, (uint)Marshal.SizeOf<ExtendedLimits>()) ||
-                !SetCpu(handle, 15, ref cpu, (uint)Marshal.SizeOf<CpuLimits>()))
+                (cpuRate > 0 && !SetCpu(handle, 15, ref cpu, (uint)Marshal.SizeOf<CpuLimits>())))
                 throw new Win32Exception(Marshal.GetLastWin32Error());
         }
         catch { handle.Dispose(); throw; }

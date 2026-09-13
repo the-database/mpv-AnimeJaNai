@@ -1,4 +1,4 @@
-# Trusted management protocol 1.0 preview
+# Trusted management protocol 1.1 preview
 
 This protocol connects AJN Manager to the persistent host. It is **not** an addon capability. Guests only receive their private broker channel and cannot install packages, edit grants, or control another addon through it.
 
@@ -28,6 +28,12 @@ Messages use the guest protocol's bounded JSON-RPC profile: UTF-8 JSON objects, 
 | `addons.configure` | `{id,changes}` | Validate and atomically save settings; notify a running worker |
 | `addons.action` | `{id,action}` | Run a declared action, sharing an existing worker or starting temporarily |
 | `addons.logs` | `{id}` | Last 32 messages, at most 512 UTF-16 units each |
+| `media.selections` | `{id}` | Approved files (with trusted-UI paths) and saved profile labels |
+| `media.approveSource` | `{id,expectedHash,path}` | Approve one local file for the reviewed addon package |
+| `media.approveProfile` | `{id,expectedHash,name,slot,backend,configuration}` | Save an immutable profile configuration snapshot |
+| `media.revoke` | `{id,expectedHash,kind,selectionId}` | Stop and drain the addon before removing one source/profile approval |
+
+The four media operations require a configured native provider and the addon's `sessions.manage` grant. `manager.hello` includes `nativeMediaAvailable`; addon summaries include `mediaPermission`. The standalone client exposes a copy of the hello result in `ServerInfo`. Resource consent uses the currently reviewed addon hash, so changing the installed version while a dialog is open causes rejection. See [NATIVE-MEDIA.md](NATIVE-MEDIA.md) for provider setup and resource limits.
 
 The registry supports 128 installed addons; the worker limit is eight. A failed package lookup does not permanently consume a host entry. One corrupt addon gets its own error row and can still be removed. An invalid rollback request leaves its running worker alone. An install validates the selected package and grant before stopping the previous instance; an I/O failure during the subsequent atomic registration may require explicitly restarting the still-registered old package.
 

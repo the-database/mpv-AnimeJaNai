@@ -25,6 +25,8 @@ public sealed class ManagementClient : IAsyncDisposable
     private readonly byte[] buffer = new byte[4096];
     private int position, available;
     private long nextId;
+    private JsonObject serverInfo = new();
+    public JsonObject ServerInfo => (JsonObject)serverInfo.DeepClone();
 
     private ManagementClient(NamedPipeClientStream pipe) { this.pipe = pipe; }
     public bool IsConnected => !lifetime.IsCancellationRequested && pipe.IsConnected;
@@ -40,6 +42,7 @@ public sealed class ManagementClient : IAsyncDisposable
             await pipe.ConnectAsync(1500, cancellationToken).ConfigureAwait(false);
             var hello = await client.CallAsync("manager.hello", new JsonObject { ["major"] = 1 }, cancellationToken).ConfigureAwait(false);
             if (hello?["major"]?.GetValue<int>() != 1) throw new ManagementException("incompatible_api", "Unsupported addon host version.");
+            client.serverInfo = (JsonObject)hello.DeepClone();
             return client;
         }
         catch { await client.DisposeAsync(); throw; }

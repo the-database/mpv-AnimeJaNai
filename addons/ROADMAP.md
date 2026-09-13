@@ -8,8 +8,8 @@ The developer foundation is not the completed community addon product. The follo
 | Sandboxed workers | Real Windows runtime, resource supervision and tests | Additional containment review, aggregate service limits, supported-system testing, Linux enforcement |
 | Public protocol / SDK | Versioned preview, JS SDK, typed settings, actions, replay | Freeze compatibility contract after integration, other language examples, more capable async/event scheduling |
 | Lifecycle | Persistent per-user host, private same-user management transport, consolidated activation, bounded stop and health checks | Player connection and opt-in login activation |
-| Manager | Addon list/install/permissions/settings/actions/logs UI; rendered UI tests and a real management-to-Wasm test | Native capability consent and source/device selection, community catalog flow |
-| Sessions | Owned concurrent registry, provider interface and cancellation tests | Native provider, selected sources/profiles, admission, asynchronous startup/progress, seek/cancel, real concurrent GPU tests |
+| Manager | Addon controls, exact-file consent, saved profile snapshots, revocation and rendered UI tests | Device/network consent, community catalog flow |
+| Sessions | Native provider, approved local sources/profiles, admission, asynchronous open/close, independent pause/seek, real concurrent DirectML tests | TensorRT/RIFE validation, more source types, host capacity UI and hardware matrix |
 | Frame samples | Immutable bounded latest-sample queue fixture | Native hook, negotiated stage/format/rate, timestamps/color metadata, bounded binary transport, GPU overhead tests |
 | Media output | Design requirement | Trusted encode/mux/output pipeline, streaming backpressure and cleanup |
 | Device/service I/O | No network capability is exposed | Destination-scoped outbound APIs; separately authorized listeners/discovery; credential handling |
