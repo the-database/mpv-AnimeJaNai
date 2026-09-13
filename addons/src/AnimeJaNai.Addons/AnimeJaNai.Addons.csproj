@@ -4,6 +4,7 @@
     <AssemblyName>ajn-addon</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../sdk/csharp/ManagementClient.cs" Link="ManagementClient.cs" />
     <EmbeddedResource Include="../../sdk/ajn.js" LogicalName="sdk.js" />
     <EmbeddedResource Include="../../sdk/ajn.d.ts" LogicalName="sdk.d.ts" />
     <EmbeddedResource Include="../../examples/counter/addon.js" LogicalName="example.js" />

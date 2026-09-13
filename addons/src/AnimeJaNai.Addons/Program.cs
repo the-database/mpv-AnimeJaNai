@@ -6,8 +6,20 @@ try
 {
     if (args.Length == 3 && args[0] == "worker") return await WorkerBridge.RunAsync(args[1], args[2]);
     if (args.Length == 0) { Help(); return 0; }
+    using var offlineLease = args.Length >= 3 && args[0] is "install-dev" or "rollback" or "disable" or "configure" or "action" or "replay" or "run"
+        ? new HostLease(args[2]) : null;
     switch (args[0])
     {
+        case "serve" when args.Length == 3:
+            WorkerBridge.VerifyRuntime(args[2]);
+            var service = new AddonService(args[1], async (p, g, log, token) => await AddonWorker.StartAsync(p, g, args[2],
+                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, cancellationToken: token));
+            using (var shutdown = new CancellationTokenSource())
+            {
+                Console.CancelKeyPress += (_, e) => { e.Cancel = true; shutdown.Cancel(); };
+                await new ManagementServer(args[1], service).RunAsync(shutdown.Token);
+            }
+            return 0;
         case "new" when args.Length == 3:
             DeveloperTools.New(args[1], args[2]);
             Console.WriteLine("Created addon source and editor types.");
@@ -71,7 +83,7 @@ catch (AddonException error)
     return 1;
 }
 catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or PlatformNotSupportedException
-    or OperationCanceledException or TimeoutException or System.ComponentModel.Win32Exception or ArgumentException)
+    or OperationCanceledException or TimeoutException or System.ComponentModel.Win32Exception or ArgumentException or AggregateException)
 {
     Print(new { error = new { code = "host_error", message = error.Message } });
     return 1;
@@ -84,6 +96,7 @@ AJN addon developer host (API 1.0 preview)
   new <new-directory> <reverse.domain.id>
   build <source-directory> <javy.exe> <new-package.ajnaddon>
   inspect <package.ajnaddon>
+  serve <data-directory> <wasmtime.exe>
   install-dev <package.ajnaddon> <data-directory> [permission,permission]
   run <addon-id> <data-directory> <wasmtime.exe> [event-name]
   settings <addon-id> <data-directory>

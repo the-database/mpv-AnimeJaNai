@@ -5,6 +5,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AnimeJaNai.Addons;
+using AnimeJaNai.Addons.Management;
+using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 return await Checks.RunAsync(args);
 
@@ -58,6 +62,7 @@ internal static class Checks
         await SettingsAndActivationChecks();
         await ChannelChecks();
         await SessionChecks();
+        if (OperatingSystem.IsWindows()) await ManagementChecks();
         if (args.Length == 4) await RuntimeChecks(args[1], args[2], args[3]);
         string report = Path.Combine(root, "results.json");
         await File.WriteAllTextAsync(report, JsonSerializer.Serialize(new { passed = results.Count - failed, failed, results }, new JsonSerializerOptions { WriteIndented = true }));
@@ -246,6 +251,10 @@ internal static class Checks
             var incompatible = reduced with { Settings = new() { ["rate"] = reduced.Settings!["rate"] with { Maximum = 22 } } };
             var narrowed = new AddonSettings(directory, incompatible);
             await Error("settings_incompatible", () => narrowed.Get());
+            var editable = narrowed.GetForEditing();
+            True(editable.Invalid.SequenceEqual(["rate"]));
+            Same(JsonValue.Create(20), editable.Values["rate"]);
+            Same(JsonValue.Create(25), original.Get()["rate"]);
             narrowed.Update(new() { ["rate"] = 21 }); Same(JsonValue.Create(21), narrowed.Get()["rate"]);
         });
         await Test("Manifest copies isolate settings definitions and defaults", () =>
@@ -354,6 +363,7 @@ internal static class Checks
                     if (event.name === "start") { const n = (ajn.storage.get("starts") || 0) + 1; ajn.storage.set("starts", n); return n; }
                     if (event.name === "echo") return event.data;
                     if (event.name === "settings") return ajn.settings.get();
+                    if (event.name === "action") return {settings:ajn.settings.get(),starts:ajn.storage.get("starts")};
                     if (event.name === "open") return ajn.sessions.open("fixture-session");
                     if (event.name === "badwire") { Javy.IO.writeSync(1, new TextEncoder().encode("{}\n")); return null; }
                     if (event.name === "oversize") { Javy.IO.writeSync(1, new TextEncoder().encode("x".repeat(140000) + "\n")); return null; }
@@ -458,6 +468,159 @@ internal static class Checks
             milliseconds.Sort();
             Console.WriteLine($"Echo median {milliseconds[milliseconds.Count / 2]:F3} ms; p95 {milliseconds[(int)(milliseconds.Count * .95)]:F3} ms");
             await File.WriteAllTextAsync(Path.Combine(root, "control-latency.json"), JsonSerializer.Serialize(new { milliseconds, note = "35 warmed stdio echo round trips, no video or GPU workload" }));
+        });
+        await Test("Management service drives a real sandbox through settings, actions and reconnect", async () =>
+        {
+            string managed = Area();
+            new AddonRegistry(managed).Install(fixture, ["storage.read", "storage.write"]);
+            var service = new AddonService(managed, async (p, g, log, token) => await AddonWorker.StartAsync(p, g, runtime,
+                Path.Combine(managed, "workers"), managed, command, log: log, cancellationToken: token));
+            using var stop = new CancellationTokenSource(); var server = new ManagementServer(managed, service).RunAsync(stop.Token, exitWhenIdle: false);
+            try
+            {
+                await using var client = await ManagementClient.ConnectAsync(managed);
+                True(service.HasRunningWorkers);
+                await client.CallAsync("addons.configure", new() { ["id"] = fixture.Manifest.Id, ["changes"] = new JsonObject { ["name"] = "日本語 saved" } });
+                var first = await client.CallAsync("addons.action", new() { ["id"] = fixture.Manifest.Id, ["action"] = "check" });
+                Same(JsonValue.Create(1), first!["starts"]);
+                Same(JsonValue.Create("日本語 saved"), first["settings"]!["name"]);
+                await client.CallAsync("addons.start", new() { ["id"] = fixture.Manifest.Id });
+                await client.DisposeAsync();
+                await using var reconnect = await ManagementClient.ConnectAsync(managed);
+                var second = await reconnect.CallAsync("addons.action", new() { ["id"] = fixture.Manifest.Id, ["action"] = "check" });
+                Same(first, second);
+                await reconnect.CallAsync("addons.stop", new() { ["id"] = fixture.Manifest.Id });
+                True(!service.HasRunningWorkers);
+                await reconnect.CallAsync("addons.start", new() { ["id"] = fixture.Manifest.Id });
+                var restarted = await reconnect.CallAsync("addons.action", new() { ["id"] = fixture.Manifest.Id, ["action"] = "check" });
+                Same(JsonValue.Create(2), restarted!["starts"]);
+                await reconnect.CallAsync("addons.remove", new() { ["id"] = fixture.Manifest.Id });
+                True(!service.HasRunningWorkers && (await reconnect.ListAsync()).Count == 0);
+                Same(JsonValue.Create(2), new AddonStorage(managed, fixture.Manifest.Id).Get("starts"));
+            }
+            finally { stop.Cancel(); await server.WaitAsync(TimeSpan.FromSeconds(15)); }
+        });
+    }
+
+    private static async Task ManagementChecks()
+    {
+        await Test("Management connections share activation and disconnect releases only their source", async () =>
+        {
+            string directory = Area(); var package = AddonPackage.Create(SettingsManifest(), EmptyModule);
+            new AddonRegistry(directory).Install(package, []);
+            var workers = new List<FakeAddon>();
+            var service = new AddonService(directory, (_, _, log, _) =>
+            {
+                var worker = new FakeAddon(); workers.Add(worker); log("Started test addon"); return Task.FromResult<IAddonInstance>(worker);
+            });
+            using var stop = new CancellationTokenSource(); var server = new ManagementServer(directory, service).RunAsync(stop.Token, exitWhenIdle: false);
+            try
+            {
+                await using var first = await ManagementClient.ConnectAsync(directory);
+                await using var second = await ManagementClient.ConnectAsync(directory);
+                True(workers.Count == 1);
+                await first.DisposeAsync();
+                True((await second.ListAsync())[0]!["running"]!.GetValue<bool>());
+                await second.CallAsync("addons.start", new() { ["id"] = package.Manifest.Id });
+                await second.DisposeAsync();
+                await Task.Delay(100); True(service.HasRunningWorkers, "Manual background activation should outlive Manager");
+                await using var third = await ManagementClient.ConnectAsync(directory);
+                await third.CallAsync("addons.stop", new() { ["id"] = package.Manifest.Id });
+                True(!service.HasRunningWorkers);
+                var settings = await third.CallAsync("addons.configure", new() { ["id"] = package.Manifest.Id, ["changes"] = new JsonObject { ["rate"] = 40 } });
+                Same(JsonValue.Create(40), settings!["rate"]);
+                True(((JsonArray)(await third.CallAsync("addons.logs", new() { ["id"] = package.Manifest.Id }))!).Count > 0);
+                await Error("host_running", () => new HostLease(directory));
+            }
+            finally { stop.Cancel(); await server.WaitAsync(TimeSpan.FromSeconds(10)); }
+        });
+        await Test("Management package review is hash-bound and a corrupt addon remains removable", async () =>
+        {
+            string directory = Area(); var registry = new AddonRegistry(directory);
+            var original = AddonPackage.Create(SettingsManifest(), EmptyModule);
+            string file = Path.Combine(directory, "addon.ajnaddon"); original.Save(file);
+            var broken = Package(id: "org.example.broken"); registry.Install(broken, []);
+            File.WriteAllText(Path.Combine(directory, "installed", broken.Manifest.Id, "active.json"), "{broken");
+            var service = new AddonService(directory, (_, _, _, _) => Task.FromResult<IAddonInstance>(new FakeAddon()));
+            using var stop = new CancellationTokenSource(); var server = new ManagementServer(directory, service).RunAsync(stop.Token, exitWhenIdle: false);
+            try
+            {
+                await using var client = await ManagementClient.ConnectAsync(directory);
+                var inspected = await client.CallAsync("addons.inspect", new() { ["path"] = file });
+                AddonPackage.Create(SettingsManifest("1.1.0"), EmptyModule).Save(file);
+                try
+                {
+                    await client.CallAsync("addons.installDev", new() { ["path"] = file, ["expectedHash"] = inspected!["hash"]!.DeepClone(), ["permissions"] = new JsonArray() });
+                    throw new Exception("Expected changed package rejection");
+                }
+                catch (ManagementException error) when (error.Code == "integrity_mismatch") { }
+                original.Save(file);
+                _ = await client.CallAsync("addons.installDev", new() { ["path"] = file, ["expectedHash"] = original.Hash, ["permissions"] = new JsonArray() });
+                var list = await client.ListAsync();
+                True(list.Count == 2 && list.Any(item => item!["id"]!.GetValue<string>() == broken.Manifest.Id && item["error"] is not null));
+                await client.CallAsync("addons.remove", new() { ["id"] = broken.Manifest.Id });
+                True((await client.ListAsync()).Count == 1);
+            }
+            finally { stop.Cancel(); await server.WaitAsync(TimeSpan.FromSeconds(10)); }
+        });
+        await Test("Management pipe restricts its owner and denies network logons", async () =>
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            string directory = Area();
+            var service = new AddonService(directory, (_, _, _, _) => Task.FromResult<IAddonInstance>(new FakeAddon()));
+            using var stop = new CancellationTokenSource(); var server = new ManagementServer(directory, service).RunAsync(stop.Token, exitWhenIdle: false);
+            try
+            {
+                using var pipe = new NamedPipeClientStream(".", ManagementClient.PipeName(directory), PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await pipe.ConnectAsync(2000);
+                var security = pipe.GetAccessControl();
+                using var identity = WindowsIdentity.GetCurrent();
+                True(security.GetOwner(typeof(SecurityIdentifier))!.Equals(identity.Owner));
+                var network = new SecurityIdentifier(WellKnownSidType.NetworkSid, null);
+                var rules = security.GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<PipeAccessRule>().ToArray();
+                bool deniesNetwork = false;
+                foreach (var rule in rules)
+                {
+                    if (rule.IdentityReference.Equals(network) && rule.AccessControlType == AccessControlType.Deny) deniesNetwork = true;
+                    if (rule.AccessControlType == AccessControlType.Allow) True(rule.IdentityReference.Equals(identity.Owner));
+                }
+                True(deniesNetwork);
+            }
+            finally { stop.Cancel(); await server.WaitAsync(TimeSpan.FromSeconds(10)); }
+        });
+        await Test("Management paginates installed addons and bounds Unicode logs", async () =>
+        {
+            string directory = Area(); var registry = new AddonRegistry(directory);
+            for (int i = 0; i < 33; i++) registry.Install(Package(id: "org.example.page" + i.ToString("D3")), []);
+            var service = new AddonService(directory, (_, _, log, _) =>
+            {
+                for (int i = 0; i < 40; i++) log(new string('語', 1024));
+                return Task.FromResult<IAddonInstance>(new FakeAddon());
+            });
+            using var stop = new CancellationTokenSource(); var server = new ManagementServer(directory, service).RunAsync(stop.Token, exitWhenIdle: false);
+            try
+            {
+                await using var client = await ManagementClient.ConnectAsync(directory);
+                var all = await client.ListAsync(); True(all.Count == 33);
+                True(all.Select(n => n!["id"]!.GetValue<string>()).Distinct().Count() == 33);
+                await client.CallAsync("addons.start", new() { ["id"] = "org.example.page000" });
+                var logs = (JsonArray)(await client.CallAsync("addons.logs", new() { ["id"] = "org.example.page000" }))!;
+                True(logs.Count == 32 && logs.All(l => l!.GetValue<string>().Length == 512));
+                True((await client.ListAsync()).Count == 33, "Large log response broke the next operation");
+            }
+            finally { stop.Cancel(); await server.WaitAsync(TimeSpan.FromSeconds(10)); }
+        });
+        await Test("Failed lookups release host slots and unavailable rollback preserves running work", async () =>
+        {
+            string directory = Area();
+            await using var service = new AddonService(directory, (_, _, _, _) => Task.FromResult<IAddonInstance>(new FakeAddon()));
+            await service.InvokeAsync("test", "manager.hello", new() { ["major"] = 1L }, default);
+            for (int i = 0; i < 140; i++)
+                await Error("not_installed", () => service.InvokeAsync("test", "addons.settings", new() { ["id"] = "org.example.missing" + i }, default));
+            var package = Package(); new AddonRegistry(directory).Install(package, []);
+            await service.InvokeAsync("test", "addons.start", new() { ["id"] = package.Manifest.Id }, default);
+            await Error("no_previous_version", () => service.InvokeAsync("test", "addons.rollback", new() { ["id"] = package.Manifest.Id }, default));
+            True(service.HasRunningWorkers);
         });
     }
 

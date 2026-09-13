@@ -86,6 +86,24 @@ public sealed class AddonSettings
         return Effective(Read());
     }
 
+    // Trusted editors need a repair path when a new schema rejects an old value.
+    // Showing a default does not change the saved value until the user saves.
+    public (JsonObject Values, string[] Invalid) GetForEditing()
+    {
+        using var held = SafeFiles.Lock(directory);
+        var stored = Read(); var values = new JsonObject(); List<string> invalid = [];
+        foreach (var (key, definition) in manifest.Settings ?? [])
+        {
+            if (stored.TryGetPropertyValue(key, out var value))
+            {
+                if (definition.Accepts(value)) { values[key] = value!.DeepClone(); continue; }
+                invalid.Add(key);
+            }
+            values[key] = definition.Default.DeepClone();
+        }
+        return (values, invalid.ToArray());
+    }
+
     // This method is available to trusted host UI/CLI only, never to a worker.
     public JsonObject Update(JsonObject changes)
     {

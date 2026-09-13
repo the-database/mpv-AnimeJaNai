@@ -164,6 +164,7 @@ public sealed class AddonWorker : IAddonInstance
 
     public string Diagnostics { get { lock (diagnostics) return diagnostics.ToString(); } }
     public bool IsStopped => stopped;
+    public string? Failure => stopped && failure != "Addon worker was closed." ? failure : null;
 
     private async Task DrainErrorsAsync()
     {

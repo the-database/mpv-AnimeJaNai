@@ -2,9 +2,9 @@
 
 This is the first working part of the AJN addon framework. It combines the earlier proposals' lifecycle, declarative settings/actions, JSON-RPC, and developer replay with an enforced Wasm sandbox. It is developed on `feature/addon-foundation` independently of the 3.6.1 player fixes.
 
-**Working now:** compile a JavaScript addon, inspect/install an unsigned development package with explicit permissions, run it in an isolated worker, save private addon data, change typed settings, invoke declared actions, replay events, restore the previous package, and disable its registration. The host library consolidates activation sources and enforces processing-session ownership. Tests cover both library behavior and actual Windows workers.
+**Working now:** compile a JavaScript addon, inspect/install an unsigned development package with explicit permissions, run it in an isolated worker, save private addon data, change typed settings, invoke declared actions, replay events, restore the previous package, and disable its registration. A persistent per-user host and the companion Manager Addons tab share one activation controller per addon. Tests cover library behavior, real Windows workers, the private management connection, and rendered Manager controls.
 
-**Not connected yet:** Manager's addon screen and persistent background service, native playback/session adapters, GPU frame production, media encoding/output, device/network access, credentials, website catalog/signatures, automatic updates, and Linux worker enforcement. The processing provider and latest-frame queue are tested contracts/fixtures, not working video features. Neither the Plex addon nor the lighting addon is implemented here.
+**Not connected yet:** native playback/session adapters, GPU frame production, media encoding/output, device/network access, credentials, website catalog/signatures, automatic updates, and Linux worker enforcement. The processing provider and latest-frame queue are tested contracts/fixtures, not working video features. Neither the Plex addon nor the lighting addon is implemented here.
 
 API 1.0 is a **preview contract**, not a frozen public compatibility promise. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
@@ -49,7 +49,15 @@ dotnet $ajn rollback org.example.first ./addon-data
 dotnet $ajn disable org.example.first ./addon-data
 ```
 
-Rollback switches code and its previously approved grant. Settings and private storage are retained. Incompatible saved settings stop activation with an actionable error; no settings migration scripts run automatically. `disable` removes the registration for future CLI starts. A persistent embedding host must also call its activation controller's `StopAsync` to stop an active worker; the CLI does not control another process.
+Rollback switches code and its previously approved grant. Settings and private storage are retained. Incompatible saved settings stop activation; Manager shows which fields need repair and displays valid defaults without changing the saved values until the user saves. No settings migration scripts run automatically. `disable` removes the registration for future starts.
+
+## Manager and persistent host
+
+The companion `AnimeJaNaiManager` branch `feature/addon-manager` provides the Addons tab. It expects `addon-host/ajn-addon.exe` and `addon-host/runtime/wasmtime.exe` under the AJN root. Addon data lives in `addons` under the Manager data directory. Use the integrated preview package, or follow [MANAGEMENT.md](MANAGEMENT.md) to assemble a development installation.
+
+Manager reviews a local package before installation, starts permission checkboxes unchecked, and binds the approval to the exact reviewed archive hash. It renders typed settings, declared actions, worker status and bounded logs. Removing an addon stops it and retains its settings/storage. A manually started addon continues after Manager closes; `on_manager` activation ends when the last relevant Manager connection closes.
+
+The host can also be started with `serve <data-directory> <wasmtime.exe>`. An exclusive data-directory lease prevents standalone CLI writes or workers from competing with an active service. Use Manager to manage that running service, or use a separate directory for CLI development. The service exits after about 30 idle seconds with no clients or running workers. It does not register itself for Windows startup.
 
 ## Develop and test
 

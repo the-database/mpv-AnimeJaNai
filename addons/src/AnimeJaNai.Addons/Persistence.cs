@@ -108,6 +108,21 @@ public sealed record InstalledAddon(Activation Current, Activation? Previous);
 
 public sealed class AddonRegistry(string root)
 {
+    public IReadOnlyList<string> ListIds()
+    {
+        string directory = SafeFiles.DirectoryPath(root, "installed");
+        List<string> ids = [];
+        foreach (string path in Directory.EnumerateDirectories(directory))
+        {
+            SafeFiles.CheckParents(path);
+            string id = Path.GetFileName(path);
+            if (Contract.ValidId(id) && File.Exists(Path.Combine(path, "active.json"))) ids.Add(id);
+            Contract.Require(ids.Count <= 128, "capacity_exceeded", "At most 128 installed addons are supported by this preview.");
+        }
+        ids.Sort(StringComparer.Ordinal);
+        return ids;
+    }
+
     private string DirectoryFor(string id)
     {
         Contract.Require(Contract.ValidId(id), "invalid_id", "Invalid addon id.");
@@ -117,9 +132,11 @@ public sealed class AddonRegistry(string root)
     public void Install(AddonPackage package, IEnumerable<string> permissions)
     {
         var grant = new PermissionGrant(package, permissions);
+        using var catalogLock = SafeFiles.Lock(SafeFiles.DirectoryPath(root, "installed"));
         string directory = DirectoryFor(package.Manifest.Id);
         using var held = SafeFiles.Lock(directory);
         var existing = ReadState(directory);
+        Contract.Require(existing is not null || ListIds().Count < 128, "capacity_exceeded", "At most 128 installed addons are supported by this preview.");
         string packagePath = Path.Combine(directory, package.Hash + ".ajnaddon");
         SafeFiles.CheckParents(packagePath);
         if (!File.Exists(packagePath))
@@ -156,6 +173,14 @@ public sealed class AddonRegistry(string root)
         _ = Resolve(directory, id, previous);
         SafeFiles.AtomicWrite(Path.Combine(directory, "active.json"),
             JsonSerializer.SerializeToUtf8Bytes(new InstalledAddon(previous, state.Current), Contract.Json));
+    }
+
+    public void ValidateRollback(string id)
+    {
+        string directory = DirectoryFor(id);
+        using var held = SafeFiles.Lock(directory);
+        var state = ReadState(directory) ?? throw new AddonException("not_installed", "Addon is not installed.");
+        _ = Resolve(directory, id, state.Previous ?? throw new AddonException("no_previous_version", "No previous package is available."));
     }
 
     public void Disable(string id)

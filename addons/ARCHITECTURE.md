@@ -13,7 +13,9 @@ flowchart LR
     Host -. future granted destinations .-> Devices[Services / devices]
 ```
 
-Solid connections exist in the developer foundation. The Manager screen and native/network adapters remain future integration work. The CLI uses the same package, grant, settings, broker, and worker classes that a persistent service will embed.
+Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes a separate trusted management protocol over a Windows named pipe. Native/network adapters remain integration work. The CLI and service use the same package, grant, settings, broker, and worker classes.
+
+The management pipe permits its Windows owner and explicitly denies network logons. The complete ACL is applied at creation, and the initial listener uses FirstPipeInstance. Both ends verify ownership. The host holds an exclusive data-directory lease; eight management connections share its addon controllers, and list responses are paginated. Manager commands are never exposed on a guest worker's channel. See [MANAGEMENT.md](MANAGEMENT.md).
 
 ## Ownership
 
