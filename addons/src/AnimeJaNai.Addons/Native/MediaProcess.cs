@@ -24,24 +24,29 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
     private bool closing;
     private bool nativeReleased;
     private readonly NativeFrameBuffer? frames;
+    private readonly NativeEncodedPipe? encoded;
+    internal Stream EncodedOutput => encoded?.Reader ?? throw new AddonException("feature_unavailable", "This session has no encoded output.");
 
-    private MediaProcess(Process process, WindowsJob job, string directory, string workRoot, NativeFrameBuffer? frames)
+    private MediaProcess(Process process, WindowsJob job, string directory, string workRoot, NativeFrameBuffer? frames, NativeEncodedPipe? encoded)
     {
         this.process = process; this.job = job; this.directory = directory; this.workRoot = workRoot;
         this.frames = frames;
+        this.encoded = encoded;
         channel = new(process.StandardOutput.BaseStream, process.StandardInput.BaseStream);
         diagnostics = DrainAsync();
         monitoring = MonitorAsync();
     }
 
     public static async Task<MediaProcess> StartAsync(string root, string source, string configuration, int slot, string backend,
-        string workRoot, WorkerCommand command, CancellationToken token, bool enableFrameSamples = false)
+        string workRoot, WorkerCommand command, CancellationToken token, bool enableFrameSamples = false, NativeEncoding? encoding = null)
     {
         token.ThrowIfCancellationRequested();
+        encoding?.Validate();
         workRoot = Path.GetFullPath(workRoot);
         string directory = SafeFiles.DirectoryPath(workRoot, "media-" + Guid.NewGuid().ToString("N"));
         WindowsJob? job = null; Process? process = null; MediaProcess? result = null;
         NativeFrameBuffer? frames = null;
+        NativeEncodedPipe? encoded = null;
         try
         {
             // Native decoders/model loading need a different budget from guest
@@ -62,10 +67,13 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             job.Attach(process);
             if (enableFrameSamples && backend == "DirectML") frames = new NativeFrameBuffer();
             long sampleMapping = frames?.DuplicateTo(process) ?? 0;
-            result = new(process, job, directory, workRoot, frames);
+            if (encoding is not null) encoded = new();
+            long outputHandle = encoded?.DuplicateTo(process) ?? 0;
+            result = new(process, job, directory, workRoot, frames, encoded);
             await process.StandardInput.BaseStream.WriteAsync(new byte[] { 1 }, token);
             await result.channel.WriteAsync(new JsonObject { ["version"] = 1, ["root"] = Path.GetFullPath(root),
-                ["source"] = Path.GetFullPath(source), ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend, ["sampleMapping"] = sampleMapping }, token);
+                ["source"] = Path.GetFullPath(source), ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend,
+                ["sampleMapping"] = sampleMapping, ["encoding"] = encoding?.ToJson(), ["outputHandle"] = outputHandle }, token);
             return result; // Native initialization progresses behind the handle.
         }
         catch (Exception error)
@@ -80,6 +88,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
                 job?.Dispose();
                 if (process is not null) { try { process.Kill(true); } catch (InvalidOperationException) { } await process.WaitForExitAsync(); process.Dispose(); }
                 frames?.Dispose();
+                encoded?.Dispose();
                 await RemoveFilesAsync(workRoot, directory);
             }
             throw;
@@ -103,6 +112,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
     }
     public Task SeekAsync(double seconds, CancellationToken token)
     {
+        Contract.Require(encoded is null, "operation_unavailable", "Encoded streams require a new output session to change their timeline.");
         Contract.Require(double.IsFinite(seconds) && seconds >= 0 && seconds <= 315576000, "invalid_request", "Invalid seek position.");
         return ControlAsync(new() { ["operation"] = "seek", ["seconds"] = seconds }, token);
     }
@@ -183,7 +193,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             lifetime.Cancel(); job.Terminate();
             await job.WaitForEmptyAsync();
             await Task.WhenAll(monitoring, diagnostics);
-            job.Dispose(); process.Dispose(); frames?.Dispose(); nativeReleased = true;
+            job.Dispose(); process.Dispose(); frames?.Dispose(); encoded?.Dispose(); nativeReleased = true;
         }
         await RemoveFilesAsync(workRoot, directory);
         lock (sync) status = new() { ["state"] = "closed" };

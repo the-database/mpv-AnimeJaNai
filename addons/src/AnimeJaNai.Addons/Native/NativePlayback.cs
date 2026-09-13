@@ -22,15 +22,17 @@ internal sealed class NativePlayback : IDisposable
     public bool Ended { get; private set; }
     public bool Failed { get; private set; }
 
-    public NativePlayback(string installRoot, string source, string configuration, string workDirectory, int slot, string backend, long sampleMapping = 0)
+    public NativePlayback(string installRoot, string source, string configuration, string workDirectory, int slot, string backend,
+        long sampleMapping = 0, NativeEncoding? encoding = null, int outputDescriptor = -1)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) throw new PlatformNotSupportedException("Native media currently requires Windows x64.");
         Contract.Require(Path.IsPathFullyQualified(source) && File.Exists(source), "invalid_source", "A selected local media file is required.");
         Contract.Require(slot is >= 1 and <= 9 or >= 1001 and <= 1003 or >= 1010 and <= 1013, "invalid_profile", "Unsupported native profile.");
         Contract.Require(backend is "DirectML" or "TensorRT", "invalid_profile", "Unsupported native backend.");
+        encoding?.Validate();
+        Contract.Require(encoding is null ? outputDescriptor == -1 : outputDescriptor >= 0, "native_output", "Invalid native output configuration.");
         installRoot = Path.GetFullPath(installRoot);
-        library = NativeLibrary.Load(Path.Combine(installRoot, "libmpv-2.dll"), typeof(NativePlayback).Assembly,
-            DllImportSearchPath.UseDllDirectoryForDependencies | DllImportSearchPath.System32);
+        library = NativeRuntime.Load(installRoot);
         T Load<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
         try
         {
@@ -52,6 +54,27 @@ internal sealed class NativePlayback : IDisposable
                 "input-default-bindings", "input-terminal", "terminal", "audio", "sub", "access-references" }) Set(name, "no");
             Set("sub-auto", "no"); Set("audio-file-auto", "no"); Set("cover-art-auto", "no");
             Set("vo", "null"); Set("hwdec", backend == "DirectML" ? "d3d11va" : "cuda"); Set("idle", "yes");
+            if (encoding is not null)
+            {
+                Set("o", "pipe:" + outputDescriptor.ToString(CultureInfo.InvariantCulture));
+                Set("of", encoding.Container == "fragmentedMp4" ? "mp4" : encoding.Container);
+                Set("ofopts", encoding.Container switch {
+                    "matroska" => "live=1,cluster_time_limit=1000,flush_packets=1",
+                    "fragmentedMp4" => "movflags=frag_keyframe+empty_moov+default_base_moof,frag_duration=1000000,flush_packets=1",
+                    _ => "mpegts_flags=+resend_headers,flush_packets=1",
+                });
+                Set("ovc", encoding.VideoCodec + "_nvenc"); Set("ovc-hwframes", "yes");
+                Set("ovcopts", "preset=p4,tune=ll,bf=0,rc-lookahead=0,b=" + (encoding.VideoKbps * 1000).ToString(CultureInfo.InvariantCulture)
+                    + ",g=" + encoding.KeyframeFrames.ToString(CultureInfo.InvariantCulture));
+                Set("ocopy-metadata", "no");
+                if (encoding.AudioCodec != "none")
+                {
+                    Set("audio", "auto"); Set("oac", encoding.AudioCodec == "opus" ? "libopus" : "aac");
+                    Set("oacopts", "b=" + (encoding.AudioKbps * 1000).ToString(CultureInfo.InvariantCulture));
+                }
+                if (encoding.LengthSeconds > 0) Set("length", encoding.LengthSeconds.ToString("R", CultureInfo.InvariantCulture));
+                status["encoding"] = encoding.ToJson();
+            }
             // Use our already-opened file, restrict container parsers, and deny
             // nested protocol opens. Playlists and external references cannot
             // turn a selected file into additional file/network access.
@@ -81,7 +104,7 @@ internal sealed class NativePlayback : IDisposable
         {
             if (player != IntPtr.Zero) destroy!(player);
             selectedFile?.Dispose();
-            NativeLibrary.Free(library); throw;
+            throw;
         }
     }
 
@@ -165,7 +188,7 @@ internal sealed class NativePlayback : IDisposable
         lock (controlGate)
         {
             if (player == IntPtr.Zero) return;
-            destroy(player); player = IntPtr.Zero; selectedFile.Dispose(); NativeLibrary.Free(library);
+            destroy(player); player = IntPtr.Zero; selectedFile.Dispose();
         }
     }
 

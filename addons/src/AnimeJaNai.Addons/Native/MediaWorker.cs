@@ -37,9 +37,15 @@ internal static class MediaWorker
         // The handle was duplicated into this process before the execution gate.
         // It outlives libmpv and is closed after the filter unmaps its view.
         using var sampleMapping = new SafeFileHandle(new IntPtr(sampleHandle), ownsHandle: true);
+        long outputHandle = launch["outputHandle"] is null ? 0 : Contract.Number(launch, "outputHandle");
+        Contract.Require(outputHandle >= 0 && (outputHandle == 0) == (launch["encoding"] is null), "native_protocol", "Invalid encoded output launch.");
+        using var outputMapping = new SafeFileHandle(new IntPtr(outputHandle), ownsHandle: true);
+        using var encodedWriter = outputHandle == 0 ? null : new NativeEncodedWriter(outputMapping);
+        var encoding = launch["encoding"] is JsonObject options ? NativeEncoding.Parse(options) : null;
+        Contract.Require((encodedWriter is null) == (encoding is null), "native_protocol", "Invalid encoding parameters.");
         using var player = new NativePlayback(Contract.Text(launch, "root", 4096), Contract.Text(launch, "source", 4096),
             Contract.Text(launch, "configuration", 4096), Contract.Text(launch, "work", 4096),
-            checked((int)Contract.Number(launch, "slot")), Contract.Text(launch, "backend", 32), sampleHandle);
+            checked((int)Contract.Number(launch, "slot")), Contract.Text(launch, "backend", 32), sampleHandle, encoding, encodedWriter?.Descriptor ?? -1);
         var commands = Task.Run(async () =>
         {
             try
@@ -63,12 +69,20 @@ internal static class MediaWorker
             catch (AddonException error) when (error.Code == "worker_exited") { }
             catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         });
+        JsonObject? terminalState = null;
         try
         {
             long last = 0;
             while (!commands.IsCompleted)
             {
                 var state = player.Poll();
+                if (player.Ended && encoding is not null)
+                {
+                    terminalState = (JsonObject)state.DeepClone();
+                    // Encoder and muxer may still hold delayed packets. Do not
+                    // publish completion before their destruction flushes them.
+                    state["state"] = "finishing";
+                }
                 if (Stopwatch.GetElapsedTime(last) >= TimeSpan.FromMilliseconds(250) || player.Ended)
                 {
                     using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -86,6 +100,13 @@ internal static class MediaWorker
             // media EOF must not wait forever for another control message.
             try { await commands.WaitAsync(TimeSpan.FromSeconds(1)); }
             catch (TimeoutException) { _ = commands.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); }
+        }
+        player.Dispose();
+        encodedWriter?.Dispose();
+        if (terminalState is not null)
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await channel.WriteAsync(new JsonObject { ["version"] = 1, ["status"] = terminalState }, deadline.Token);
         }
         return player.Failed ? 1 : 0;
     }

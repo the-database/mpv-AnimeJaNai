@@ -37,7 +37,7 @@ foreach ($folder in $assets.packageFolders.PSObject.Properties.Name) {
 if (-not $runtimePackageDirectory) { throw 'Could not locate the .NET runtime license and notices.' }
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'LICENSE.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-LICENSE.TXT')
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-THIRD-PARTY-NOTICES.TXT')
-foreach ($name in @('README.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'NATIVE-MEDIA.md', 'FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
+foreach ($name in @('README.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'NATIVE-MEDIA.md', 'NATIVE-OUTPUT.md', 'FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
     Copy-Item -LiteralPath (Join-Path $addonRoot $name) -Destination $outputRoot
 }
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/bootstrap.ps1') -Destination (Join-Path $outputRoot 'tools')

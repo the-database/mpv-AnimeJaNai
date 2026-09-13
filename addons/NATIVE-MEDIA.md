@@ -1,6 +1,6 @@
 # Native media sessions — API 1.1 preview
 
-The Windows host can run independent AJN processing sessions in supervised native processes. A real Wasm addon has been tested opening two DirectML sessions, producing 960×720 frames from a 480×360 video, pausing/seeking one while the other advances, and closing them cleanly. The native null output avoids downloading GPU frames merely to discard them. API1.2 additionally offers GPU-reduced SDR samples through the separate [frames capability](FRAMES.md). Encoding, sound and streaming remain under development.
+The Windows host can run independent AJN processing sessions in supervised native processes. A real Wasm addon has been tested opening two DirectML sessions, producing 960×720 frames from a 480×360 video, pausing/seeking one while the other advances, and closing them cleanly. The native null output avoids downloading GPU frames merely to discard them. API1.2 additionally offers GPU-reduced SDR samples through the separate [frames capability](FRAMES.md). A [private encoding/audio adapter](NATIVE-OUTPUT.md) is tested; public output and streaming integration remain under development.
 
 ## Select media in Manager
 

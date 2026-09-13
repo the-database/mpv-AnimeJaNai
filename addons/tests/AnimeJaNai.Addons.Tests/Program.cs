@@ -65,6 +65,7 @@ internal static partial class Checks
         await MediaSelectionChecks();
         await FrameAndTimerChecks();
         await NetworkChecks();
+        await EncodingChecks();
         if (OperatingSystem.IsWindows()) await ManagementChecks();
         if (args.Length == 4) await RuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await FrameRuntimeChecks(args[1], args[2], args[3]);
