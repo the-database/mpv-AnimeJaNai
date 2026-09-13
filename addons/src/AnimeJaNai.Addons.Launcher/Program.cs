@@ -12,8 +12,8 @@ try
         dataRoot = args.Length == 2 ? args[1] : Path.Combine(installRoot, "animejanai", "addons");
         return await LoginAttachment.RunAsync(installRoot, dataRoot);
     }
-    if (args.Length == 4 && args[0] == "player" && int.TryParse(args[3], out int playerId))
-    { dataRoot = args[2]; return await PlayerAttachment.RunAsync(args[1], dataRoot, playerId); }
+    if (args.Length is 4 or 5 && args[0] == "player" && int.TryParse(args[3], out int playerId))
+    { dataRoot = args[2]; return await PlayerAttachment.RunAsync(args[1], dataRoot, playerId, instance: args.Length == 5 ? args[4] : null); }
     return 2;
 }
 catch (Exception error)

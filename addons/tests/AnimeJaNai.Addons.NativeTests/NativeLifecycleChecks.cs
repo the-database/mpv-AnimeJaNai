@@ -105,7 +105,7 @@ internal static class NativeLifecycleChecks
         return count;
     }
 
-    private sealed class TestPlayer : IAsyncDisposable
+    internal sealed class TestPlayer : IAsyncDisposable
     {
         private readonly Process process;
         private readonly string pipeName = "AJN.LifecycleTest." + Guid.NewGuid().ToString("N");
@@ -113,19 +113,28 @@ internal static class NativeLifecycleChecks
         private StreamReader? reader;
         private StreamWriter? writer;
         private int sequence;
-        public TestPlayer(string root, string data, string output, string name, string executable)
+        internal int Id => process.Id;
+        public TestPlayer(string root, string data, string output, string name, string executable, string[]? extra = null, string? source = null)
         {
+            // mpv.net persists its own settings even with mpv's --no-config.
+            // Give each player a private directory so neither the package nor
+            // another concurrent player supplies or receives test settings.
+            string config = Path.Combine(output, name + "-config");
+            Directory.CreateDirectory(config);
             var info = new ProcessStartInfo(Path.Combine(root, executable)) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
                 WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true };
+            info.Environment["MPVNET_HOME"] = config;
             if (executable == "mpvnet.exe") {
                 info.ArgumentList.Add("--process-instance=multi"); info.ArgumentList.Add("--auto-load-folder=no");
                 info.ArgumentList.Add("--force-window=no"); info.ArgumentList.Add("--window-minimized=yes");
             }
             info.Environment["ANIMEJANAI_ROOT"] = root; info.Environment["ANIMEJANAI_DATA_DIR"] = data;
-            foreach (string value in new[] { "--no-config", "--load-scripts=no", "--vo=null", "--ao=null", "--hwdec=no", "--keep-open=yes", "--idle=yes",
+            foreach (string value in new[] { "--config-dir=" + config, "--no-config", "--load-scripts=no", "--vo=null", "--ao=null", "--hwdec=no", "--keep-open=yes", "--idle=yes",
                 "--input-terminal=no", "--terminal=no", "--input-ipc-server=\\\\.\\pipe\\" + pipeName,
                 "--script=" + Path.Combine(root, "portable_config", "scripts", "animejanai_addons.lua"),
-                "--log-file=" + Path.Combine(output, name + "-mpv.log"), Path.Combine(root, "animejanai", "benchmarks", "480x360.mp4") }) info.ArgumentList.Add(value);
+                "--log-file=" + Path.Combine(output, name + "-mpv.log") }) info.ArgumentList.Add(value);
+            foreach (string value in extra ?? []) info.ArgumentList.Add(value);
+            info.ArgumentList.Add(source ?? Path.Combine(root, "animejanai", "benchmarks", "480x360.mp4"));
             process = Process.Start(info) ?? throw new Exception("Could not start test player.");
             _ = Drain(process.StandardOutput); _ = Drain(process.StandardError);
         }
@@ -138,14 +147,20 @@ internal static class NativeLifecycleChecks
             reader = new(pipe, leaveOpen: true); writer = new(pipe, leaveOpen: true) { AutoFlush = true };
         }
         public async Task<double> PositionAsync()
+            => (await CommandAsync("get_property", "time-pos"))?.GetValue<double>() ?? 0;
+        internal async Task<JsonNode?> CommandAsync(params string[] command)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5)); int request = ++sequence;
-            await writer!.WriteLineAsync(new JsonObject { ["command"] = new JsonArray("get_property", "time-pos"), ["request_id"] = request }.ToJsonString());
+            await writer!.WriteLineAsync(new JsonObject { ["command"] = new JsonArray(command.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()), ["request_id"] = request }.ToJsonString());
             while (true)
             {
                 string line = await reader!.ReadLineAsync(deadline.Token) ?? throw new IOException("Test player disconnected.");
                 var result = JsonNode.Parse(line)!;
-                if (result["request_id"]?.GetValue<int>() == request) return result["data"]?.GetValue<double>() ?? 0;
+                if (result["request_id"]?.GetValue<int>() == request)
+                {
+                    if (result["error"]?.GetValue<string>() != "success") throw new IOException("Player test command failed: " + result["error"]);
+                    return result["data"]?.DeepClone();
+                }
             }
         }
         public async Task KillAsync() { if (!process.HasExited) process.Kill(); await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); }

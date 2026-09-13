@@ -23,9 +23,49 @@ for _, name in ipairs(utils.readdir(installed, 'dirs') or {}) do
 end
 if not registered then return end
 
+-- Only this trusted script configures the private sample filter. The file
+-- carries bounded configuration, never pixels or arbitrary player commands.
+local pid = mp.get_property_number('pid')
+local instance = string.format('%d-%.0f', pid, mp.get_time() * 1000)
+local control = utils.join_path(data, 'player-control/' .. instance .. '.json')
+local label = 'ajn-player-sample'
+local revision, changed, mapping = nil, 0, nil
+local function tap_present()
+    for _, item in ipairs(mp.get_property_native('vf') or {}) do
+        if item.label == label then return true end
+    end
+    return false
+end
+local function remove_tap()
+    if tap_present() then mp.commandv('vf', 'remove', '@' .. label) end
+    mapping = nil
+end
+local function update_sample()
+    local file = io.open(control, 'rb')
+    local text = file and file:read(4097)
+    if file then file:close() end
+    local value = text and #text <= 4096 and utils.parse_json(text) or nil
+    if type(value) ~= 'table' or value.schemaVersion ~= 1 or value.instance ~= instance
+        or type(value.revision) ~= 'string' or #value.revision > 20
+        or not value.revision:match('^%d+$') then remove_tap(); return end
+    if revision ~= value.revision then revision = value.revision; changed = mp.get_time() end
+    if value.available ~= true or value.enabled ~= true or mp.get_time() - changed > 3 then
+        remove_tap(); return
+    end
+    local prefix = 'Local\\AJN.PlayerFrames.'
+    local name = value.mapping
+    if type(name) ~= 'string' or #name ~= #prefix + 32 or name:sub(1, #prefix) ~= prefix
+        or not name:sub(#prefix + 1):match('^[a-f0-9]+$') then remove_tap(); return end
+    if mapping ~= name then remove_tap(); mapping = name end
+    if not tap_present() then
+        mp.commandv('vf', 'add', '@' .. label .. ':ajn-sample:name=%' .. #name .. '%' .. name)
+    end
+end
+mp.add_periodic_timer(0.5, update_sample)
+
 mp.command_native_async({
     name = 'subprocess',
-    args = { host, 'player', root, data, tostring(mp.get_property_number('pid')) },
+    args = { host, 'player', root, data, tostring(pid), instance },
     detach = true,
     playback_only = false,
 }, function(success, result)

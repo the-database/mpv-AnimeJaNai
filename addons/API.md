@@ -1,4 +1,4 @@
-# Addon API 1.5 preview
+# Addon API 1.6 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -37,7 +37,7 @@ While processing it, the guest may issue broker requests and wait for their repl
 
 The SDK handles `host.ping` internally. User handlers receive `start`, `stop`, `action` with `{ id }`, `settings.changed`, requested `timer` events, and explicit developer replay events. Additive event-data fields must be ignored unless used. Callback failures stop that worker. A host heartbeat every five seconds detects a guest that stops servicing messages after an event.
 
-API 1.2 adds a binary tail for successful `frames.read` responses; API 1.3 adds one for `network.result`. The JSON declares `byteLength`; exactly that many bytes follow the newline. Other messages remain JSON-only. See [FRAMES.md](FRAMES.md) and [NETWORK.md](NETWORK.md).
+API 1.2 adds a binary tail for successful `frames.read` responses; API 1.3 adds one for `network.result`, and API 1.6 uses the frame format for `playerFrames.read`. The JSON declares `byteLength`; exactly that many bytes follow the newline. Other messages remain JSON-only. See [FRAMES.md](FRAMES.md), [PLAYER-FRAMES.md](PLAYER-FRAMES.md) and [NETWORK.md](NETWORK.md).
 
 Errors use standard integer JSON-RPC error codes and an AJN-specific string at `error.data.code`, such as `permission_denied`, `storage_quota`, `capacity_exceeded`, or `feature_unavailable`. Invalid transport/protocol messages stop the worker; valid broker requests that are denied receive a structured error and may be handled by the addon. The JavaScript SDK exposes the string as `error.code`.
 
@@ -60,6 +60,10 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 | `frames.subscribe` | `{ sessionId, stage, format, width, height, maxFps }` | `frames.read` + `sessions.manage` | Subscription ID and accepted sample options; frames 1.0 |
 | `frames.read` | `{ subscriptionId }` | `frames.read` + `sessions.manage` | `{ frame, byteLength }` followed by bounded binary bytes; or no new sample |
 | `frames.unsubscribe` | `{ subscriptionId }` | `frames.read` + `sessions.manage` | `null`; releases the sample subscription |
+| `playerFrames.list` | `{}` | `player.observe` + `frames.read` | Opaque attached player IDs; playerFrames 1.0 |
+| `playerFrames.subscribe` | `{ playerId, stage, format, width, height, maxFps }` | `player.observe` + `frames.read` | Owned subscription ID and accepted options |
+| `playerFrames.read` | `{ subscriptionId }` | `player.observe` + `frames.read` | Latest unread sample and bounded binary bytes, or no new sample |
+| `playerFrames.unsubscribe` | `{ subscriptionId }` | `player.observe` + `frames.read` | `null`; releases only this observer |
 | `timers.set` | `{ timerId, intervalMs, repeat }` | None | `null`; creates/replaces a bounded timer; timers 1.0 |
 | `timers.clear` | `{ timerId }` | None | `null`; cancels the timer |
 | `network.selections` | `{}` | `network.connect` | Approved destination IDs and metadata; network 1.0 |
@@ -82,6 +86,12 @@ API 1.5 adds [remote media sources](REMOTE-INPUTS.md) through the optional
 `remoteSources` capability. Local-file methods and older compiled addons keep
 their existing behavior. The trusted reader supplies bytes directly to the native
 session; a remote media stream does not pass through Wasm messages.
+
+API 1.6 adds [normal-player observations](PLAYER-FRAMES.md) through optional
+`playerFrames` capability 1.0. These use the existing binary frame transport and
+require separate observation consent. Multiple addons share one bounded sample
+producer per player while keeping independent subscriptions. Owned-session
+methods and previously compiled addons retain their behavior.
 
 Private storage is separated by addon ID: maximum 256 keys, 32 KiB per value, 1 MiB total. A stored null and a missing key both read as null in this preview. Saving one key is atomic; a read-modify-write sequence is not a transaction across distinct worker instances. The embedding host should create one activation controller per addon ID.
 

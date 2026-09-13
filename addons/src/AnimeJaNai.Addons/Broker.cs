@@ -12,16 +12,19 @@ public sealed class Broker : IAsyncDisposable
     private readonly Action<string> log;
     private readonly SessionRegistry.Owner? owner;
     private readonly NetworkAccess network;
+    private readonly PlayerFrameRegistry? playerFrames;
+    private readonly PlayerFrameRegistry.Owner? observer;
     private volatile bool disposed;
     internal AddonTimers Timers { get; } = new();
 
-    public Broker(AddonPackage package, PermissionGrant grant, string dataRoot, Action<string>? log = null, SessionRegistry? sessions = null, NetworkSelections? networkSelections = null)
+    public Broker(AddonPackage package, PermissionGrant grant, string dataRoot, Action<string>? log = null, SessionRegistry? sessions = null, NetworkSelections? networkSelections = null, PlayerFrameRegistry? playerFrames = null)
     {
         Contract.Require(package.Hash == grant.PackageHash, "invalid_grant", "Permissions belong to a different package.");
         this.package = package;
         this.grant = grant;
         this.log = log ?? (_ => { });
         this.sessions = sessions;
+        this.playerFrames = playerFrames;
         owner = sessions?.CreateOwner(package, grant);
         network = new(package, grant, networkSelections ?? new(dataRoot));
         foreach (var (name, requirement) in package.Manifest.RequiredCapabilities ?? [])
@@ -30,13 +33,15 @@ public sealed class Broker : IAsyncDisposable
         storage = new(dataRoot, package.Manifest.Id);
         settings = new(dataRoot, package.Manifest);
         _ = settings.Get();
+        observer = playerFrames?.CreateOwner();
     }
 
     private string[] AvailableCapabilities() => ["host", "storage", "logging", "settings", "timers", "network",
         .. OperatingSystem.IsWindows() ? new[] { "credentials" } : [],
         .. sessions is null ? [] : sessions.SupportsFrames(owner!) ? new[] { "sessions", "frames" } : ["sessions"],
         .. sessions?.SupportsOutputs(owner!) == true ? new[] { "outputs" } : [],
-        .. sessions?.SupportsRemoteSources(owner!) == true ? new[] { "remoteSources" } : []];
+        .. sessions?.SupportsRemoteSources(owner!) == true ? new[] { "remoteSources" } : [],
+        .. playerFrames is not null ? new[] { "playerFrames" } : []];
     private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
@@ -51,6 +56,13 @@ public sealed class Broker : IAsyncDisposable
 
     public async Task<BrokerResponse> InvokeTransportAsync(string method, JsonObject parameters, CancellationToken token)
     {
+        if (method == "playerFrames.read")
+        {
+            token.ThrowIfCancellationRequested();
+            Contract.Require(!disposed, "owner_closed", "Addon instance has stopped.");
+            var snapshot = Observations().Read(observer!, Contract.Text(parameters, "subscriptionId", 64));
+            return new(new JsonObject { ["frame"] = snapshot?.Metadata, ["byteLength"] = snapshot?.Pixels.Length ?? 0 }, snapshot?.Pixels ?? default);
+        }
         if (method == "network.result")
         {
             token.ThrowIfCancellationRequested();
@@ -72,6 +84,17 @@ public sealed class Broker : IAsyncDisposable
         switch (method)
         {
             case "host.info": return Info();
+            case "playerFrames.list": return Observations().List(observer!);
+            case "playerFrames.subscribe":
+                var observed = Observations();
+                Contract.Require(Contract.Text(parameters, "stage", 32) == "processed" && Contract.Text(parameters, "format", 16) == "bgra8",
+                    "frame_format_unavailable", "Player observations offer processed BGRA8 samples.");
+                long ow = Contract.Number(parameters, "width"), oh = Contract.Number(parameters, "height"), ofps = Contract.Number(parameters, "maxFps");
+                Contract.Require(ow is >= 1 and <= 320 && oh is >= 1 and <= 180 && ofps is >= 1 and <= 60, "invalid_request", "Unsupported sample dimensions or rate.");
+                return observed.Subscribe(observer!, Contract.Text(parameters, "playerId", 64), new((int)ow, (int)oh, (int)ofps));
+            case "playerFrames.unsubscribe":
+                Observations().Unsubscribe(observer!, Contract.Text(parameters, "subscriptionId", 64)); return null;
+            case "playerFrames.read": throw new AddonException("binary_transport_required", "Player samples require the binary response transport.");
             case "settings.get": return settings.Get();
             case "remoteSources.formats":
                 grant.Demand("media.input"); grant.Demand("sessions.manage");
@@ -170,11 +193,17 @@ public sealed class Broker : IAsyncDisposable
     }
 
     private SessionRegistry Sessions() => sessions ?? throw new AddonException("feature_unavailable", "No native processing provider is connected.");
+    private PlayerFrameRegistry Observations()
+    {
+        grant.Demand("player.observe"); grant.Demand("frames.read");
+        return playerFrames ?? throw new AddonException("feature_unavailable", "This host does not include player observation.");
+    }
 
     public async ValueTask DisposeAsync()
     {
         disposed = true;
         Timers.Close();
+        if (observer is not null) playerFrames!.ReleaseOwner(observer);
         await Task.WhenAll(network.DisposeAsync().AsTask(), sessions is null ? Task.CompletedTask : sessions.ReleaseOwnerAsync(owner!));
     }
 }

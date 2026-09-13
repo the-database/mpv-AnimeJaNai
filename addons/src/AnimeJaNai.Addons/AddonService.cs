@@ -32,6 +32,7 @@ public sealed class AddonService : IAsyncDisposable
     private readonly Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start;
     private readonly ConcurrentDictionary<string, Entry> entries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> clients = new(StringComparer.Ordinal);
+    internal Native.NativePlayerObservations? PlayerObservations { get; init; }
     public bool HasRunningWorkers => entries.Values.Any(e => e.Worker is { IsStopped: false });
 
     public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null, NetworkSelections? networkSelections = null, HostSettings? hostSettings = null, LoginSettings? loginSettings = null)
@@ -67,13 +68,21 @@ public sealed class AddonService : IAsyncDisposable
                     try { await WithAsync(id, async entry => { await AutoActivateAsync(entry, client, token); return null; }, token); }
                     catch (Exception error) when (error is AddonException or IOException or UnauthorizedAccessException) { }
                 }
-            if (kind != "on_manager") return new JsonObject { ["major"] = 1, ["minor"] = 4, ["kind"] = kind };
-            return new JsonObject { ["major"] = 1, ["minor"] = 4, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
+            if (kind != "on_manager") return new JsonObject { ["major"] = 1, ["minor"] = 5, ["kind"] = kind };
+            return new JsonObject { ["major"] = 1, ["minor"] = 5, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
                 ["credentialsAvailable"] = OperatingSystem.IsWindows(), ["hostSettingsAvailable"] = hostSettings is not null, ["loginSettingsAvailable"] = loginSettings is not null };
         }
         Contract.Require(clients.TryGetValue(client, out var role), "handshake_required", "Complete a trusted connection handshake first.");
         if (role != "on_manager")
         {
+            if (role == "on_player" && method is "player.attach" or "player.poll")
+            {
+                if (PlayerObservations is null) return new JsonObject { ["available"] = false };
+                if (method == "player.poll") return PlayerObservations.Poll(client);
+                long processId = Contract.Number(parameters, "processId");
+                Contract.Require(processId is >= 1 and <= int.MaxValue, "invalid_player", "Expected a player process id.");
+                return PlayerObservations.Attach(client, (int)processId);
+            }
             Contract.Require(method == "lifecycle.ping", "management_denied", "Lifecycle connections can only retain their activation.");
             if (role == "on_login" && loginSettings?.IsEnabled != true)
             {
@@ -311,6 +320,7 @@ public sealed class AddonService : IAsyncDisposable
     public async Task DisconnectAsync(string client)
     {
         if (!clients.TryRemove(client, out string? kind)) return;
+        PlayerObservations?.Disconnect(client);
         foreach (var entry in entries.Values)
         {
             await entry.Gate.WaitAsync();

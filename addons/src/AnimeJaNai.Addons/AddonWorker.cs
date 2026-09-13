@@ -38,7 +38,7 @@ public sealed class AddonWorker : IAddonInstance
 
     public static async Task<AddonWorker> StartAsync(AddonPackage package, PermissionGrant grant, string runtime,
         string workRoot, string dataRoot, WorkerCommand command, Action<string>? log = null,
-        SessionRegistry? sessions = null, TimeSpan? eventTimeout = null, CancellationToken cancellationToken = default, NetworkSelections? networkSelections = null)
+        SessionRegistry? sessions = null, TimeSpan? eventTimeout = null, CancellationToken cancellationToken = default, NetworkSelections? networkSelections = null, PlayerFrameRegistry? playerFrames = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("This host currently enforces worker resource limits on Windows only.");
         WorkerBridge.VerifyRuntime(runtime);
@@ -51,7 +51,7 @@ public sealed class AddonWorker : IAddonInstance
         AddonWorker? worker = null;
         try
         {
-            broker = new Broker(package, grant, dataRoot, log, sessions, networkSelections);
+            broker = new Broker(package, grant, dataRoot, log, sessions, networkSelections, playerFrames);
             job = new WindowsJob();
             directory = SafeFiles.DirectoryPath(workRoot, "worker-" + Guid.NewGuid().ToString("N"));
             string module = Path.Combine(directory, "module.wasm");

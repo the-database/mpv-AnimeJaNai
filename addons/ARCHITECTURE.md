@@ -10,11 +10,12 @@ flowchart LR
     Host --> Data[Addon storage / settings]
     Host --> Sessions[Supervised native AJN sessions]
     Sessions -->|GPU-reduced samples| Host
+    Player[Normal AJN playback] -->|Separately approved small samples| Host
     Host -->|Approved HTTP / UDP| Devices[Services / devices]
     Sessions -->|Private encoded stream adapter| Host
 ```
 
-Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes trusted management over a Windows named pipe. Native sessions, SDR DirectML samples, scoped HTTP/UDP and owned encoded HTTP outputs are integrated. The CLI and service use the same package, grant, settings, broker, and worker classes.
+Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes trusted management over a Windows named pipe. Native sessions, SDR DirectML samples, normal-player observations, scoped HTTP/UDP and owned encoded HTTP outputs are integrated. The CLI and service use the same package, grant, settings, broker, and worker classes.
 
 The management pipe permits its Windows owner and explicitly denies network logons. The complete ACL is applied at creation, and the initial listener uses FirstPipeInstance. Both ends verify ownership. The host holds an exclusive data-directory lease; eight management connections share its addon controllers, and list responses are paginated. Manager commands are never exposed on a guest worker's channel. See [MANAGEMENT.md](MANAGEMENT.md).
 

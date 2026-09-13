@@ -10,4 +10,5 @@
   <ItemGroup><Compile Include="../HttpFixture.cs" Link="HttpFixture.cs" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/output-inspector/*" Link="output-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/remote-inspector/*" Link="remote-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/player-inspector/*" Link="player-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

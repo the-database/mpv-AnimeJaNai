@@ -29,8 +29,14 @@ applicable connected triggers immediately. The default data directory is
 `<AJN root>/animejanai/addons`; the trusted `ANIMEJANAI_ROOT` and
 `ANIMEJANAI_DATA_DIR` overrides match Manager's layout.
 
-The bridge pings every five seconds and makes at most three connection/start
-attempts if the whole host connection is lost. It never blocks playback on an
+The bridge pings every five seconds, or polls every half-second when the optional
+normal-player observation adapter is available. The poll renews a short sample
+lease and updates bounded private configuration for the trusted Lua bridge.
+Observation requires its own explicit grant; an attached player alone performs
+no GPU sampling. See [PLAYER-FRAMES.md](PLAYER-FRAMES.md).
+
+The bridge makes at most three connection/start attempts if the whole host
+connection is lost. It never blocks playback on an
 addon callback. Manager and players use the same launch-or-connect helper;
 simultaneous host candidates respect the exclusive data-directory lease and
 connect to the winner. The existing eight-client limit includes lifecycle

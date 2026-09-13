@@ -1,4 +1,4 @@
-# Trusted management protocol 1.4 preview
+# Trusted management protocol 1.5 preview
 
 This protocol connects AJN Manager to the persistent host. It is **not** an addon capability. Guests only receive their private broker channel and cannot install packages, edit grants, or control another addon through it.
 
@@ -68,7 +68,7 @@ without an explicit instance the service does not advertise the editor.
 
 Management 1.4 adds `loginSettingsAvailable` and the canonical client's
 `ConnectOrStartAsync` / `ConnectLifecycleAsync`. A lifecycle connection begins
-with `lifecycle.hello` and `{major:1,kind:"on_player"|"on_login"}`. Its only
+with `lifecycle.hello` and `{major:1,kind:"on_player"|"on_login"}`. Its baseline
 subsequent operation is `lifecycle.ping`, returning `{connected:true}` or false
 when login consent was removed externally. Changing roles on the same connection
 is denied, as are all Manager methods from a lifecycle role. Login requires
@@ -77,11 +77,18 @@ reason. Install and rollback activate against all applicable connected roles.
 Guests do not receive this channel or any of these methods. The GUI launcher
 and mpv integration are described in [LIFECYCLE.md](LIFECYCLE.md).
 
+Management 1.5 adds `player.attach` and `player.poll` exclusively to the trusted
+`on_player` role. The adapter validates the original local AJN player process and
+returns its private sample configuration. Without a matching native adapter,
+attachment reports `available:false`. These methods are unavailable to Manager,
+login and guest roles. They do not forward arbitrary player commands. The public
+addon API exposes only opaque observation handles; see [PLAYER-FRAMES.md](PLAYER-FRAMES.md).
+
 The four media operations require a configured native provider and the addon's `sessions.manage` grant. `manager.hello` includes `nativeMediaAvailable`; addon summaries include `mediaPermission`. The standalone client exposes a copy of the hello result in `ServerInfo`. Resource consent uses the currently reviewed addon hash, so changing the installed version while a dialog is open causes rejection. See [NATIVE-MEDIA.md](NATIVE-MEDIA.md) for provider setup and resource limits.
 
 The registry supports 128 installed addons; the worker limit is eight. A failed package lookup does not permanently consume a host entry. One corrupt addon gets its own error row and can still be removed. An invalid rollback request leaves its running worker alone. An install validates the selected package and grant before stopping the previous instance; an I/O failure during the subsequent atomic registration may require explicitly restarting the still-registered old package.
 
-On disconnection, only that connection's `on_manager` reason is released. Other Manager connections and explicit manual starts keep their activation. Stop does not unregister the package; a new relevant activation may start it later. Remove prevents future activation. There is no automatic crash/restart loop.
+On disconnection, only that connection's activation reason and player observation registration are released. Other connections and explicit manual starts keep their activation. Stop does not unregister the package; a new relevant activation may start it later. Remove prevents future activation. There is no automatic crash/restart loop.
 
 When a new settings schema rejects a saved value, `addons.settings` returns that field's default and identifies it in `invalidSettings`. Manager visibly explains the repair. Reading does not overwrite the original value; clicking Save validates and persists the chosen replacements. Corrupt JSON files remain preserved for manual recovery. Saving succeeds durably before notifying an addon; if the notification fails, the saved data is still retained.
 

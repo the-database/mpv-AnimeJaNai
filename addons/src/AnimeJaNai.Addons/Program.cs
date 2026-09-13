@@ -12,6 +12,7 @@ try
     switch (args[0])
     {
         case "serve" when args.Length is >= 3 and <= 5:
+        {
             WorkerBridge.VerifyRuntime(args[2]);
             MediaSelections? media = args.Length >= 4 ? new(args[1]) : null;
             int capacity = 2;
@@ -19,18 +20,21 @@ try
             var hostSettings = new HostSettings(args[1], args.Length == 5 ? capacity : null);
             var networkSelections = new NetworkSelections(args[1]);
             SessionRegistry? nativeSessions = media is null ? null : new(new AnimeJaNai.Addons.Native.NativeSessionProvider(args[3], args[1], media, WorkerCommand.Current(), capacity, networkSelections, hostSettings), perOwnerLimit: 16);
+            using var playerObservations = args.Length >= 4 && AnimeJaNai.Addons.Native.NativePlayerObservations.Available(args[3])
+                ? new AnimeJaNai.Addons.Native.NativePlayerObservations(args[3]) : null;
             var service = new AddonService(args[1], async (p, g, log, token) => await AddonWorker.StartAsync(p, g, args[2],
-                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections),
-                media, networkSelections, hostSettings, args.Length >= 4 ? new LoginSettings(args[3], args[1]) : null);
+                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections, playerFrames: playerObservations?.Frames),
+                media, networkSelections, hostSettings, args.Length >= 4 ? new LoginSettings(args[3], args[1]) : null) { PlayerObservations = playerObservations };
             using (var shutdown = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, e) => { e.Cancel = true; shutdown.Cancel(); };
                 await new ManagementServer(args[1], service).RunAsync(shutdown.Token);
             }
             return 0;
-        case "attach-player" when args.Length == 4:
+        }
+        case "attach-player" when args.Length is 4 or 5:
             Contract.Require(int.TryParse(args[3], out int playerId), "invalid_player", "Expected the owning player process id.");
-            return await PlayerAttachment.RunAsync(args[1], args[2], playerId);
+            return await PlayerAttachment.RunAsync(args[1], args[2], playerId, instance: args.Length == 5 ? args[4] : null);
         case "new" when args.Length == 3:
             DeveloperTools.New(args[1], args[2]);
             Console.WriteLine("Created addon source and editor types.");
@@ -108,7 +112,7 @@ catch (Exception error) when (error is IOException or UnauthorizedAccessExceptio
 static string[] Grants(string csv) => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 static void Print(object? value) => Console.WriteLine(JsonSerializer.Serialize(value, Contract.Json));
 static void Help() => Console.WriteLine("""
-AJN addon developer host (API 1.5 preview)
+AJN addon developer host (API 1.6 preview)
   new <new-directory> <reverse.domain.id>
   build <source-directory> <javy.exe> <new-package.ajnaddon>
   inspect <package.ajnaddon>

@@ -64,6 +64,8 @@ internal static partial class Checks
         await SessionChecks();
         await MediaSelectionChecks();
         await FrameAndTimerChecks();
+        await PlayerFrameChecks();
+        if (OperatingSystem.IsWindows()) await PlayerMappingChecks();
         await NetworkChecks();
         await EncodingChecks();
         await OutputChecks();

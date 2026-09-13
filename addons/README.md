@@ -16,9 +16,11 @@ This is the first working part of the AJN addon framework. It combines the earli
 
 **Remote media now works:** a separate input permission lets addons process media from approved HTTP/HTTPS services, including range seeking and remote-to-remote encoded delivery. The trusted reader supplies bytes directly to owned native sessions. See [REMOTE-INPUTS.md](REMOTE-INPUTS.md) for the generic inspector, bounds and supported formats.
 
-**Remaining integration:** more source/output transports, TCP/TLS/WebSockets, listeners/discovery, shared-player/final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+**Normal-player samples now work:** separately approved observers can read small processed SDR images from ordinary mpv and mpv.net playback. Multiple addons share one producer per player, with independent sample sizes and rates. Tests cover actual Wasm, two players, seeking, independent unsubscribe and host termination while playback continues. See [PLAYER-FRAMES.md](PLAYER-FRAMES.md) and the generic player inspector.
 
-API 1.5 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.4 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+**Remaining integration:** more source/output transports, TCP/TLS/WebSockets, listeners/discovery, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+
+API 1.6 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.5 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 

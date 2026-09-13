@@ -1,17 +1,21 @@
 using System.Diagnostics;
 using AnimeJaNai.Addons.Management;
+using System.Text;
+using System.Text.Json.Nodes;
 
 namespace AnimeJaNai.Addons;
 
-// One small trusted bridge per player. It has no media path or player command
+// One small trusted bridge per player. It has no media path or general command
 // channel. Holding the original process handle avoids following a reused PID.
 internal static class PlayerAttachment
 {
-    public static async Task<int> RunAsync(string installRoot, string dataRoot, int playerId, CancellationToken cancellationToken = default)
+    public static async Task<int> RunAsync(string installRoot, string dataRoot, int playerId, CancellationToken cancellationToken = default, string? instance = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Player addon activation currently supports Windows.");
         installRoot = Path.GetFullPath(installRoot); dataRoot = Path.GetFullPath(dataRoot);
         Contract.Require(playerId > 0 && playerId != Environment.ProcessId, "invalid_player", "Expected the owning AJN player process.");
+        Contract.Require(instance is null || Contract.ValidKey(instance), "invalid_player", "Invalid player bridge instance.");
+        string? control = instance is null ? null : Path.Combine(SafeFiles.DirectoryPath(dataRoot, "player-control"), instance + ".json");
         using var player = Process.GetProcessById(playerId);
         _ = player.SafeHandle;
         string? executable = player.MainModule?.FileName;
@@ -33,10 +37,24 @@ internal static class PlayerAttachment
                         Path.Combine(installRoot, "addon-host", "runtime", "wasmtime.exe"),
                         File.Exists(Path.Combine(installRoot, "addon-host", "native-media.json")) ? installRoot : null,
                         kind: "on_player", cancellationToken: lifetime.Token);
+                    bool observing = false;
+                    long revision = 0;
+                    if (control is not null)
+                    {
+                        var attached = await client.CallAsync("player.attach", new JsonObject { ["processId"] = playerId }, lifetime.Token);
+                        observing = attached?["available"]?.GetValue<bool>() == true;
+                    }
                     while (true)
                     {
-                        await Task.Delay(TimeSpan.FromSeconds(5), lifetime.Token);
-                        await client.CallAsync("lifecycle.ping", cancellationToken: lifetime.Token);
+                        if (observing)
+                        {
+                            var configuration = (JsonObject)(await client.CallAsync("player.poll", cancellationToken: lifetime.Token))!;
+                            configuration["schemaVersion"] = 1; configuration["instance"] = instance;
+                            configuration["revision"] = (++revision).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            SafeFiles.AtomicWrite(control!, Encoding.UTF8.GetBytes(configuration.ToJsonString()));
+                        }
+                        else await client.CallAsync("lifecycle.ping", cancellationToken: lifetime.Token);
+                        await Task.Delay(TimeSpan.FromMilliseconds(observing ? 500 : 5000), lifetime.Token);
                     }
                 }
                 catch (Exception error) when (error is IOException or TimeoutException)
@@ -48,7 +66,16 @@ internal static class PlayerAttachment
             return 0;
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { return 0; }
-        finally { lifetime.Cancel(); await ownerExited; }
+        catch (ManagementException error) when (error.Code == "player_closed") { return 0; }
+        finally
+        {
+            lifetime.Cancel(); await ownerExited;
+            if (control is not null)
+            {
+                try { SafeFiles.CheckParents(control); File.Delete(control); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or AddonException) { }
+            }
+        }
     }
 
     private static async Task WatchOwnerAsync(Process owner, CancellationTokenSource lifetime)

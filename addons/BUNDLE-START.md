@@ -11,6 +11,10 @@ HTTP receiver. It requires the matching integrated native output runtime and
 NVIDIA encoding hardware. It sends nothing until its explicit action is used.
 See `OUTPUTS.md` for source/profile/receiver permissions and supported formats.
 
+The player inspector observes small images from ordinary AJN playback after its
+two permissions are approved. It requires a matching integrated native build.
+See `PLAYER-FRAMES.md` for shared observations, limits and the example actions.
+
 Extract the ZIP to a writable folder. Open PowerShell 7 there and run:
 
 ```powershell

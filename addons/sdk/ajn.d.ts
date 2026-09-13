@@ -1,4 +1,4 @@
-/** AJN addon API 1.5 preview. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.6 preview. Plain JavaScript, with optional editor type checking. */
 interface AjnRemoteSource {
     type?: "http"; destinationId: string; path?: string; useCredential?: boolean;
 }
@@ -122,6 +122,16 @@ interface AjnApi {
     frames: {
         subscribe(sessionId: string, options?: AjnSampleOptions): Required<AjnSampleOptions> & { subscriptionId: string };
         /** Latest unread sample, or null. Never waits for the GPU. */
+        read(subscriptionId: string): AjnFrame | null;
+        unsubscribe(subscriptionId: string): void;
+    };
+    /** API 1.6, playerFrames capability 1.0. Requires player.observe and
+     * frames.read separately from owned-session permissions. No player controls
+     * or filenames are exposed. Samples precede final display composition. */
+    playerFrames: {
+        list(): { playerId: string; stage: "processed"; format: "bgra8" }[];
+        subscribe(playerId: string, options?: AjnSampleOptions): Required<AjnSampleOptions> & { subscriptionId: string };
+        /** Independent latest unread sample, or null. Slow readers skip frames. */
         read(subscriptionId: string): AjnFrame | null;
         unsubscribe(subscriptionId: string): void;
     };

@@ -3,10 +3,13 @@ using System.Diagnostics;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
+using System.Security.Principal;
+using Microsoft.Win32.SafeHandles;
 
 namespace AnimeJaNai.Addons.Native;
 
-// An unnamed, fixed-size mapping shared only with the trusted native process.
+// A fixed-size mapping shared only with trusted native code. Owned sessions use
+// an unnamed handle; normal players use an explicitly protected named object.
 // Addons receive a validated copy of one reduced sample over the broker pipe.
 internal sealed unsafe class NativeFrameBuffer : IDisposable
 {
@@ -19,11 +22,14 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
     private Lease? active;
     private bool disposed;
     private long minimumEpoch;
+    internal string? Name { get; }
+    internal bool HasSubscription { get { lock (sync) { return !disposed && active is not null; } } }
 
-    public NativeFrameBuffer()
+    public NativeFrameBuffer(bool player = false)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) throw new PlatformNotSupportedException();
-        mapping = MemoryMappedFile.CreateNew(null, Size, MemoryMappedFileAccess.ReadWrite);
+        Name = player ? "Local\\AJN.PlayerFrames." + Guid.NewGuid().ToString("N") : null;
+        mapping = Name is null ? MemoryMappedFile.CreateNew(null, Size, MemoryMappedFileAccess.ReadWrite) : CreatePlayerMapping(Name);
         try
         {
             view = mapping.CreateViewAccessor(0, Size, MemoryMappedFileAccess.ReadWrite);
@@ -46,7 +52,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
             return target.ToInt64();
         }
     }
-    public IFrameSubscription Subscribe(FrameRequest request)
+    public IFrameSubscription Subscribe(FrameRequest request, bool repeatLatest = false)
     {
         request.Validate();
         lock (sync)
@@ -55,10 +61,15 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
             Contract.Require(active is null, "capacity_exceeded", "This session already has a sample subscription.");
             Contract.Require(generation < int.MaxValue, "capacity_exceeded", "Reopen the session to renew its sample generation.");
             long config = ((long)++generation << 32) | ((long)request.MaxFps << 24) | ((long)request.Height << 12) | (uint)request.Width;
-            active = new(this, config);
+            active = new(this, config, repeatLatest);
             Exchange64(16, config);
             return active;
         }
+    }
+
+    internal void RenewPlayerLease()
+    {
+        lock (sync) { Alive(); if (Name is not null) Exchange64(168, Environment.TickCount64 + 3000); }
     }
 
     public void InvalidateForSeek()
@@ -76,6 +87,13 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
             Alive();
             Contract.Require(active == lease, "subscription_not_found", "Frame subscription is closed.");
             int state = Volatile.Read(ref *(int*)(pointer + 104));
+            if (Name is not null)
+            {
+                if (Read64(168) <= Environment.TickCount64) return null;
+                long status = Read64(176), producer = Read64(160);
+                state = status >> 32 == producer ? (int)status : 1;
+                if (state == 6) return null;
+            }
             Contract.Require(state != 4, "frame_format_unavailable", "This producer supports progressive mono SDR D3D11 samples only.");
             Contract.Require(state != 5, "frame_unavailable", "The native GPU sample branch failed. Video may continue without samples.");
             Span<byte> header = stackalloc byte[HeaderBytes];
@@ -89,7 +107,14 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
                 long config = BinaryPrimitives.ReadInt64LittleEndian(header[48..]);
                 long epoch = BinaryPrimitives.ReadInt64LittleEndian(header[56..]);
                 ulong id = BinaryPrimitives.ReadUInt64LittleEndian(header[40..]);
-                if (config != lease.Config || epoch != Read64(24) || epoch < minimumEpoch || id == lease.LastId) return null;
+                if (config != lease.Config || epoch != Read64(24) || epoch < minimumEpoch) return null;
+                if (id == lease.LastId)
+                {
+                    if (!lease.RepeatLatest) return null;
+                    Thread.MemoryBarrier();
+                    if (sequence != Read64(32) || config != Read64(16) || epoch != Read64(24)) continue;
+                    return lease.Cached;
+                }
                 int width = BinaryPrimitives.ReadInt32LittleEndian(header[80..]);
                 int height = BinaryPrimitives.ReadInt32LittleEndian(header[84..]);
                 int stride = BinaryPrimitives.ReadInt32LittleEndian(header[88..]);
@@ -105,6 +130,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
                 if (sequence != Read64(32) || config != Read64(16) || epoch != Read64(24)) continue;
                 var packet = Decode(header, pixels, lease.LastId);
                 lease.LastId = id;
+                if (lease.RepeatLatest) lease.Cached = packet;
                 return packet;
             }
             return null;
@@ -156,18 +182,49 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
         lock (sync)
         {
             if (disposed) return;
-            Exchange64(16, 0); active = null; disposed = true;
+            Exchange64(16, 0); if (Name is not null) Exchange64(168, 0); active = null; disposed = true;
             view.SafeMemoryMappedViewHandle.ReleasePointer(); pointer = null;
             view.Dispose(); mapping.Dispose();
         }
     }
-    private sealed class Lease(NativeFrameBuffer owner, long config) : IFrameSubscription
+    private sealed class Lease(NativeFrameBuffer owner, long config, bool repeatLatest) : IFrameSubscription
     {
         internal long Config { get; } = config;
         internal ulong LastId;
+        internal bool RepeatLatest { get; } = repeatLatest;
+        internal FramePacket? Cached;
         public FramePacket? ReadLatest() => owner.Read(this);
         public void Dispose() => owner.Unsubscribe(this);
     }
+
+    private static MemoryMappedFile CreatePlayerMapping(string name)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        using var identity = WindowsIdentity.GetCurrent();
+        string sid = identity.User!.Value;
+        // Apply the complete owner-only DACL atomically. CreateNew semantics:
+        // reject a pre-existing object, retain our handle while opening the view.
+        string descriptor = $"O:{sid}D:P(D;;GA;;;NU)(A;;GA;;;{sid})";
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(descriptor, 1, out var security, out _))
+            throw new IOException("Could not protect the player sample buffer.");
+        try
+        {
+            var attributes = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = security };
+            using var handle = CreateFileMappingW(new IntPtr(-1), ref attributes, 4, 0, Size, name);
+            int error = Marshal.GetLastPInvokeError();
+            if (handle.IsInvalid || error == 183) throw new IOException("Could not create a unique player sample buffer.");
+            return MemoryMappedFile.OpenExisting(name, MemoryMappedFileRights.ReadWrite);
+        }
+        finally { LocalFree(security); }
+    }
+
+    [StructLayout(LayoutKind.Sequential)] private struct SecurityAttributes { public int Length; public IntPtr Descriptor; public int Inherit; }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileMappingW(IntPtr file, ref SecurityAttributes attributes, uint protection, uint high, uint low, string name);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string descriptor, uint revision, out IntPtr security, out uint size);
+    [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr value);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

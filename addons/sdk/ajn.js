@@ -1,4 +1,4 @@
-// AJN API 1.5 transport, compatible with the 1.0 JSON-only methods. The host independently
+// AJN API 1.6 transport, compatible with the 1.0 JSON-only methods. The host independently
 // validates every message and permission even when an addon replaces this code.
 const __ajnSdk = (() => {
     const maximum = 128 * 1024;
@@ -123,6 +123,14 @@ const __ajnSdk = (() => {
             }, options, { sessionId })),
             read: subscriptionId => request("frames.read", { subscriptionId }, true),
             unsubscribe: subscriptionId => request("frames.unsubscribe", { subscriptionId }),
+        }),
+        playerFrames: Object.freeze({
+            list: () => request("playerFrames.list"),
+            subscribe: (playerId, options = {}) => request("playerFrames.subscribe", Object.assign({
+                playerId, stage: "processed", format: "bgra8", width: 64, height: 36, maxFps: 30,
+            }, options, { playerId })),
+            read: subscriptionId => request("playerFrames.read", { subscriptionId }, true),
+            unsubscribe: subscriptionId => request("playerFrames.unsubscribe", { subscriptionId }),
         }),
         storage: Object.freeze({
             get: key => request("storage.get", { key }),
