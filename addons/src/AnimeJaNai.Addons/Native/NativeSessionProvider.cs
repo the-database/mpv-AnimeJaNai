@@ -9,13 +9,15 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
     private readonly MediaSelections selections;
     private readonly WorkerCommand command;
     private readonly int maximumSessions;
-    private readonly object gate = new();
+    private readonly object gate;
+    private readonly HostSettings? hostSettings;
+    private int Capacity => hostSettings?.MaximumConcurrentSessions ?? maximumSessions;
     private int reserved;
     private readonly bool framesAvailable;
     private readonly bool outputsAvailable;
     private readonly NetworkSelections networkSelections;
 
-    public NativeSessionProvider(string installRoot, string dataRoot, MediaSelections selections, WorkerCommand command, int maximumSessions = 2, NetworkSelections? networkSelections = null)
+    public NativeSessionProvider(string installRoot, string dataRoot, MediaSelections selections, WorkerCommand command, int maximumSessions = 2, NetworkSelections? networkSelections = null, HostSettings? hostSettings = null)
     {
         Contract.Require(OperatingSystem.IsWindows() && IntPtr.Size == 8, "feature_unavailable", "Native sessions require Windows x64.");
         Contract.Require(maximumSessions is >= 1 and <= 16, "invalid_request", "Native session capacity must be between 1 and 16.");
@@ -23,6 +25,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
         foreach (string relative in new[] { "libmpv-2.dll", "animejanai/inference/aji.dll" })
             Contract.Require(File.Exists(Path.Combine(root, relative)), "native_unavailable", "Native media runtime is incomplete.");
         this.selections = selections; this.command = command; this.maximumSessions = maximumSessions;
+        this.hostSettings = hostSettings; gate = hostSettings?.Sync ?? new();
         this.networkSelections = networkSelections ?? new(dataRoot);
         work = SafeFiles.DirectoryPath(dataRoot, "media-workers");
         // Added only by a package containing the matching private native filter.
@@ -82,12 +85,12 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             ["minimumKeyframeFrames"] = 1, ["maximumKeyframeFrames"] = 600,
             ["maximumWallSeconds"] = 86400, ["maximumBytes"] = OutputUploadSession.MaximumBytes,
             ["maximumBytesPerSecond"] = OutputUploadSession.BytesPerSecond, ["maximumHostBytesPerSecond"] = OutputUploadSession.GlobalBytesPerSecond,
-            ["maximumConcurrentSessions"] = host.maximumSessions, ["softwareSubtitles"] = false,
+            ["maximumConcurrentSessions"] = host.Capacity, ["softwareSubtitles"] = false,
         };
         public JsonObject ListSelections()
         {
             var result = host.selections.List(package, grant);
-            result["maximumConcurrentSessions"] = host.maximumSessions;
+            result["maximumConcurrentSessions"] = host.Capacity;
             return result;
         }
         public Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken token) => OpenCoreAsync(sourceId, profileId, null, token);
@@ -107,7 +110,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
                     "backend_unavailable", "The selected TensorRT runtime is not installed. Install it through AJN Manager or approve a DirectML profile.");
             lock (host.gate)
             {
-                Contract.Require(host.reserved < host.maximumSessions, "capacity_exceeded", "Native processing capacity is in use. Close a session before starting another.");
+                Contract.Require(host.reserved < host.Capacity, "capacity_exceeded", "Native processing capacity is in use. Close a session before starting another.");
                 host.reserved++;
             }
             try

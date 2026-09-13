@@ -33,7 +33,7 @@ Opening returns promptly while decoding/model initialization proceeds. Cached st
 
 Use **requestClose** for native sessions. It starts cleanup without occupying the addon's two-second callback deadline. Status is `closing` during cleanup, or `cleanup_failed` if a retry is needed. After successful cleanup, the handle returns `session_not_found`. Calling requestClose again retries failed cleanup. The API 1.0 `close` method retains its original synchronous-release semantics; it is not suitable for potentially slow native shutdown. No existing method changed semantics in API 1.1.
 
-Each addon decides how many independent sessions it needs within host limits. The default native capacity is two across all addons. The trusted operator can set 1–16 when launching:
+Each addon decides how many independent sessions it needs within host limits. The default native capacity is two across all addons. Manager's **Host settings** saves a limit from 1 to 16. Changes affect new admissions; existing and reserved sessions continue. The trusted operator can also supply an explicit read-only override when launching:
 
 ```text
 ajn-addon serve <data-directory> <wasmtime.exe> <trusted-AJN-root> [maximum-media-sessions]

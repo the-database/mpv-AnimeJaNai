@@ -16,10 +16,11 @@ try
             MediaSelections? media = args.Length >= 4 ? new(args[1]) : null;
             int capacity = 2;
             if (args.Length == 5) Contract.Require(int.TryParse(args[4], out capacity) && capacity is >= 1 and <= 16, "invalid_request", "Media capacity must be between 1 and 16.");
+            var hostSettings = new HostSettings(args[1], args.Length == 5 ? capacity : null);
             var networkSelections = new NetworkSelections(args[1]);
-            SessionRegistry? nativeSessions = media is null ? null : new(new AnimeJaNai.Addons.Native.NativeSessionProvider(args[3], args[1], media, WorkerCommand.Current(), capacity, networkSelections), perOwnerLimit: 16);
+            SessionRegistry? nativeSessions = media is null ? null : new(new AnimeJaNai.Addons.Native.NativeSessionProvider(args[3], args[1], media, WorkerCommand.Current(), capacity, networkSelections, hostSettings), perOwnerLimit: 16);
             var service = new AddonService(args[1], async (p, g, log, token) => await AddonWorker.StartAsync(p, g, args[2],
-                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections), media, networkSelections);
+                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections), media, networkSelections, hostSettings);
             using (var shutdown = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, e) => { e.Cancel = true; shutdown.Cancel(); };

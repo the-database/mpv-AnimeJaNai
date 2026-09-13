@@ -65,6 +65,12 @@ The companion `AnimeJaNaiManager` branch `feature/addon-manager` provides the Ad
 
 Manager reviews a local package before installation, starts permission checkboxes unchecked, and binds the approval to the exact reviewed archive hash. It renders typed settings, declared actions, worker status and bounded logs. Removing an addon stops it and retains its settings/storage. A manually started addon continues after Manager closes; `on_manager` activation ends when the last relevant Manager connection closes.
 
+**Host settings** lets you save a processing-session limit from 1 to 16 across
+all addons (default two). An addon chooses its requested session count within
+that limit. Lowering the host limit does not interrupt existing work; it limits
+new admissions until sessions close. An explicit `serve` capacity argument is
+shown as a read-only override of the saved choice.
+
 The host can also be started with `serve <data-directory> <wasmtime.exe>`. An exclusive data-directory lease prevents standalone CLI writes or workers from competing with an active service. Use Manager to manage that running service, or use a separate directory for CLI development. The service exits after about 30 idle seconds with no clients or running workers. It does not register itself for Windows startup.
 
 ## Develop and test

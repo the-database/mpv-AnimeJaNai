@@ -86,6 +86,9 @@ to sixteen. Addons choose how many to request within that capacity. A completed
 or failed handle retains its admission slot until explicitly closed or its
 owner stops. Failed cleanup retains ownership/capacity and can be retried.
 
+Manager's **Host settings** changes the shared native-session limit. Lowering it
+preserves active outputs and prevents new admission until enough handles close.
+
 Full-resolution frames and continuous encoded bytes stay in trusted components:
 native GPU processing/encoding → private bounded pipe → HTTP transport. They do
 not cross guest JSON-RPC. Optional `frames.read` sampling remains a distinct,

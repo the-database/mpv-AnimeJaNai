@@ -27,18 +27,20 @@ public sealed class AddonService : IAsyncDisposable
     private readonly AddonRegistry registry;
     private readonly MediaSelections? media;
     private readonly NetworkSelections network;
+    private readonly HostSettings? hostSettings;
     private readonly Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start;
     private readonly ConcurrentDictionary<string, Entry> entries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> clients = new(StringComparer.Ordinal);
     public bool HasRunningWorkers => entries.Values.Any(e => e.Worker is { IsStopped: false });
 
-    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null, NetworkSelections? networkSelections = null)
+    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null, NetworkSelections? networkSelections = null, HostSettings? hostSettings = null)
     {
         this.root = root;
         registry = new(root);
         this.start = start;
         this.media = media;
         network = networkSelections ?? new(root);
+        this.hostSettings = hostSettings;
     }
 
     public async Task<JsonNode?> InvokeAsync(string client, string method, JsonObject parameters, CancellationToken token)
@@ -52,11 +54,14 @@ public sealed class AddonService : IAsyncDisposable
                     try { await WithAsync(id, async entry => { await AutoActivateAsync(entry, client, token); return null; }, token); }
                     catch (Exception error) when (error is AddonException or IOException or UnauthorizedAccessException) { }
                 }
-            return new JsonObject { ["major"] = 1, ["minor"] = 2, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true, ["credentialsAvailable"] = OperatingSystem.IsWindows() };
+            return new JsonObject { ["major"] = 1, ["minor"] = 3, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
+                ["credentialsAvailable"] = OperatingSystem.IsWindows(), ["hostSettingsAvailable"] = hostSettings is not null };
         }
         Contract.Require(clients.ContainsKey(client), "handshake_required", "Complete manager.hello first.");
         switch (method)
         {
+            case "host.settings": return (hostSettings ?? throw new AddonException("feature_unavailable", "This host does not expose editable resource settings.")).Describe();
+            case "host.configure": return (hostSettings ?? throw new AddonException("feature_unavailable", "This host does not expose editable resource settings.")).Update(Contract.Number(parameters, "maximumConcurrentSessions"));
             case "addons.list":
                 string? after = parameters["after"] is null ? null : Contract.Text(parameters, "after", 100);
                 var ids = registry.ListIds().Where(id => after is null || StringComparer.Ordinal.Compare(id, after) > 0).ToArray();

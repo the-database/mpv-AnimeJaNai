@@ -1,4 +1,4 @@
-# Trusted management protocol 1.2 preview
+# Trusted management protocol 1.3 preview
 
 This protocol connects AJN Manager to the persistent host. It is **not** an addon capability. Guests only receive their private broker channel and cannot install packages, edit grants, or control another addon through it.
 
@@ -17,6 +17,8 @@ Messages use the guest protocol's bounded JSON-RPC profile: UTF-8 JSON objects, 
 | Method | Parameters | Behavior |
 | --- | --- | --- |
 | `manager.hello` | `{major:1}` | Register this connection; acquire declared `on_manager` activations |
+| `host.settings` | `{}` | Global native-session limit, bounds, editability and override source |
+| `host.configure` | `{maximumConcurrentSessions}` | Atomically save the operator's 1–16 session limit; existing sessions continue |
 | `addons.list` | `{after?:string}` | Up to 16 summaries and `nextCursor`; client helper joins all pages |
 | `addons.inspect` | `{path}` | Validated manifest and exact package `hash`; no installation |
 | `addons.installDev` | `{path,expectedHash,permissions}` | Revalidate the reviewed hash and selected grant, replace registration, activate for connected Managers |
@@ -44,6 +46,23 @@ and `networkPermission`/`credentialPermission` summary fields. These are trusted
 UI operations, distinct from guest `network.*` methods. Reviewed addresses stay
 in host memory until approval; client parameters cannot replace them. See
 [NETWORK.md](NETWORK.md) for the authority and credential limits.
+
+Management 1.3 adds `hostSettingsAvailable`. Matching Managers offer **Host
+settings** independently of addon selection. The default native-session limit
+is two. Saving a limit changes admission for future sessions without stopping
+existing or already-reserved work; if usage exceeds the new limit, opens are
+denied until enough sessions close. Addons cannot change this host policy.
+`sessions.selections` and `outputs.formats` report the current limit.
+
+The operator setting is stored atomically in `host-settings.json`, schema 1.
+Additive saved fields survive updates. An invalid file is preserved and causes
+host startup to fail instead of silently relaxing its resource limit; restore
+or correct that file before starting the host. A failed save leaves both the
+file and the live limit unchanged. Supplying the optional capacity argument to
+`serve` temporarily overrides the saved setting and makes this editor read-only
+until the host is restarted without that argument. Library embedders must pass
+the same `HostSettings` instance to the native provider and management service;
+without an explicit instance the service does not advertise the editor.
 
 The four media operations require a configured native provider and the addon's `sessions.manage` grant. `manager.hello` includes `nativeMediaAvailable`; addon summaries include `mediaPermission`. The standalone client exposes a copy of the hello result in `ServerInfo`. Resource consent uses the currently reviewed addon hash, so changing the installed version while a dialog is open causes rejection. See [NATIVE-MEDIA.md](NATIVE-MEDIA.md) for provider setup and resource limits.
 
