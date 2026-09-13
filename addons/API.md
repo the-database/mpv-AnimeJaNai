@@ -1,4 +1,4 @@
-# Addon API 1.4 preview
+# Addon API 1.5 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -69,11 +69,19 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 | `network.sendDatagram` | `{ destinationId, bodyBase64 }` | `network.connect` | `{ bytesSent }`; approved UDP destination only |
 | `outputs.formats` | `{}` | `media.output` + `sessions.manage` | Adapter options and resource bounds; outputs 1.0 |
 | `outputs.open` | `{ sourceId, profileId, encoding, destination }` | `media.output` + `sessions.manage` + `network.connect`; `credentials.use` when requested | Owned `{ sessionId }`; reviewed source/profile and HTTP upload receiver |
+| `remoteSources.formats` | `{}` | `media.input` + `sessions.manage` | Supported sources and limits; remoteSources 1.0 |
+| `sessions.openRemote` | `{ source, profileId }` | `media.input` + `sessions.manage` + `network.connect`; `credentials.use` when requested | Owned `{ sessionId }`; approved HTTP source service and profile |
+| `outputs.openRemote` | `{ source, profileId, encoding, destination }` | Remote-source permissions plus `media.output` | Owned remote-input/encoded-output session; both services approved independently |
 
 API 1.4 adds typed encoded output controls without changing the binary transport.
 Encoded bytes remain in the trusted host; `sessions.status/pause/requestClose`
 manage the owned output. See [OUTPUTS.md](OUTPUTS.md) for exact choices,
 destination consent, completion semantics and limits.
+
+API 1.5 adds [remote media sources](REMOTE-INPUTS.md) through the optional
+`remoteSources` capability. Local-file methods and older compiled addons keep
+their existing behavior. The trusted reader supplies bytes directly to the native
+session; a remote media stream does not pass through Wasm messages.
 
 Private storage is separated by addon ID: maximum 256 keys, 32 KiB per value, 1 MiB total. A stored null and a missing key both read as null in this preview. Saving one key is atomic; a read-modify-write sequence is not a transaction across distinct worker instances. The embedding host should create one activation controller per addon ID.
 

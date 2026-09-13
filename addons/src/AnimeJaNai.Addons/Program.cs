@@ -108,7 +108,7 @@ catch (Exception error) when (error is IOException or UnauthorizedAccessExceptio
 static string[] Grants(string csv) => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 static void Print(object? value) => Console.WriteLine(JsonSerializer.Serialize(value, Contract.Json));
 static void Help() => Console.WriteLine("""
-AJN addon developer host (API 1.4 preview)
+AJN addon developer host (API 1.5 preview)
   new <new-directory> <reverse.domain.id>
   build <source-directory> <javy.exe> <new-package.ajnaddon>
   inspect <package.ajnaddon>

@@ -2,14 +2,14 @@ using System.Runtime.InteropServices;
 
 namespace AnimeJaNai.Addons.Native;
 
-// Private libmpv adapter. A stream callback exposes only this opened file, with
+// Private libmpv adapter. A stream callback exposes only this opened source, with
 // no path parsing or alternate-file lookup in the callbacks. Keep delegates
 // alive until mpv_terminate_destroy has returned.
 internal sealed class SelectedFileStream : IDisposable
 {
     public const string Protocol = "ajnselected";
     public const string Uri = Protocol + "://media";
-    private readonly FileStream file;
+    private readonly Stream file;
     private readonly object gate = new();
     private readonly byte[] buffer = new byte[65536];
     private bool open;
@@ -20,11 +20,17 @@ internal sealed class SelectedFileStream : IDisposable
     private readonly SizeCallback size;
     private readonly CloseCallback close, cancel;
 
-    public SelectedFileStream(string path)
+    private static Stream OpenFile(string path)
     {
         SafeFiles.CheckParents(path);
-        file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.RandomAccess);
-        openCallback = Open; read = Read; seek = Seek; size = Size; close = Close; cancel = _ => cancelled = true;
+        return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.RandomAccess);
+    }
+    public SelectedFileStream(string path) : this(OpenFile(path)) { }
+    internal SelectedFileStream(Stream stream, Action? cancelSource = null)
+    {
+        file = stream;
+        openCallback = Open; read = Read; seek = Seek; size = Size; close = Close;
+        cancel = _ => { cancelled = true; cancelSource?.Invoke(); };
     }
 
     public int Register(IntPtr library, IntPtr player) => Marshal.GetDelegateForFunctionPointer<RegisterCallback>(
@@ -36,8 +42,9 @@ internal sealed class SelectedFileStream : IDisposable
         {
             lock (gate)
             {
-                if (open || Marshal.PtrToStringUTF8(uri) != Uri) return -13; // MPV_ERROR_LOADING_FAILED
-                file.Position = 0; cancelled = false;
+                if (open || !file.CanRead || Marshal.PtrToStringUTF8(uri) != Uri) return -13; // MPV_ERROR_LOADING_FAILED
+                if (file.CanSeek) file.Position = 0;
+                cancelled = false;
                 Marshal.StructureToPtr(new StreamInfo
                 {
                     Read = Marshal.GetFunctionPointerForDelegate(read), Seek = Marshal.GetFunctionPointerForDelegate(seek),
@@ -64,7 +71,7 @@ internal sealed class SelectedFileStream : IDisposable
     }
     private long Seek(IntPtr cookie, long position)
     {
-        try { lock (gate) return !open || cancelled || position < 0 ? -20 : file.Seek(position, SeekOrigin.Begin); }
+        try { lock (gate) return !open || cancelled || !file.CanSeek || position < 0 ? -20 : file.Seek(position, SeekOrigin.Begin); }
         catch { return -20; } // MPV_ERROR_GENERIC
     }
     private long Size(IntPtr cookie)

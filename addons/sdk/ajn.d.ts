@@ -1,4 +1,12 @@
-/** AJN addon API 1.4 preview. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.5 preview. Plain JavaScript, with optional editor type checking. */
+interface AjnRemoteSource {
+    type?: "http"; destinationId: string; path?: string; useCredential?: boolean;
+}
+interface AjnRemoteFormats {
+    types: string[]; protocols: string[]; containers: string[]; playlists: boolean; redirects: boolean; seek: string;
+    maximumBytes: number; maximumBytesPerSecond: number; maximumReadBytes: number; maximumRequests: number;
+    ioDeadlineSeconds: number; maximumWallSeconds: number; maximumConcurrentSessions: number;
+}
 interface AjnOutputOptions {
     encoding: {
         videoCodec: "h264" | "hevc" | "av1"; container: "matroska" | "mpegts" | "fragmentedMp4";
@@ -78,6 +86,9 @@ interface AjnApi {
     log(message: string): void;
     /** Host-owned declarative settings. Only the user/host can change them. */
     settings: { get(): Record<string, boolean | number | string> };
+    /** API 1.5, remoteSources capability 1.0 and media.input permission.
+     * The trusted reader streams media; bytes never enter the Wasm runtime. */
+    remoteSources: { formats(): AjnRemoteFormats };
     /** Requires media.output, sessions.manage, network.connect and output
      * capability 1.0. Source/profile/service consent is checked independently.
      * Returned IDs use sessions.status/pause/requestClose; seek needs a new
@@ -85,6 +96,9 @@ interface AjnApi {
     outputs: {
         formats(): AjnOutputFormats;
         open(sourceId: string, profileId: string | null, options: AjnOutputOptions): { sessionId: string };
+        /** Also requires media.input and remoteSources capability 1.0.
+         * Input and receiver must each be independently approved. */
+        openRemote(source: AjnRemoteSource, profileId: string | null, options: AjnOutputOptions): { sessionId: string };
     };
     /** Requires network.connect plus destination consent. Saved credentials
      * also require credentials.use. No redirects, cookies or OS credentials. */
@@ -125,6 +139,10 @@ interface AjnApi {
         };
         /** Requires sessions.manage and a trusted native provider in the host. */
         open(sourceId: string, profileId?: string | null): { sessionId: string };
+        /** API 1.5: media.input, sessions.manage, network.connect and an approved
+         * HTTP service/profile. credentials.use is required when selected.
+         * Check status.input.seekable before seeking; some streams are forward-only. */
+        openRemote(source: AjnRemoteSource, profileId?: string | null): { sessionId: string };
         status(sessionId: string): Record<string, unknown>;
         /** Accepted asynchronously; observe status for the resulting state. */
         pause(sessionId: string, paused: boolean): void;

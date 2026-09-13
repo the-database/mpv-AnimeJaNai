@@ -38,11 +38,14 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
         monitoring = MonitorAsync();
     }
 
-    public static async Task<MediaProcess> StartAsync(string root, string source, string configuration, int slot, string backend,
-        string workRoot, WorkerCommand command, CancellationToken token, bool enableFrameSamples = false, NativeEncoding? encoding = null)
+    public static async Task<MediaProcess> StartAsync(string root, string? source, string configuration, int slot, string backend,
+        string workRoot, WorkerCommand command, CancellationToken token, bool enableFrameSamples = false, NativeEncoding? encoding = null,
+        RemoteInputPlan? remoteSource = null)
     {
         token.ThrowIfCancellationRequested();
         encoding?.Validate();
+        Contract.Require((source is null) != (remoteSource is null), "invalid_source", "Choose one approved media source.");
+        remoteSource?.Validate();
         workRoot = Path.GetFullPath(workRoot);
         string directory = SafeFiles.DirectoryPath(workRoot, "media-" + Guid.NewGuid().ToString("N"));
         WindowsJob? job = null; Process? process = null; MediaProcess? result = null;
@@ -73,7 +76,8 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             result = new(process, job, directory, workRoot, frames, encoded);
             await process.StandardInput.BaseStream.WriteAsync(new byte[] { 1 }, token);
             await result.channel.WriteAsync(new JsonObject { ["version"] = 1, ["root"] = Path.GetFullPath(root),
-                ["source"] = Path.GetFullPath(source), ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend,
+                ["source"] = source is null ? null : Path.GetFullPath(source), ["remoteSource"] = remoteSource?.ToPrivateJson(),
+                ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend,
                 ["sampleMapping"] = sampleMapping, ["encoding"] = encoding?.ToJson(), ["outputHandle"] = outputHandle }, token);
             return result; // Native initialization progresses behind the handle.
         }

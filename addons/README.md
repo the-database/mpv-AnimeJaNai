@@ -14,9 +14,11 @@ This is the first working part of the AJN addon framework. It combines the earli
 
 **Player and login activation now work:** the trusted player bridge consolidates multiple players into one addon worker and releases ownership when each player exits. Manager offers opt-in Windows sign-in startup, separately from package permissions. See [LIFECYCLE.md](LIFECYCLE.md) for installation, behavior and validation limits.
 
-**Remaining integration:** remote media and other output transports, TCP/TLS/WebSockets, listeners/discovery, shared-player/final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+**Remote media now works:** a separate input permission lets addons process media from approved HTTP/HTTPS services, including range seeking and remote-to-remote encoded delivery. The trusted reader supplies bytes directly to owned native sessions. See [REMOTE-INPUTS.md](REMOTE-INPUTS.md) for the generic inspector, bounds and supported formats.
 
-API 1.4 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0/1.1/1.2/1.3 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+**Remaining integration:** more source/output transports, TCP/TLS/WebSockets, listeners/discovery, shared-player/final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+
+API 1.5 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.4 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 

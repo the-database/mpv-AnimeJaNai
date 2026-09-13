@@ -209,7 +209,7 @@ public sealed class NetworkSelections(string root)
         SafeFiles.AtomicWrite(Path.Combine(directory, "approvals.json"), bytes); cache[directory] = state;
     }
 
-    private static void ValidateDestination(NetworkDestination destination)
+    internal static void ValidateDestination(NetworkDestination destination)
     {
         Contract.Require(destination is not null && destination.Origin is not null && destination.Addresses is { Length: > 0 and <= 8 },
             "invalid_destination", "Invalid resolved destination.");

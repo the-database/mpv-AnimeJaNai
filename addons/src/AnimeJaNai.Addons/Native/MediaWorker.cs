@@ -43,9 +43,12 @@ internal static class MediaWorker
         using var encodedWriter = outputHandle == 0 ? null : new NativeEncodedWriter(outputMapping);
         var encoding = launch["encoding"] is JsonObject options ? NativeEncoding.Parse(options) : null;
         Contract.Require((encodedWriter is null) == (encoding is null), "native_protocol", "Invalid encoding parameters.");
-        using var player = new NativePlayback(Contract.Text(launch, "root", 4096), Contract.Text(launch, "source", 4096),
+        Contract.Require((launch["source"] is null) != (launch["remoteSource"] is null), "invalid_source", "Choose one approved media source.");
+        using var remote = launch["remoteSource"] is JsonObject remotePlan
+            ? await RemoteMediaStream.OpenAsync(RemoteInputPlan.FromPrivateJson(remotePlan), startup.Token) : null;
+        using var player = new NativePlayback(Contract.Text(launch, "root", 4096), launch["source"] is null ? null : Contract.Text(launch, "source", 4096),
             Contract.Text(launch, "configuration", 4096), Contract.Text(launch, "work", 4096),
-            checked((int)Contract.Number(launch, "slot")), Contract.Text(launch, "backend", 32), sampleHandle, encoding, encodedWriter?.Descriptor ?? -1);
+            checked((int)Contract.Number(launch, "slot")), Contract.Text(launch, "backend", 32), sampleHandle, encoding, encodedWriter?.Descriptor ?? -1, remote);
         var commands = Task.Run(async () =>
         {
             try
@@ -70,26 +73,36 @@ internal static class MediaWorker
             catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         });
         JsonObject? terminalState = null;
+        bool sourceFailed = false;
         try
         {
             long last = 0;
             while (!commands.IsCompleted)
             {
                 var state = player.Poll();
-                if (player.Ended && encoding is not null)
+                if (remote is not null)
+                {
+                    var inputStatus = remote.Status();
+                    string? inputError = inputStatus["errorCode"]?.GetValue<string>();
+                    sourceFailed = inputError is not null and not "input_cancelled";
+                    if (player.Ended && !player.Failed && inputError == "input_cancelled") inputStatus["errorCode"] = null;
+                    state["input"] = inputStatus;
+                    if (sourceFailed) { state["state"] = "failed"; state["error"] = "Remote media input failed: " + inputError; }
+                }
+                if ((player.Ended || sourceFailed) && encoding is not null)
                 {
                     terminalState = (JsonObject)state.DeepClone();
                     // Encoder and muxer may still hold delayed packets. Do not
                     // publish completion before their destruction flushes them.
                     state["state"] = "finishing";
                 }
-                if (Stopwatch.GetElapsedTime(last) >= TimeSpan.FromMilliseconds(250) || player.Ended)
+                if (Stopwatch.GetElapsedTime(last) >= TimeSpan.FromMilliseconds(250) || player.Ended || sourceFailed)
                 {
                     using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                     await channel.WriteAsync(new JsonObject { ["version"] = 1, ["status"] = state }, deadline.Token);
                     last = Stopwatch.GetTimestamp();
                 }
-                if (player.Ended) break;
+                if (player.Ended || sourceFailed) break;
             }
         }
         finally
@@ -108,6 +121,6 @@ internal static class MediaWorker
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             await channel.WriteAsync(new JsonObject { ["version"] = 1, ["status"] = terminalState }, deadline.Token);
         }
-        return player.Failed ? 1 : 0;
+        return player.Failed || sourceFailed ? 1 : 0;
     }
 }

@@ -1,4 +1,4 @@
-// AJN API 1.4 transport, compatible with the 1.0 JSON-only methods. The host independently
+// AJN API 1.5 transport, compatible with the 1.0 JSON-only methods. The host independently
 // validates every message and permission even when an addon replaces this code.
 const __ajnSdk = (() => {
     const maximum = 128 * 1024;
@@ -89,8 +89,14 @@ const __ajnSdk = (() => {
         info: () => request("host.info"),
         log: message => request("log.write", { message: String(message) }),
         settings: Object.freeze({ get: () => request("settings.get") }),
+        remoteSources: Object.freeze({ formats: () => request("remoteSources.formats") }),
         outputs: Object.freeze({
             formats: () => request("outputs.formats"),
+            openRemote: (source, profileId, options) => request("outputs.openRemote", {
+                source: Object.assign({type: "http", path: "/", useCredential: false}, source), profileId: profileId || null,
+                encoding: Object.assign({audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0}, options.encoding),
+                destination: Object.assign({type: "httpUpload", method: "POST", path: "/", useCredential: false}, options.destination),
+            }),
             open: (sourceId, profileId, options) => request("outputs.open", {
                 sourceId, profileId: profileId || null,
                 encoding: Object.assign({audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0}, options.encoding),
@@ -125,6 +131,9 @@ const __ajnSdk = (() => {
         sessions: Object.freeze({
             selections: () => request("sessions.selections"),
             open: (sourceId, profileId = null) => request("sessions.open", { sourceId, profileId }),
+            openRemote: (source, profileId = null) => request("sessions.openRemote", {
+                source: Object.assign({type: "http", path: "/", useCredential: false}, source), profileId,
+            }),
             status: sessionId => request("sessions.status", { sessionId }),
             pause: (sessionId, paused) => request("sessions.pause", { sessionId, paused }),
             seek: (sessionId, seconds) => request("sessions.seek", { sessionId, seconds }),

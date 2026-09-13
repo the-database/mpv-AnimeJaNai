@@ -8,12 +8,14 @@ bool framesOnly = args.Length == 6 && args[^1] == "--frames-only";
 bool frameBenchmark = args.Length == 4 && args[^1] == "--frames-benchmark";
 bool encodingOnly = args.Length == 4 && args[^1] == "--encoding-only";
 bool outputsOnly = args.Length == 6 && args[^1] == "--outputs-only";
+bool remoteOnly = args.Length == 6 && args[^1] == "--remote-only";
 bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
 if (framesOnly) args = args[..5];
 if (frameBenchmark) args = args[..3];
 if (encodingOnly) args = args[..3];
 if (outputsOnly) args = args[..5];
+if (remoteOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
 if (args.Length is not (3 or 5)) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
@@ -23,6 +25,12 @@ Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (remoteOnly)
+    {
+        await NativeRemoteInputChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], args[4], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
     if (lifecycleOnly)
     {
         await NativeLifecycleChecks.RunAsync(root, output, evidence);

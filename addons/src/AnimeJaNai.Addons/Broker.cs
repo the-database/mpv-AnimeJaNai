@@ -35,7 +35,8 @@ public sealed class Broker : IAsyncDisposable
     private string[] AvailableCapabilities() => ["host", "storage", "logging", "settings", "timers", "network",
         .. OperatingSystem.IsWindows() ? new[] { "credentials" } : [],
         .. sessions is null ? [] : sessions.SupportsFrames(owner!) ? new[] { "sessions", "frames" } : ["sessions"],
-        .. sessions?.SupportsOutputs(owner!) == true ? new[] { "outputs" } : []];
+        .. sessions?.SupportsOutputs(owner!) == true ? new[] { "outputs" } : [],
+        .. sessions?.SupportsRemoteSources(owner!) == true ? new[] { "remoteSources" } : []];
     private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
@@ -72,6 +73,18 @@ public sealed class Broker : IAsyncDisposable
         {
             case "host.info": return Info();
             case "settings.get": return settings.Get();
+            case "remoteSources.formats":
+                grant.Demand("media.input"); grant.Demand("sessions.manage");
+                return Sessions().RemoteSourceFormats(owner!);
+            case "sessions.openRemote":
+            case "outputs.openRemote":
+                grant.Demand("media.input"); grant.Demand("sessions.manage"); grant.Demand("network.connect");
+                if (method == "outputs.openRemote") grant.Demand("media.output");
+                Contract.Require(parameters["source"] is JsonObject, "invalid_request", "Expected a remote source.");
+                return new JsonObject { ["sessionId"] = await Sessions().OpenRemoteAsync(owner!,
+                    RemoteInputRequest.Parse((JsonObject)parameters["source"]!),
+                    parameters["profileId"] is null ? null : Contract.Text(parameters, "profileId", 128),
+                    method == "outputs.openRemote" ? OutputRequest.Parse(parameters) : null, cancellationToken) };
             case "outputs.formats":
                 grant.Demand("media.output"); grant.Demand("sessions.manage");
                 return Sessions().OutputFormats(owner!);

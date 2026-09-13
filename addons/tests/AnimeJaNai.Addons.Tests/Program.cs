@@ -67,6 +67,7 @@ internal static partial class Checks
         await NetworkChecks();
         await EncodingChecks();
         await OutputChecks();
+        await RemoteInputChecks();
         await HostSettingsChecks();
         await LifecycleChecks();
         await LoginChecks();

@@ -15,7 +15,7 @@ Approvals belong to the exact package hash, not merely the addon name. New packa
 
 ## Public contract
 
-Declare API 1.1 and required capability `sessions: { major: 1, minMinor: 1 }`, plus permission `sessions.manage`. Optional consumers can inspect `ajn.info().capabilities.sessions`. Capability availability and user permission are separate checks.
+Declare API 1.1 and required capability `sessions: { major: 1, minMinor: 1 }`, plus permission `sessions.manage`. Optional consumers can inspect `ajn.info().capabilities.sessions`. Capability availability and user permission are separate checks. API 1.5 additionally offers [approved HTTP media sources](REMOTE-INPUTS.md), with a separate input permission and capability.
 
 ```javascript
 const resources = ajn.sessions.selections();

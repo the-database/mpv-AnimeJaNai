@@ -88,10 +88,22 @@ public sealed class MediaSelections(string root)
         var state = Read(directory, package.Hash);
         var source = state.Sources.Find(s => s.Id == sourceId);
         Contract.Require(source is not null, "source_not_granted", "This media source has not been approved for this addon version.");
+        return new(source, SelectProfile(state, profileId));
+    }
+
+    public ApprovedProfile ResolveProfile(AddonPackage package, PermissionGrant grant, string? profileId)
+    {
+        string directory = DirectoryFor(package, grant);
+        using var held = SafeFiles.Lock(directory);
+        return SelectProfile(Read(directory, package.Hash), profileId);
+    }
+
+    private static ApprovedProfile SelectProfile(State state, string? profileId)
+    {
         if (profileId is null && state.Profiles.Count == 1) profileId = state.Profiles[0].Id;
         var profile = state.Profiles.Find(p => p.Id == profileId);
         Contract.Require(profile is not null, "profile_not_granted", "Choose an approved profile snapshot for this addon version.");
-        return new(source, profile);
+        return profile;
     }
 
     // Caller stops the addon first, draining pending opens and active sessions.

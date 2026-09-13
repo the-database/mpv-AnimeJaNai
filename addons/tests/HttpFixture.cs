@@ -5,7 +5,8 @@ using System.Text;
 namespace AnimeJaNai.Addons.TestSupport;
 
 internal sealed record HttpInput(string Path, Dictionary<string, string> Headers, byte[] Body, string Method);
-internal sealed record HttpReply(int Status, byte[] Body, string Headers = "", bool Chunked = false);
+internal sealed record HttpReply(int Status, byte[] Body, string Headers = "", bool Chunked = false,
+    long? DeclaredLength = null, TimeSpan? BodyDelay = null);
 internal sealed class HttpFixture : IAsyncDisposable
 {
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
@@ -74,8 +75,9 @@ internal sealed class HttpFixture : IAsyncDisposable
             Last = input; Interlocked.Increment(ref Requests);
             var reply = await handler(input, stop.Token);
             string prefix = $"HTTP/1.1 {reply.Status} Test\r\nConnection: close\r\n" + reply.Headers +
-                (reply.Chunked ? "Transfer-Encoding: chunked\r\n" : $"Content-Length: {reply.Body.Length}\r\n") + "\r\n";
+                (reply.Chunked ? "Transfer-Encoding: chunked\r\n" : $"Content-Length: {reply.DeclaredLength ?? reply.Body.Length}\r\n") + "\r\n";
             await stream.WriteAsync(Encoding.ASCII.GetBytes(prefix), stop.Token);
+            if (reply.BodyDelay is { } delay) await Task.Delay(delay, stop.Token);
             if (reply.Chunked) await stream.WriteAsync(Encoding.ASCII.GetBytes(reply.Body.Length.ToString("X") + "\r\n"), stop.Token);
             await stream.WriteAsync(reply.Body, stop.Token);
             if (reply.Chunked) await stream.WriteAsync("\r\n0\r\n\r\n"u8.ToArray(), stop.Token);

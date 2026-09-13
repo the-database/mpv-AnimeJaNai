@@ -33,6 +33,12 @@ public interface IProcessingSessionProvider
     int ApiMinor => 0;
     bool SupportsFrames => false;
     bool SupportsOutputs => false;
+    bool SupportsRemoteSources => false;
+    JsonObject RemoteSourceFormats() => throw new AddonException("feature_unavailable", "Remote media sources are unavailable.");
+    Task<IProcessingSession> OpenRemoteAsync(RemoteInputRequest source, string? profileId, CancellationToken cancellationToken) =>
+        throw new AddonException("feature_unavailable", "Remote media sources are unavailable.");
+    Task<IProcessingSession> OpenRemoteOutputAsync(RemoteInputRequest source, string? profileId, OutputRequest output, CancellationToken cancellationToken) =>
+        throw new AddonException("feature_unavailable", "Remote media output is unavailable.");
     JsonObject OutputFormats() => throw new AddonException("feature_unavailable", "Encoded output is unavailable.");
     Task<IProcessingSession> OpenOutputAsync(string sourceId, string? profileId, OutputRequest output, CancellationToken cancellationToken) =>
         throw new AddonException("feature_unavailable", "Encoded output is unavailable.");
@@ -66,6 +72,13 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
     public int CapabilityMinor(Owner owner) => owner.Provider.ApiMinor;
     public bool SupportsFrames(Owner owner) => owner.Provider.SupportsFrames;
     public bool SupportsOutputs(Owner owner) => owner.Provider.SupportsOutputs;
+    public bool SupportsRemoteSources(Owner owner) => owner.Provider.SupportsRemoteSources;
+    public JsonObject RemoteSourceFormats(Owner owner)
+    {
+        lock (sync) Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
+        Contract.Require(owner.Provider.SupportsRemoteSources, "feature_unavailable", "Remote media sources are unavailable.");
+        return owner.Provider.RemoteSourceFormats();
+    }
     public JsonObject OutputFormats(Owner owner)
     {
         lock (sync) Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
@@ -140,16 +153,25 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
     }
 
     public Task<string> OpenAsync(Owner owner, string source, string? profile, CancellationToken cancellationToken) =>
-        OpenCoreAsync(owner, source, profile, null, cancellationToken);
+        OpenCoreAsync(owner, token => owner.Provider.OpenAsync(source, profile, token), cancellationToken);
 
     public Task<string> OpenOutputAsync(Owner owner, string source, string? profile, OutputRequest output, CancellationToken cancellationToken)
     {
         output.Validate();
         Contract.Require(owner.Provider.SupportsOutputs, "feature_unavailable", "Encoded output is unavailable.");
-        return OpenCoreAsync(owner, source, profile, output, cancellationToken);
+        return OpenCoreAsync(owner, token => owner.Provider.OpenOutputAsync(source, profile, output, token), cancellationToken);
     }
 
-    private async Task<string> OpenCoreAsync(Owner owner, string source, string? profile, OutputRequest? output, CancellationToken cancellationToken)
+    public Task<string> OpenRemoteAsync(Owner owner, RemoteInputRequest source, string? profile, OutputRequest? output, CancellationToken cancellationToken)
+    {
+        source.Validate(); output?.Validate();
+        Contract.Require(owner.Provider.SupportsRemoteSources, "feature_unavailable", "Remote media sources are unavailable.");
+        Contract.Require(output is null || owner.Provider.SupportsOutputs, "feature_unavailable", "Encoded output is unavailable.");
+        return OpenCoreAsync(owner, token => output is null ? owner.Provider.OpenRemoteAsync(source, profile, token)
+            : owner.Provider.OpenRemoteOutputAsync(source, profile, output, token), cancellationToken);
+    }
+
+    private async Task<string> OpenCoreAsync(Owner owner, Func<CancellationToken, Task<IProcessingSession>> open, CancellationToken cancellationToken)
     {
         lock (sync)
         {
@@ -162,8 +184,7 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         try
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, owner.Lifetime.Token);
-            created = output is null ? await owner.Provider.OpenAsync(source, profile, linked.Token) :
-                await owner.Provider.OpenOutputAsync(source, profile, output, linked.Token);
+            created = await open(linked.Token);
             string id = Guid.NewGuid().ToString("N");
             lock (sync)
             {

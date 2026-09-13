@@ -75,6 +75,17 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
         public int ApiMinor => 1;
         public bool SupportsFrames => host.framesAvailable;
         public bool SupportsOutputs => host.outputsAvailable;
+        public bool SupportsRemoteSources => true;
+        public JsonObject RemoteSourceFormats() => new()
+        {
+            ["types"] = new JsonArray("http"), ["protocols"] = new JsonArray("http", "https"),
+            ["containers"] = new JsonArray("matroska", "webm", "mov", "avi", "mpegts"),
+            ["playlists"] = false, ["redirects"] = false,
+            ["seek"] = "Validated byte ranges with a strong entity tag or an eligible Last-Modified date",
+            ["maximumBytes"] = RemoteMediaStream.MaximumBytes, ["maximumBytesPerSecond"] = RemoteMediaStream.BytesPerSecond,
+            ["maximumReadBytes"] = RemoteMediaStream.MaximumRead, ["maximumRequests"] = RemoteMediaStream.MaximumRequests,
+            ["ioDeadlineSeconds"] = 10, ["maximumWallSeconds"] = 86400, ["maximumConcurrentSessions"] = host.Capacity,
+        };
         public JsonObject OutputFormats() => new()
         {
             ["encoders"] = new JsonArray("nvenc"), ["requires"] = "Supported NVIDIA GPU and driver; Windows UCRT native output runtime",
@@ -94,6 +105,14 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             return result;
         }
         public Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken token) => OpenCoreAsync(sourceId, profileId, null, token);
+        public Task<IProcessingSession> OpenRemoteAsync(RemoteInputRequest source, string? profileId, CancellationToken token) =>
+            OpenCoreAsync(null, profileId, null, token, source);
+        public Task<IProcessingSession> OpenRemoteOutputAsync(RemoteInputRequest source, string? profileId, OutputRequest output, CancellationToken token)
+        {
+            grant.Demand("media.output"); grant.Demand("network.connect");
+            Contract.Require(SupportsOutputs, "feature_unavailable", "This native runtime does not offer encoded output.");
+            output.Validate(); return OpenCoreAsync(null, profileId, output, token, source);
+        }
         public Task<IProcessingSession> OpenOutputAsync(string sourceId, string? profileId, OutputRequest output, CancellationToken token)
         {
             grant.Demand("media.output"); grant.Demand("network.connect");
@@ -101,11 +120,12 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             output.Validate();
             return OpenCoreAsync(sourceId, profileId, output, token);
         }
-        private async Task<IProcessingSession> OpenCoreAsync(string sourceId, string? profileId, OutputRequest? output, CancellationToken token)
+        private async Task<IProcessingSession> OpenCoreAsync(string? sourceId, string? profileId, OutputRequest? output, CancellationToken token, RemoteInputRequest? remoteSource = null)
         {
             token.ThrowIfCancellationRequested();
-            var selected = host.selections.Resolve(package, grant, sourceId, profileId);
-            if (selected.Profile.Backend == "TensorRT")
+            var selected = remoteSource is null ? host.selections.Resolve(package, grant, sourceId!, profileId) : null;
+            var profile = selected?.Profile ?? host.selections.ResolveProfile(package, grant, profileId);
+            if (profile.Backend == "TensorRT")
                 Contract.Require(new[] { "nvinfer_11.dll", "trtexec.exe", "aji_trt.dll" }.All(name => File.Exists(Path.Combine(host.root, "animejanai", "inference", name))),
                     "backend_unavailable", "The selected TensorRT runtime is not installed. Install it through AJN Manager or approve a DirectML profile.");
             lock (host.gate)
@@ -118,9 +138,10 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
                 // Resolve/decrypt only after reserving capacity, but before any
                 // native work or outbound connection can begin.
                 var plan = output is null ? null : OutputUploadPlan.Prepare(package, grant, host.networkSelections, output);
-                var process = await MediaProcess.StartAsync(host.root, selected.Source.Path, selected.Profile.Configuration,
-                    selected.Profile.Slot, selected.Profile.Backend, host.work, host.command, token,
-                    enableFrameSamples: host.framesAvailable && grant.Allowed.Contains("frames.read"), encoding: output?.NativeOptions);
+                var input = remoteSource is null ? null : RemoteInputPlan.Prepare(package, grant, host.networkSelections, remoteSource);
+                var process = await MediaProcess.StartAsync(host.root, selected?.Source.Path, profile.Configuration,
+                    profile.Slot, profile.Backend, host.work, host.command, token,
+                    enableFrameSamples: host.framesAvailable && grant.Allowed.Contains("frames.read"), encoding: output?.NativeOptions, remoteSource: input);
                 try { return new Reserved(host, plan is null ? process : new OutputUploadSession(process, plan)); }
                 catch
                 {

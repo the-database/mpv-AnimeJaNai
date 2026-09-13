@@ -22,11 +22,12 @@ internal sealed class NativePlayback : IDisposable
     public bool Ended { get; private set; }
     public bool Failed { get; private set; }
 
-    public NativePlayback(string installRoot, string source, string configuration, string workDirectory, int slot, string backend,
-        long sampleMapping = 0, NativeEncoding? encoding = null, int outputDescriptor = -1)
+    public NativePlayback(string installRoot, string? source, string configuration, string workDirectory, int slot, string backend,
+        long sampleMapping = 0, NativeEncoding? encoding = null, int outputDescriptor = -1, Stream? sourceStream = null)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) throw new PlatformNotSupportedException("Native media currently requires Windows x64.");
-        Contract.Require(Path.IsPathFullyQualified(source) && File.Exists(source), "invalid_source", "A selected local media file is required.");
+        Contract.Require(sourceStream is null ? source is not null && Path.IsPathFullyQualified(source) && File.Exists(source)
+            : source is null && sourceStream.CanRead, "invalid_source", "Choose one approved media source.");
         Contract.Require(slot is >= 1 and <= 9 or >= 1001 and <= 1003 or >= 1010 and <= 1013, "invalid_profile", "Unsupported native profile.");
         Contract.Require(backend is "DirectML" or "TensorRT", "invalid_profile", "Unsupported native backend.");
         encoding?.Validate();
@@ -92,7 +93,8 @@ internal sealed class NativePlayback : IDisposable
             string filters = "@aji:animejanai:" + string.Join(':', parameters.Select(p => p.Key + "=" + Quote(p.Value))) + ":slot=" + slot;
             if (sampleMapping > 0) filters += ",@ajn-sample:ajn-sample:mapping=" + sampleMapping.ToString(CultureInfo.InvariantCulture);
             Set("vf", filters);
-            selectedFile = new SelectedFileStream(source);
+            selectedFile = sourceStream is null ? new SelectedFileStream(source!)
+                : new SelectedFileStream(sourceStream, sourceStream is RemoteMediaStream remote ? remote.Cancel : null);
             Check(selectedFile.Register(library, player));
             Check(initialize(player));
             ulong number = 0;
