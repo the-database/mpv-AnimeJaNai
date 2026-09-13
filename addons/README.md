@@ -6,9 +6,11 @@ This is the first working part of the AJN addon framework. It combines the earli
 
 **Native sessions now work:** the optional Windows provider runs independent GPU processing sessions from explicitly approved local media and saved profile snapshots. Manager provides resource consent and revocation. Real Wasm-to-DirectML tests cover concurrent 2× upscaling and independent controls. See [NATIVE-MEDIA.md](NATIVE-MEDIA.md) for setup, supported formats, limits, and the session-controller example.
 
-**Not connected yet:** GPU frame delivery, media encoding/output, device/network access, credentials, website catalog/signatures, automatic updates, and Linux worker enforcement. The latest-frame queue remains a fixture. Neither the Plex addon nor the lighting addon is implemented here.
+**Frame samples now work:** an optional native filter reduces SDR DirectML images on the GPU and sends bounded binary samples through the host to Wasm. Host timers provide serialized callbacks, with missed ticks coalesced. Tests exercise actual moving images, two concurrent upscaling sessions, independent pause/seek, permission checks and cleanup. See [FRAMES.md](FRAMES.md) and the generic sample inspector.
 
-API 1.1 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+**Not connected yet:** media encoding/output, device/network access, credentials, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux worker enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+
+API 1.2 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0/1.1 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 

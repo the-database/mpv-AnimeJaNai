@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Security.Cryptography;
 
 namespace AnimeJaNai.Addons.Native;
 
@@ -10,6 +11,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
     private readonly int maximumSessions;
     private readonly object gate = new();
     private int reserved;
+    private readonly bool framesAvailable;
 
     public NativeSessionProvider(string installRoot, string dataRoot, MediaSelections selections, WorkerCommand command, int maximumSessions = 2)
     {
@@ -20,6 +22,23 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             Contract.Require(File.Exists(Path.Combine(root, relative)), "native_unavailable", "Native media runtime is incomplete.");
         this.selections = selections; this.command = command; this.maximumSessions = maximumSessions;
         work = SafeFiles.DirectoryPath(dataRoot, "media-workers");
+        // Added only by a package containing the matching private native filter.
+        // Older native previews remain compatible and do not advertise samples.
+        framesAvailable = HasFrameRuntime(root);
+    }
+
+    internal static bool HasFrameRuntime(string root)
+    {
+        try
+        {
+            var marker = Contract.ParseObject(AddonPackage.ReadBoundedFile(Path.Combine(root, "addon-host", "native-frames.json"), 4096));
+            if (Contract.Number(marker, "privateSampleAbi") != 1) return false;
+            string expected = Contract.Text(marker, "mpvSha256", 64);
+            if (!Contract.ValidHash(expected)) return false;
+            using var library = File.OpenRead(Path.Combine(root, "libmpv-2.dll"));
+            return Convert.ToHexStringLower(SHA256.HashData(library)) == expected;
+        }
+        catch (Exception error) when (error is IOException or AddonException or UnauthorizedAccessException) { return false; }
     }
 
     public Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken token) =>
@@ -29,6 +48,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
     private sealed class Bound(NativeSessionProvider host, AddonPackage package, PermissionGrant grant) : IProcessingSessionProvider, IProcessingSelectionProvider
     {
         public int ApiMinor => 1;
+        public bool SupportsFrames => host.framesAvailable;
         public JsonObject ListSelections()
         {
             var result = host.selections.List(package, grant);
@@ -50,7 +70,8 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             try
             {
                 return new Reserved(host, await MediaProcess.StartAsync(host.root, selected.Source.Path, selected.Profile.Configuration,
-                    selected.Profile.Slot, selected.Profile.Backend, host.work, host.command, token));
+                    selected.Profile.Slot, selected.Profile.Backend, host.work, host.command, token,
+                    enableFrameSamples: host.framesAvailable && grant.Allowed.Contains("frames.read")));
             }
             catch (ProcessingSessionStartException error)
             {
@@ -59,12 +80,13 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             catch { lock (host.gate) host.reserved--; throw; }
         }
     }
-    private sealed class Reserved(NativeSessionProvider host, MediaProcess process) : IControllableProcessingSession
+    private sealed class Reserved(NativeSessionProvider host, MediaProcess process) : IControllableProcessingSession, IFrameProcessingSession
     {
         private int released;
         public Task<JsonObject> GetStatusAsync(CancellationToken token) => process.GetStatusAsync(token);
         public Task PauseAsync(bool paused, CancellationToken token) => process.PauseAsync(paused, token);
         public Task SeekAsync(double seconds, CancellationToken token) => process.SeekAsync(seconds, token);
+        public IFrameSubscription SubscribeFrames(FrameRequest request) => process.SubscribeFrames(request);
         public async ValueTask DisposeAsync()
         {
             await process.DisposeAsync();

@@ -1,4 +1,4 @@
-// AJN API 1.0 transport. This SDK is a convenience layer; the host independently
+// AJN API 1.2 transport, compatible with the 1.0 JSON-only methods. The host independently
 // validates every message and permission even when an addon replaces this code.
 const __ajnSdk = (() => {
     const maximum = 128 * 1024;
@@ -31,7 +31,21 @@ const __ajnSdk = (() => {
             sent += count;
         }
     }
-    function request(method, params = {}) {
+    function readBytes(length) {
+        const bytes = new Uint8Array(length);
+        let count = 0;
+        while (count < length) {
+            if (at === end) {
+                end = Javy.IO.readSync(0, input); at = 0;
+                if (end === 0) throw new Error("AJN binary response ended early");
+            }
+            const take = Math.min(length - count, end - at);
+            bytes.set(input.subarray(at, at + take), count);
+            count += take; at += take;
+        }
+        return bytes;
+    }
+    function request(method, params = {}, frameResponse = false) {
         const id = nextId++;
         if (nextId >= Number.MAX_SAFE_INTEGER) nextId = 1;
         write({ jsonrpc: "2.0", id, method, params });
@@ -42,12 +56,32 @@ const __ajnSdk = (() => {
             error.code = response.error.data && response.error.data.code;
             throw error;
         }
-        return response.result;
+        const result = response.result;
+        if (!frameResponse) return result;
+        if (!result || !Number.isInteger(result.byteLength) || result.byteLength < 0 || result.byteLength > 320 * 180 * 4)
+            throw new Error("Invalid AJN binary response length");
+        if (result.frame === null && result.byteLength === 0) return null;
+        const frame = result.frame;
+        if (!frame || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || frame.width < 1 || frame.width > 320 ||
+            frame.height < 1 || frame.height > 180 || frame.format !== "bgra8" || frame.stage !== "processed" || result.byteLength !== frame.width * frame.height * 4)
+            throw new Error("Invalid AJN sample metadata");
+        return Object.assign({}, frame, { pixels: readBytes(result.byteLength) });
     }
     const api = Object.freeze({
         info: () => request("host.info"),
         log: message => request("log.write", { message: String(message) }),
         settings: Object.freeze({ get: () => request("settings.get") }),
+        timers: Object.freeze({
+            set: (timerId, intervalMs, repeat = true) => request("timers.set", { timerId, intervalMs, repeat }),
+            clear: timerId => request("timers.clear", { timerId }),
+        }),
+        frames: Object.freeze({
+            subscribe: (sessionId, options = {}) => request("frames.subscribe", Object.assign({
+                sessionId, stage: "processed", format: "bgra8", width: 64, height: 36, maxFps: 30,
+            }, options, { sessionId })),
+            read: subscriptionId => request("frames.read", { subscriptionId }, true),
+            unsubscribe: subscriptionId => request("frames.unsubscribe", { subscriptionId }),
+        }),
         storage: Object.freeze({
             get: key => request("storage.get", { key }),
             set: (key, value) => request("storage.set", { key, value }),
@@ -73,7 +107,7 @@ const __ajnSdk = (() => {
                 const event = message.params;
                 try {
                     const value = event.name === "host.ping" ? null : handler(event, api);
-                    if (value && typeof value.then === "function") throw new Error("API 1.0 callbacks must finish synchronously");
+                    if (value && typeof value.then === "function") throw new Error("AJN callbacks must finish synchronously; use host timers for future events");
                     write({ jsonrpc: "2.0", id: message.id, result: value === undefined ? null : value });
                 } catch (error) {
                     write({ jsonrpc: "2.0", id: message.id, error: { code: -32000, message: String(error.message || error).slice(0, 4096) } });

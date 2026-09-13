@@ -6,11 +6,11 @@ The developer foundation is not the completed community addon product. The follo
 | --- | --- | --- |
 | Package / consent / rollback | Implemented locally; unsigned dev installs only | Publisher/signature policy, catalog verification, update consent and revocation |
 | Sandboxed workers | Real Windows runtime, resource supervision and tests | Additional containment review, aggregate service limits, supported-system testing, Linux enforcement |
-| Public protocol / SDK | Versioned preview, JS SDK, typed settings, actions, replay | Freeze compatibility contract after integration, other language examples, more capable async/event scheduling |
+| Public protocol / SDK | Versioned preview, JS SDK, typed settings, actions, replay, bounded binary responses and coalesced timers | Freeze compatibility contract after integration, other language examples, media/output events |
 | Lifecycle | Persistent per-user host, private same-user management transport, consolidated activation, bounded stop and health checks | Player connection and opt-in login activation |
 | Manager | Addon controls, exact-file consent, saved profile snapshots, revocation and rendered UI tests | Device/network consent, community catalog flow |
 | Sessions | Native provider, approved local sources/profiles, admission, asynchronous open/close, independent pause/seek, real concurrent DirectML tests | TensorRT/RIFE validation, more source types, host capacity UI and hardware matrix |
-| Frame samples | Immutable bounded latest-sample queue fixture | Native hook, negotiated stage/format/rate, timestamps/color metadata, bounded binary transport, GPU overhead tests |
+| Frame samples | Native GPU-reduced SDR DirectML samples, negotiated size/rate, PTS/epoch/color/geometry metadata, bounded binary transport, actual Wasm/concurrent-session tests | Final-display and HDR stages, CUDA/TensorRT producer, shared player observation, broader GPU/performance matrix |
 | Media output | Design requirement | Trusted encode/mux/output pipeline, streaming backpressure and cleanup |
 | Device/service I/O | No network capability is exposed | Destination-scoped outbound APIs; separately authorized listeners/discovery; credential handling |
 | Website links | Design requirement | Signed catalog identity resolution and Manager review flow; never arbitrary link-to-execution |

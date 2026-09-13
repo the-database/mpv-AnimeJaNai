@@ -6,14 +6,14 @@ The June proposals provide useful product structure: a host independent of Manag
 flowchart LR
     UI[Trusted Manager / developer CLI] --> Life[Activation and package registry]
     Life --> Host[Trusted broker]
-    Guest[Wasm addon worker] <-->|Bounded JSON-RPC| Host
+    Guest[Wasm addon worker] <-->|Bounded JSON-RPC and binary samples| Host
     Host --> Data[Addon storage / settings]
     Host --> Sessions[Supervised native AJN sessions]
-    Sessions -. bounded samples .-> Host
+    Sessions -->|GPU-reduced samples| Host
     Host -. future granted destinations .-> Devices[Services / devices]
 ```
 
-Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes a separate trusted management protocol over a Windows named pipe. Native/network adapters remain integration work. The CLI and service use the same package, grant, settings, broker, and worker classes.
+Solid connections exist in the developer foundation and companion Manager branch. The persistent host exposes a separate trusted management protocol over a Windows named pipe. Native sessions and SDR DirectML samples are integrated; network and media-output adapters remain work. The CLI and service use the same package, grant, settings, broker, and worker classes.
 
 The management pipe permits its Windows owner and explicitly denies network logons. The complete ACL is applied at creation, and the initial listener uses FirstPipeInstance. Both ends verify ownership. The host holds an exclusive data-directory lease; eight management connections share its addon controllers, and list responses are paginated. Manager commands are never exposed on a guest worker's channel. See [MANAGEMENT.md](MANAGEMENT.md).
 
@@ -37,7 +37,7 @@ Automatic catalog updates must eventually bind publisher identity, addon ID, ver
 
 Keep inference, decoding, frame ownership, sampling/downscaling, encoding, and GPU synchronization in trusted native components. Addon code must not run in the render callback. Control messages can use JSON; continuous pixels or encoded media require a separately bounded binary transport with ownership, cancellation, and backpressure rules.
 
-The existing latest-frame queue only proves that a producer can discard stale samples without waiting and can copy payloads with defined ownership. Its current 320x180 cap is a test/prototype bound, not a final sampling contract. Final sampling must negotiate resolution/rate/stage and carry timestamps and color metadata. Post-filter frames are not automatically the final tone-mapped, subtitle-composited display image.
+The first real producer negotiates processed BGRA8 SDR samples up to 320x180 and 60 Hz. Its private D3D11 filter preserves the original frame, retains at most one sample source through GPU completion, and skips when busy. An unnamed mapping connects only the trusted native worker and host; validated binary copies reach Wasm. Subscription ownership follows session ownership, seeks invalidate old epochs, and unsubscribe/close disables capture. Host timers serialize periodic callbacks and coalesce missed ticks. Post-filter frames are not automatically the final tone-mapped, subtitle-composited display image. [FRAMES.md](FRAMES.md) records the exact semantics and remaining format limits.
 
 Network permissions need user-selected destinations, protocols, operation limits, and separate listening/discovery grants. The guest runtime remains without general network access; broker adapters enforce each destination. Credential storage and scoped service operations belong in trusted code. Existing proposals' localhost ports, single Plex stream, optional external configuration executables, and Plex-specific UI are not platform requirements.
 

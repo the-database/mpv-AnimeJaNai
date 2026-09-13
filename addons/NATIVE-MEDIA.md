@@ -1,6 +1,6 @@
 # Native media sessions — API 1.1 preview
 
-The Windows host can run independent AJN processing sessions in supervised native processes. A real Wasm addon has been tested opening two DirectML sessions, producing 960×720 frames from a 480×360 video, pausing/seeking one while the other advances, and closing them cleanly. The native null output avoids downloading GPU frames merely to discard them. This is a processing/control checkpoint; frame delivery, encoding, sound, streaming, and lighting are separate capabilities still under development.
+The Windows host can run independent AJN processing sessions in supervised native processes. A real Wasm addon has been tested opening two DirectML sessions, producing 960×720 frames from a 480×360 video, pausing/seeking one while the other advances, and closing them cleanly. The native null output avoids downloading GPU frames merely to discard them. API1.2 additionally offers GPU-reduced SDR samples through the separate [frames capability](FRAMES.md). Encoding, sound and streaming remain under development.
 
 ## Select media in Manager
 
@@ -41,6 +41,13 @@ ajn-addon serve <data-directory> <wasmtime.exe> <trusted-AJN-root> [maximum-medi
 
 Without the AJN root argument, the host remains usable without native media and does not advertise sessions. Manager opts into the packaged runtime when `addon-host/native-media.json` is present. Capacity is admission control, not a guarantee that every GPU can run that many selected models. Engine creation is on demand; no TensorRT engines are distributed by this addon package. The current desktop evidence is DirectML; TensorRT/RIFE combinations require additional validation.
 
+Frame-capable packages also include `addon-host/native-frames.json` with
+`privateSampleAbi: 1` and `mpvSha256` equal to the packaged `libmpv-2.dll` digest.
+The host advertises samples only when both match. A missing, incompatible or
+stale marker leaves ordinary native sessions available without advertising a
+private filter that the installed library cannot provide. Addon authors should
+use public capability discovery; they do not need this private native ABI.
+
 ## Private implementation and failure ownership
 
 The native worker uses libmpv internally; its stream callback ABI is a pinned implementation dependency, not part of the addon API. The selected file is opened once with a read-only handle and served through one private URI. Container parsing is limited, and reference/protocol opens are disabled. The UI supplies trusted profile snapshots; addons cannot alter them.
@@ -49,7 +56,7 @@ Each media process has a separate Windows Job: 2 GiB process memory, 4 GiB job m
 
 The parent requires a status heartbeat within 15 seconds and allows three seconds for graceful shutdown before terminating the native job. Private configuration/cache folders are removed only after their process job empties. Failing cleanup keeps reservations and ownership for retry; revocation cannot report success while forgetting a resource. Independent sessions drain concurrently when an addon stops. A host crash terminates its owned jobs.
 
-The backend, runtime and codec/driver dependencies remain maintenance responsibilities. Process separation cannot guarantee recovery from a system-wide GPU driver failure. Efficient frame samples require GPU reduction, explicit stage/color/timestamp semantics and a bounded binary transport; this checkpoint does not substitute full-resolution screenshots for that design.
+The backend, runtime and codec/driver dependencies remain maintenance responsibilities. Process separation cannot guarantee recovery from a system-wide GPU driver failure. Frame samples now use GPU reduction, explicit stage/color/timestamp semantics and a bounded binary transport; their support and performance limits are documented in [FRAMES.md](FRAMES.md).
 
 ## Validation
 

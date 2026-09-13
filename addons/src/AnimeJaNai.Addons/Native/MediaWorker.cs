@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Microsoft.Win32.SafeHandles;
 
 namespace AnimeJaNai.Addons.Native;
 
@@ -31,9 +32,14 @@ internal static class MediaWorker
         using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var launch = await channel.ReadAsync(startup.Token);
         Contract.Require(Contract.Number(launch, "version") == 1, "native_version", "Unsupported internal media protocol.");
+        long sampleHandle = launch["sampleMapping"] is null ? 0 : Contract.Number(launch, "sampleMapping");
+        Contract.Require(sampleHandle >= 0, "native_protocol", "Invalid private sample mapping.");
+        // The handle was duplicated into this process before the execution gate.
+        // It outlives libmpv and is closed after the filter unmaps its view.
+        using var sampleMapping = new SafeFileHandle(new IntPtr(sampleHandle), ownsHandle: true);
         using var player = new NativePlayback(Contract.Text(launch, "root", 4096), Contract.Text(launch, "source", 4096),
             Contract.Text(launch, "configuration", 4096), Contract.Text(launch, "work", 4096),
-            checked((int)Contract.Number(launch, "slot")), Contract.Text(launch, "backend", 32));
+            checked((int)Contract.Number(launch, "slot")), Contract.Text(launch, "backend", 32), sampleHandle);
         var commands = Task.Run(async () =>
         {
             try

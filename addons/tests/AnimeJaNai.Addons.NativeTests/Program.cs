@@ -4,13 +4,30 @@ using System.Text.Json.Nodes;
 using AnimeJaNai.Addons.Native;
 using AnimeJaNai.Addons;
 
-if (args.Length is not (3 or 5)) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe]"); return 2; }
+bool framesOnly = args.Length == 6 && args[^1] == "--frames-only";
+bool frameBenchmark = args.Length == 4 && args[^1] == "--frames-benchmark";
+if (framesOnly) args = args[..5];
+if (frameBenchmark) args = args[..3];
+if (args.Length is not (3 or 5)) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
 string root = Path.GetFullPath(args[0]), output = Path.GetFullPath(args[1]);
 if (Directory.Exists(output)) { Console.Error.WriteLine("Choose a new test output directory."); return 2; }
 Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (frameBenchmark)
+    {
+        await NativeFrameBenchmark.RunAsync(root, output, evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
+    if (framesOnly)
+    {
+        var frameCommand = new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]);
+        await NativeFrameChecks.RunAsync(root, output, frameCommand, args[3], args[4], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
     string config = Path.Combine(output, "animejanai.conf");
     File.WriteAllText(config, "[global]\nconfig_version=3\nbackend=DirectML\nlogging=yes\ndefault_slot=1002\n");
     using var player = new NativePlayback(root, Path.Combine(root, "animejanai", "benchmarks", "480x360.mp4"), config, output, 1002, "DirectML");
@@ -101,6 +118,8 @@ try
     }
     if (Directory.EnumerateDirectories(workRoot).Any()) throw new Exception("Cancelled/failed native sessions retained work directories.");
     if (args.Length == 5) await NativeAddonChecks.RunAsync(root, output, worker, args[3], args[4], evidence);
+    if (File.Exists(Path.Combine(root, "addon-host", "native-frames.json")))
+        await NativeFrameChecks.RunAsync(root, output, worker, args.Length == 5 ? args[3] : null, args.Length == 5 ? args[4] : null, evidence);
     File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
     Console.WriteLine("PASS native libmpv adapter and two independent supervised sessions: 2x DirectML, status, pause, seek, resume, EOF and cleanup.");
     return 0;

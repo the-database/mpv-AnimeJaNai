@@ -71,7 +71,7 @@ public sealed class AddonService : IAsyncDisposable
             case "addons.installDev":
                 var package = AddonPackage.Load(Contract.Text(parameters, "path", 4096));
                 Contract.Require(package.Hash == Contract.Text(parameters, "expectedHash", 64), "integrity_mismatch", "Package changed since it was reviewed. Inspect it again.");
-                Contract.Require(parameters["permissions"] is JsonArray { Count: <= 4 }, "invalid_grant", "Invalid permission grant.");
+                Contract.Require(parameters["permissions"] is JsonArray permissionArray && permissionArray.Count <= Contract.PermissionNames.Count, "invalid_grant", "Invalid permission grant.");
                 var permissions = ((JsonArray)parameters["permissions"]!).Select(p => p is JsonValue value && value.TryGetValue<string>(out var text)
                     ? text : throw new AddonException("invalid_grant", "Invalid permission.")).ToArray();
                 _ = new PermissionGrant(package, permissions);

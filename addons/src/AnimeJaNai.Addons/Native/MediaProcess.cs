@@ -7,7 +7,7 @@ namespace AnimeJaNai.Addons.Native;
 // Constructed only after the trusted host resolves approved source/profile ids.
 // Each instance owns its native process; a codec or driver failure does not run
 // in the Manager, the service, or another session's process.
-internal sealed class MediaProcess : IControllableProcessingSession
+internal sealed class MediaProcess : IControllableProcessingSession, IFrameProcessingSession
 {
     private readonly Process process;
     private readonly WindowsJob job;
@@ -23,22 +23,25 @@ internal sealed class MediaProcess : IControllableProcessingSession
     private Task? cleanup;
     private bool closing;
     private bool nativeReleased;
+    private readonly NativeFrameBuffer? frames;
 
-    private MediaProcess(Process process, WindowsJob job, string directory, string workRoot)
+    private MediaProcess(Process process, WindowsJob job, string directory, string workRoot, NativeFrameBuffer? frames)
     {
         this.process = process; this.job = job; this.directory = directory; this.workRoot = workRoot;
+        this.frames = frames;
         channel = new(process.StandardOutput.BaseStream, process.StandardInput.BaseStream);
         diagnostics = DrainAsync();
         monitoring = MonitorAsync();
     }
 
     public static async Task<MediaProcess> StartAsync(string root, string source, string configuration, int slot, string backend,
-        string workRoot, WorkerCommand command, CancellationToken token)
+        string workRoot, WorkerCommand command, CancellationToken token, bool enableFrameSamples = false)
     {
         token.ThrowIfCancellationRequested();
         workRoot = Path.GetFullPath(workRoot);
         string directory = SafeFiles.DirectoryPath(workRoot, "media-" + Guid.NewGuid().ToString("N"));
         WindowsJob? job = null; Process? process = null; MediaProcess? result = null;
+        NativeFrameBuffer? frames = null;
         try
         {
             // Native decoders/model loading need a different budget from guest
@@ -57,10 +60,12 @@ internal sealed class MediaProcess : IControllableProcessingSession
             foreach (string arg in command.PrefixArguments.Append("media-worker")) info.ArgumentList.Add(arg);
             process = Process.Start(info) ?? throw new AddonException("native_start", "Could not start native media worker.");
             job.Attach(process);
-            result = new(process, job, directory, workRoot);
+            if (enableFrameSamples && backend == "DirectML") frames = new NativeFrameBuffer();
+            long sampleMapping = frames?.DuplicateTo(process) ?? 0;
+            result = new(process, job, directory, workRoot, frames);
             await process.StandardInput.BaseStream.WriteAsync(new byte[] { 1 }, token);
             await result.channel.WriteAsync(new JsonObject { ["version"] = 1, ["root"] = Path.GetFullPath(root),
-                ["source"] = Path.GetFullPath(source), ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend }, token);
+                ["source"] = Path.GetFullPath(source), ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend, ["sampleMapping"] = sampleMapping }, token);
             return result; // Native initialization progresses behind the handle.
         }
         catch (Exception error)
@@ -74,6 +79,7 @@ internal sealed class MediaProcess : IControllableProcessingSession
             {
                 job?.Dispose();
                 if (process is not null) { try { process.Kill(true); } catch (InvalidOperationException) { } await process.WaitForExitAsync(); process.Dispose(); }
+                frames?.Dispose();
                 await RemoveFilesAsync(workRoot, directory);
             }
             throw;
@@ -86,6 +92,15 @@ internal sealed class MediaProcess : IControllableProcessingSession
         lock (sync) return Task.FromResult((JsonObject)status.DeepClone());
     }
     public Task PauseAsync(bool paused, CancellationToken token) => ControlAsync(new() { ["operation"] = "pause", ["paused"] = paused }, token);
+    public IFrameSubscription SubscribeFrames(FrameRequest request)
+    {
+        lock (sync)
+        {
+            Contract.Require(!closing && status["state"]?.GetValue<string>() is not ("failed" or "completed" or "closed"), "session_closed", "Native session is no longer active.");
+            Contract.Require(frames is not null, "feature_unavailable", "This session does not offer frame samples. A sample-capable runtime and DirectML profile are required.");
+            return frames.Subscribe(request);
+        }
+    }
     public Task SeekAsync(double seconds, CancellationToken token)
     {
         Contract.Require(double.IsFinite(seconds) && seconds >= 0 && seconds <= 315576000, "invalid_request", "Invalid seek position.");
@@ -99,6 +114,7 @@ internal sealed class MediaProcess : IControllableProcessingSession
         try
         {
             lock (sync) Contract.Require(!closing && status["state"]?.GetValue<string>() is not ("failed" or "completed" or "closed"), "session_closed", "Native session is no longer active.");
+            if (control["operation"]?.GetValue<string>() == "seek") frames?.InvalidateForSeek();
             await channel.WriteAsync(control, token.Token);
         }
         finally { commands.Release(); }
@@ -167,7 +183,7 @@ internal sealed class MediaProcess : IControllableProcessingSession
             lifetime.Cancel(); job.Terminate();
             await job.WaitForEmptyAsync();
             await Task.WhenAll(monitoring, diagnostics);
-            job.Dispose(); process.Dispose(); nativeReleased = true;
+            job.Dispose(); process.Dispose(); frames?.Dispose(); nativeReleased = true;
         }
         await RemoveFilesAsync(workRoot, directory);
         lock (sync) status = new() { ["state"] = "closed" };

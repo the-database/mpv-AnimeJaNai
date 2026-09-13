@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/AnimeJaNai.Addons/AnimeJaNai.Addons.csproj" /></ItemGroup>
+  <ItemGroup><None Include="../fixtures/counter-api-1.0.ajnaddon" Link="fixtures/counter-api-1.0.ajnaddon" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

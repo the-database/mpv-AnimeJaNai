@@ -22,7 +22,7 @@ internal sealed class NativePlayback : IDisposable
     public bool Ended { get; private set; }
     public bool Failed { get; private set; }
 
-    public NativePlayback(string installRoot, string source, string configuration, string workDirectory, int slot, string backend)
+    public NativePlayback(string installRoot, string source, string configuration, string workDirectory, int slot, string backend, long sampleMapping = 0)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) throw new PlatformNotSupportedException("Native media currently requires Windows x64.");
         Contract.Require(Path.IsPathFullyQualified(source) && File.Exists(source), "invalid_source", "A selected local media file is required.");
@@ -66,7 +66,9 @@ internal sealed class NativePlayback : IDisposable
                 ["rife-model-dir"] = Path.Combine(installRoot, "animejanai", "rife"),
                 ["trtexec"] = Path.Combine(inference, "trtexec.exe"), ["stats"] = Path.Combine(workDirectory, "inference.log"),
             };
-            Set("vf", "@aji:animejanai:" + string.Join(':', parameters.Select(p => p.Key + "=" + Quote(p.Value))) + ":slot=" + slot);
+            string filters = "@aji:animejanai:" + string.Join(':', parameters.Select(p => p.Key + "=" + Quote(p.Value))) + ":slot=" + slot;
+            if (sampleMapping > 0) filters += ",@ajn-sample:ajn-sample:mapping=" + sampleMapping.ToString(CultureInfo.InvariantCulture);
+            Set("vf", filters);
             selectedFile = new SelectedFileStream(source);
             Check(selectedFile.Register(library, player));
             Check(initialize(player));
@@ -173,6 +175,7 @@ internal sealed class NativePlayback : IDisposable
         new("video-params/w", "inputWidth", 4), new("video-params/h", "inputHeight", 4),
         new("video-out-params/w", "outputWidth", 4), new("video-out-params/h", "outputHeight", 4),
         new("video-out-params/pixelformat", "pixelFormat", 1), new("hwdec-current", "decoder", 1),
+        new("decoder-frame-drop-count", "decoderDroppedFrames", 4), new("frame-drop-count", "outputDroppedFrames", 4),
     ];
     [StructLayout(LayoutKind.Sequential)] private struct Event { public int Id, Error; public ulong UserData; public IntPtr Data; }
     [StructLayout(LayoutKind.Sequential)] private struct Property { public IntPtr Name; public int Format; public IntPtr Data; }

@@ -12,6 +12,7 @@ public sealed class Broker : IAsyncDisposable
     private readonly Action<string> log;
     private readonly SessionRegistry.Owner? owner;
     private volatile bool disposed;
+    internal AddonTimers Timers { get; } = new();
 
     public Broker(AddonPackage package, PermissionGrant grant, string dataRoot, Action<string>? log = null, SessionRegistry? sessions = null)
     {
@@ -29,7 +30,8 @@ public sealed class Broker : IAsyncDisposable
         _ = settings.Get();
     }
 
-    private string[] AvailableCapabilities() => sessions is null ? ["host", "storage", "logging", "settings"] : ["host", "storage", "logging", "settings", "sessions"];
+    private string[] AvailableCapabilities() => sessions is null ? ["host", "storage", "logging", "settings", "timers"] :
+        sessions.SupportsFrames(owner!) ? ["host", "storage", "logging", "settings", "timers", "sessions", "frames"] : ["host", "storage", "logging", "settings", "timers", "sessions"];
     private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
@@ -42,6 +44,16 @@ public sealed class Broker : IAsyncDisposable
             new JsonObject { ["major"] = 1, ["minor"] = CapabilityMinor(p) }))),
     };
 
+    public async Task<BrokerResponse> InvokeTransportAsync(string method, JsonObject parameters, CancellationToken token)
+    {
+        if (method != "frames.read") return new(await InvokeAsync(method, parameters, token));
+        token.ThrowIfCancellationRequested();
+        Contract.Require(!disposed, "owner_closed", "Addon instance has stopped.");
+        grant.Demand("frames.read"); grant.Demand("sessions.manage");
+        var frame = await Sessions().ReadFrameAsync(owner!, Contract.Text(parameters, "subscriptionId", 64), false, token);
+        return new(new JsonObject { ["frame"] = frame?.Metadata, ["byteLength"] = frame?.Pixels.Length ?? 0 }, frame?.Pixels ?? default);
+    }
+
     public async Task<JsonNode?> InvokeAsync(string method, JsonObject parameters, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -50,6 +62,27 @@ public sealed class Broker : IAsyncDisposable
         {
             case "host.info": return Info();
             case "settings.get": return settings.Get();
+            case "timers.set":
+                long interval = Contract.Number(parameters, "intervalMs");
+                Contract.Require(interval is >= 16 and <= 3_600_000 && parameters["repeat"] is JsonValue repeat && repeat.TryGetValue<bool>(out _), "invalid_request", "Invalid timer interval or repeat value.");
+                Timers.Set(Contract.Text(parameters, "timerId", 64), (int)interval, parameters["repeat"]!.GetValue<bool>());
+                return null;
+            case "timers.clear":
+                Timers.Clear(Contract.Text(parameters, "timerId", 64)); return null;
+            case "frames.subscribe":
+                grant.Demand("frames.read"); grant.Demand("sessions.manage");
+                Contract.Require(Contract.Text(parameters, "stage", 32) == "processed" && Contract.Text(parameters, "format", 16) == "bgra8", "frame_format_unavailable", "This producer offers processed BGRA8 samples.");
+                long width = Contract.Number(parameters, "width"), height = Contract.Number(parameters, "height"), fps = Contract.Number(parameters, "maxFps");
+                Contract.Require(width is >= 1 and <= 320 && height is >= 1 and <= 180 && fps is >= 1 and <= 60, "invalid_request", "Unsupported frame dimensions or rate.");
+                var request = new FrameRequest((int)width, (int)height, (int)fps);
+                string subscriptionId = await Sessions().SubscribeFramesAsync(owner!, Contract.Text(parameters, "sessionId", 64), request, cancellationToken);
+                var description = request.Describe(); description["subscriptionId"] = subscriptionId;
+                return description;
+            case "frames.unsubscribe":
+                grant.Demand("frames.read"); grant.Demand("sessions.manage");
+                await Sessions().ReadFrameAsync(owner!, Contract.Text(parameters, "subscriptionId", 64), true, cancellationToken);
+                return null;
+            case "frames.read": throw new AddonException("binary_transport_required", "Frame reads require the binary response transport.");
             case "log.write":
                 grant.Demand("log.write");
                 string message = Contract.Text(parameters, "message", 4096);
@@ -105,6 +138,7 @@ public sealed class Broker : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         disposed = true;
+        Timers.Close();
         if (sessions is not null) await sessions.ReleaseOwnerAsync(owner!);
     }
 }

@@ -1,4 +1,34 @@
-/** AJN addon API 1.1 preview. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.2 preview. Plain JavaScript, with optional editor type checking. */
+interface AjnFrame {
+    frameId: string;
+    epoch: string;
+    width: number;
+    height: number;
+    stride: number;
+    format: "bgra8";
+    stage: "processed";
+    /** Processing PTS, not measured display time. */
+    ptsSeconds: number | null;
+    producerTimeMs: number;
+    sourceWidth: number;
+    sourceHeight: number;
+    rotation: number;
+    verticalFlip: boolean;
+    pixelAspectRatio: number;
+    crop: { x: number; y: number; width: number; height: number };
+    color: { primaries: string; transfer: string; matrix: "rgb"; range: "full"; alpha: "opaque" };
+    skippedSamples: number;
+    producerDrops: number;
+    /** Tightly packed bytes, top row first. Do not return pixels as event JSON. */
+    pixels: Uint8Array;
+}
+interface AjnSampleOptions {
+    stage?: "processed";
+    format?: "bgra8";
+    width?: number;
+    height?: number;
+    maxFps?: number;
+}
 interface AjnHostInfo {
     id: string;
     api: { major: number; minor: number };
@@ -11,6 +41,19 @@ interface AjnApi {
     log(message: string): void;
     /** Host-owned declarative settings. Only the user/host can change them. */
     settings: { get(): Record<string, boolean | number | string> };
+    /** Timer events have data {timerId, elapsedMs, missedTicks}. All callbacks are
+     * serialized. Missed ticks coalesce; eight timers and 60 background events/s. */
+    timers: {
+        set(timerId: string, intervalMs: number, repeat?: boolean): void;
+        clear(timerId: string): void;
+    };
+    /** Requires frames.read, sessions.manage and frames capability 1.0. */
+    frames: {
+        subscribe(sessionId: string, options?: AjnSampleOptions): Required<AjnSampleOptions> & { subscriptionId: string };
+        /** Latest unread sample, or null. Never waits for the GPU. */
+        read(subscriptionId: string): AjnFrame | null;
+        unsubscribe(subscriptionId: string): void;
+    };
     storage: {
         /** Missing keys return null. Values must be JSON-serializable. */
         get(key: string): unknown;

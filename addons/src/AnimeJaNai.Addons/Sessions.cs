@@ -31,6 +31,7 @@ public sealed class ProcessingSessionStartException(IProcessingSession session, 
 public interface IProcessingSessionProvider
 {
     int ApiMinor => 0;
+    bool SupportsFrames => false;
     Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken cancellationToken);
     IProcessingSessionProvider ForAddon(AddonPackage package, PermissionGrant grant) => this;
 }
@@ -51,6 +52,7 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         public SemaphoreSlim Gate { get; } = new(1, 1);
         public Task? Closing;
         public string? CleanupError;
+        public Dictionary<string, IFrameSubscription> Frames { get; } = new(StringComparer.Ordinal);
     }
     private readonly Dictionary<string, OwnedSession> sessions = new(StringComparer.Ordinal);
     private readonly object sync = new();
@@ -58,6 +60,66 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
     public Owner CreateOwner() => new(provider);
     public Owner CreateOwner(AddonPackage package, PermissionGrant grant) => new(provider.ForAddon(package, grant));
     public int CapabilityMinor(Owner owner) => owner.Provider.ApiMinor;
+    public bool SupportsFrames(Owner owner) => owner.Provider.SupportsFrames;
+
+    public async Task<string> SubscribeFramesAsync(Owner owner, string sessionId, FrameRequest request, CancellationToken token)
+    {
+        request.Validate();
+        OwnedSession item;
+        lock (sync) item = Owned(owner, sessionId);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, owner.Lifetime.Token);
+        await item.Gate.WaitAsync(linked.Token);
+        try
+        {
+            lock (sync)
+            {
+                _ = Owned(owner, sessionId);
+                Contract.Require(item.Closing is null, "session_closed", "Session is closing.");
+                Contract.Require(item.Frames.Count == 0, "capacity_exceeded", "This producer supports one sample subscription per session.");
+            }
+            Contract.Require(owner.Provider.SupportsFrames && item.Session is IFrameProcessingSession, "feature_unavailable", "This session does not offer frame samples.");
+            var subscription = ((IFrameProcessingSession)item.Session).SubscribeFrames(request);
+            try
+            {
+                lock (sync)
+                {
+                    _ = Owned(owner, sessionId);
+                    string id = Guid.NewGuid().ToString("N");
+                    item.Frames.Add(id, subscription);
+                    return id;
+                }
+            }
+            catch { subscription.Dispose(); throw; }
+        }
+        finally { item.Gate.Release(); }
+    }
+
+    public async Task<FramePacket?> ReadFrameAsync(Owner owner, string subscriptionId, bool unsubscribe, CancellationToken token)
+    {
+        OwnedSession item;
+        lock (sync)
+        {
+            Contract.Require(!owner.Closing, "subscription_not_found", "Frame subscription is closed.");
+            item = sessions.Values.FirstOrDefault(s => s.Owner == owner && s.Frames.ContainsKey(subscriptionId))
+                ?? throw new AddonException("subscription_not_found", "Frame subscription is not owned by this addon instance.");
+        }
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, owner.Lifetime.Token);
+        await item.Gate.WaitAsync(linked.Token);
+        try
+        {
+            IFrameSubscription subscription;
+            lock (sync)
+            {
+                Contract.Require(!owner.Closing && item.Closing is null && item.Frames.ContainsKey(subscriptionId), "subscription_not_found", "Frame subscription is closed.");
+                subscription = item.Frames[subscriptionId];
+            }
+            if (!unsubscribe) return subscription.ReadLatest();
+            subscription.Dispose();
+            lock (sync) item.Frames.Remove(subscriptionId);
+            return null;
+        }
+        finally { item.Gate.Release(); }
+    }
 
     public JsonObject Selections(Owner owner)
     {
@@ -192,6 +254,13 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         try
         {
             lock (sync) if (!sessions.ContainsKey(id)) return;
+            KeyValuePair<string, IFrameSubscription>[] subscriptions;
+            lock (sync) subscriptions = item.Frames.ToArray();
+            foreach (var entry in subscriptions)
+            {
+                entry.Value.Dispose();
+                lock (sync) item.Frames.Remove(entry.Key);
+            }
             await item.Session.DisposeAsync();
             lock (sync) sessions.Remove(id);
         }

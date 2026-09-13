@@ -5,5 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/AnimeJaNai.Addons/AnimeJaNai.Addons.csproj" />
+    <None Include="../../examples/sample-inspector/**" Link="sample-inspector/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

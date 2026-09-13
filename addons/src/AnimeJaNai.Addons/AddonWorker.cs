@@ -26,6 +26,8 @@ public sealed class AddonWorker : IAddonInstance
     private string? failure;
     private int recentCalls;
     private long rateWindow = Stopwatch.GetTimestamp();
+    private int binaryBytes;
+    private long binaryWindow = Stopwatch.GetTimestamp();
 
     private AddonWorker(Process process, WindowsJob job, Broker broker, string directory, TimeSpan eventTimeout)
     {
@@ -92,7 +94,10 @@ public sealed class AddonWorker : IAddonInstance
         }
     }
 
-    public async Task<JsonNode?> SendEventAsync(string name, JsonNode? data = null, CancellationToken cancellationToken = default)
+    public Task<JsonNode?> SendEventAsync(string name, JsonNode? data = null, CancellationToken cancellationToken = default)
+        => SendEventCoreAsync(name, data, cancellationToken);
+
+    private async Task<JsonNode?> SendEventCoreAsync(string name, JsonNode? data, CancellationToken cancellationToken, Func<JsonNode?>? prepare = null)
     {
         Contract.Require(Contract.ValidKey(name), "invalid_event", "Invalid event name.");
         Contract.Require(!stopped, "worker_stopped", failure ?? "Addon worker has stopped.");
@@ -101,6 +106,11 @@ public sealed class AddonWorker : IAddonInstance
         try
         {
             Contract.Require(!stopped, "worker_stopped", failure ?? "Addon worker has stopped.");
+            if (prepare is not null)
+            {
+                data = prepare();
+                if (data is null) return null;
+            }
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
             deadline.CancelAfter(eventTimeout);
             var token = deadline.Token;
@@ -133,13 +143,20 @@ public sealed class AddonWorker : IAddonInstance
                 string method = Contract.Text(message, "method", 64);
                 Contract.Require(message["params"] is JsonObject, "invalid_message", "Request params must be an object.");
                 JsonObject response;
+                ReadOnlyMemory<byte> binary = default;
                 try
                 {
-                    response = JsonRpc.Result(id, await Task.Run(() => broker.InvokeAsync(method, (JsonObject)message["params"]!, token), token).WaitAsync(token));
+                    var result = await Task.Run(() => broker.InvokeTransportAsync(method, (JsonObject)message["params"]!, token), token).WaitAsync(token);
+                    if (Stopwatch.GetElapsedTime(binaryWindow) >= TimeSpan.FromSeconds(1)) { binaryWindow = Stopwatch.GetTimestamp(); binaryBytes = 0; }
+                    Contract.Require(result.Binary.Length <= FrameRequest.MaxBytes && binaryBytes + result.Binary.Length <= 16 * 1024 * 1024,
+                        "bandwidth_exceeded", "Addon binary samples exceeded 16 MiB in this one-second window. Reduce the sample size or rate.");
+                    binaryBytes += result.Binary.Length;
+                    response = JsonRpc.Result(id, result.Result);
+                    binary = result.Binary;
                 }
                 catch (AddonException error) { response = JsonRpc.Error(id, error.Code, error.Message); }
                 catch (IOException) { response = JsonRpc.Error(id, "storage_unavailable", "Addon storage could not be accessed."); }
-                await channel.WriteAsync(response, token);
+                await channel.WriteBinaryAsync(response, binary, token);
             }
         }
         catch (OperationCanceledException)
@@ -153,11 +170,31 @@ public sealed class AddonWorker : IAddonInstance
 
     private async Task HeartbeatAsync()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         try
         {
-            while (await timer.WaitForNextTickAsync(lifetime.Token))
-                await SendEventAsync("host.ping", cancellationToken: lifetime.Token);
+            long lastPing = Stopwatch.GetTimestamp(), lastTimer = 0;
+            while (!lifetime.IsCancellationRequested)
+            {
+                if (Stopwatch.GetElapsedTime(lastPing) >= TimeSpan.FromSeconds(5))
+                {
+                    await SendEventAsync("host.ping", cancellationToken: lifetime.Token);
+                    lastPing = Stopwatch.GetTimestamp();
+                }
+                if (broker.Timers.Due() is { } ticket)
+                {
+                    // Bound all background timer callbacks together to 60 Hz.
+                    // The event gate keeps action/settings callbacks serialized.
+                    var remaining = TimeSpan.FromSeconds(1.0 / 60) - Stopwatch.GetElapsedTime(lastTimer);
+                    if (remaining > TimeSpan.Zero) await Task.Delay(remaining, lifetime.Token);
+                    await SendEventCoreAsync("timer", null, lifetime.Token, () => broker.Timers.Take(ticket));
+                    lastTimer = Stopwatch.GetTimestamp();
+                }
+                else
+                {
+                    var untilPing = TimeSpan.FromSeconds(5) - Stopwatch.GetElapsedTime(lastPing);
+                    await broker.Timers.WaitAsync(untilPing > TimeSpan.Zero ? untilPing : TimeSpan.Zero, lifetime.Token);
+                }
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception) { Stop("Addon failed its health check."); }

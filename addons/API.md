@@ -1,4 +1,4 @@
-# Addon API 1.1 preview
+# Addon API 1.2 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -35,7 +35,9 @@ The host sends an event request:
 
 While processing it, the guest may issue broker requests and wait for their replies. It then replies to `host:1`. One event runs at a time per worker. Other workers have independent channels. The preview has a two-second event deadline, including broker calls, and at most 128 broker requests per event and 500 per second. A long native operation must return an accepted session/job promptly and run asynchronously behind its handle; it must not block an addon callback for an engine build or video stream's lifetime.
 
-The SDK handles `host.ping` internally. User handlers receive `start`, `stop`, `action` with `{ id }`, `settings.changed`, and explicit developer replay events. Additive event-data fields must be ignored unless used. Callback failures stop that worker. A host heartbeat every five seconds detects a guest that stops servicing messages after an event.
+The SDK handles `host.ping` internally. User handlers receive `start`, `stop`, `action` with `{ id }`, `settings.changed`, requested `timer` events, and explicit developer replay events. Additive event-data fields must be ignored unless used. Callback failures stop that worker. A host heartbeat every five seconds detects a guest that stops servicing messages after an event.
+
+API 1.2 adds a binary tail only for successful `frames.read` responses. The JSON result declares `byteLength`; exactly that many raw bytes follow the newline. All other messages remain JSON-only. See [FRAMES.md](FRAMES.md) for framing, sample metadata, supported stages and timer scheduling.
 
 Errors use standard integer JSON-RPC error codes and an AJN-specific string at `error.data.code`, such as `permission_denied`, `storage_quota`, `capacity_exceeded`, or `feature_unavailable`. Invalid transport/protocol messages stop the worker; valid broker requests that are denied receive a structured error and may be handled by the addon. The JavaScript SDK exposes the string as `error.code`.
 
@@ -55,6 +57,11 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 | `sessions.pause` | `{ sessionId, paused }` | `sessions.manage` | `null` after accepting the control; sessions 1.1 |
 | `sessions.seek` | `{ sessionId, seconds }` | `sessions.manage` | `null` after accepting an absolute seek; sessions 1.1 |
 | `sessions.requestClose` | `{ sessionId }` | `sessions.manage` | `null` after scheduling cleanup; sessions 1.1 |
+| `frames.subscribe` | `{ sessionId, stage, format, width, height, maxFps }` | `frames.read` + `sessions.manage` | Subscription ID and accepted sample options; frames 1.0 |
+| `frames.read` | `{ subscriptionId }` | `frames.read` + `sessions.manage` | `{ frame, byteLength }` followed by bounded binary bytes; or no new sample |
+| `frames.unsubscribe` | `{ subscriptionId }` | `frames.read` + `sessions.manage` | `null`; releases the sample subscription |
+| `timers.set` | `{ timerId, intervalMs, repeat }` | None | `null`; creates/replaces a bounded timer; timers 1.0 |
+| `timers.clear` | `{ timerId }` | None | `null`; cancels the timer |
 
 Private storage is separated by addon ID: maximum 256 keys, 32 KiB per value, 1 MiB total. A stored null and a missing key both read as null in this preview. Saving one key is atomic; a read-modify-write sequence is not a transaction across distinct worker instances. The embedding host should create one activation controller per addon ID.
 

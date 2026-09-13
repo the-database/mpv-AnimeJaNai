@@ -16,10 +16,10 @@ public sealed class AddonException(string code, string message) : Exception(mess
 public static class Contract
 {
     public const int Major = 1;
-    public const int Minor = 1;
+    public const int Minor = 2;
     public const int MaxMessageBytes = 128 * 1024;
     public static readonly FrozenSet<string> PermissionNames = new[] {
-        "log.write", "storage.read", "storage.write", "sessions.manage"
+        "log.write", "storage.read", "storage.write", "sessions.manage", "frames.read"
     }.ToFrozenSet(StringComparer.Ordinal);
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     public static readonly JsonSerializerOptions Json = new()
