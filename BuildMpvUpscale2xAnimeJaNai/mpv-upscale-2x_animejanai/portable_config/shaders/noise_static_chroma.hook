@@ -13,7 +13,8 @@ float rand(float x)    { return fract(x / 41.0); }
 vec4 hook()  {
     vec3 _m = vec3(HOOKED_pos, 0.5) + vec3(1.0);
     float h = permute(permute(permute(_m.x)+_m.y)+_m.z);
-    vec4 noise;
+    // Unused channels must contribute zero after subtracting 0.5 below.
+    vec4 noise = vec4(0.5);
     noise.x = rand(h); h = permute(h);
     noise.y = rand(h);
     return HOOKED_tex(HOOKED_pos) + vec4(STRENGTH/8192.0) * (noise - 0.5);
