@@ -6,13 +6,13 @@ using AnimeJaNai.Addons.Management;
 
 internal static class NativeLifecycleChecks
 {
-    public static async Task RunAsync(string root, string output, List<JsonObject> evidence)
+    public static async Task RunAsync(string root, string output, List<JsonObject> evidence, string playerExecutable = "mpv.exe")
     {
         string data = Path.Combine(output, "data"), addonData = Path.Combine(data, "addons");
         using (var stream = File.OpenRead(Path.Combine(root, "addon-host", "ajn-addon-launcher.exe")))
         using (var image = new System.Reflection.PortableExecutable.PEReader(stream))
             if (image.PEHeaders.PEHeader!.Subsystem != System.Reflection.PortableExecutable.Subsystem.WindowsGui) throw new Exception("The login launcher must not open a console.");
-        await using (var empty = new TestPlayer(root, Path.Combine(output, "empty-data"), output, "no-addons"))
+        await using (var empty = new TestPlayer(root, Path.Combine(output, "empty-data"), output, "no-addons", playerExecutable))
         {
             await empty.ConnectAsync();
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -35,8 +35,8 @@ internal static class NativeLifecycleChecks
         var broken = AddonPackage.Create(new AddonManifest { SchemaVersion = 1, Id = "org.animejanai.brokenplayertest", Name = "Intentional startup failure",
             Version = "1.0.0", Api = new() { Major = 1, MinMinor = 0 }, Activation = ["on_player"], Permissions = [], ModuleSha256 = new string('0', 64) }, [0, 97, 115, 109, 1, 0, 0, 0]);
         new AddonRegistry(addonData).Install(broken, []);
-        await using var first = new TestPlayer(root, data, output, "first");
-        await using var second = new TestPlayer(root, data, output, "second");
+        await using var first = new TestPlayer(root, data, output, "first", playerExecutable);
+        await using var second = new TestPlayer(root, data, output, "second", playerExecutable);
         ManagementClient? manager = null;
         try
         {
@@ -65,7 +65,7 @@ internal static class NativeLifecycleChecks
             if (!(await Status())["running"]!.GetValue<bool>() || await Starts() != 1) throw new Exception("Unexpected player exit stopped shared work.");
             await second.QuitAsync(); await Until(async () => !(await Status())["running"]!.GetValue<bool>());
             evidence.Add(new() { ["check"] = "forced first-player exit preserves playback; last-player exit releases addon" });
-            await using (var third = new TestPlayer(root, data, output, "third"))
+            await using (var third = new TestPlayer(root, data, output, "third", playerExecutable))
             {
                 await third.ConnectAsync(); await Until(async () => (await Status())["running"]!.GetValue<bool>());
                 if (await Starts() != 2) throw new Exception("A new player should start a fresh worker with preserved storage.");
@@ -113,10 +113,14 @@ internal static class NativeLifecycleChecks
         private StreamReader? reader;
         private StreamWriter? writer;
         private int sequence;
-        public TestPlayer(string root, string data, string output, string name)
+        public TestPlayer(string root, string data, string output, string name, string executable)
         {
-            var info = new ProcessStartInfo(Path.Combine(root, "mpv.exe")) { UseShellExecute = false, CreateNoWindow = true,
+            var info = new ProcessStartInfo(Path.Combine(root, executable)) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
                 WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true };
+            if (executable == "mpvnet.exe") {
+                info.ArgumentList.Add("--process-instance=multi"); info.ArgumentList.Add("--auto-load-folder=no");
+                info.ArgumentList.Add("--force-window=no"); info.ArgumentList.Add("--window-minimized=yes");
+            }
             info.Environment["ANIMEJANAI_ROOT"] = root; info.Environment["ANIMEJANAI_DATA_DIR"] = data;
             foreach (string value in new[] { "--no-config", "--load-scripts=no", "--vo=null", "--ao=null", "--hwdec=no", "--keep-open=yes", "--idle=yes",
                 "--input-terminal=no", "--terminal=no", "--input-ipc-server=\\\\.\\pipe\\" + pipeName,

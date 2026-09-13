@@ -14,7 +14,9 @@ internal static class PlayerAttachment
         Contract.Require(playerId > 0 && playerId != Environment.ProcessId, "invalid_player", "Expected the owning AJN player process.");
         using var player = Process.GetProcessById(playerId);
         _ = player.SafeHandle;
-        Contract.Require(string.Equals(player.MainModule?.FileName, Path.Combine(installRoot, "mpv.exe"), StringComparison.OrdinalIgnoreCase),
+        string? executable = player.MainModule?.FileName;
+        Contract.Require(new[] { "mpv.exe", "mpvnet.exe" }.Any(name =>
+            string.Equals(executable, Path.Combine(installRoot, name), StringComparison.OrdinalIgnoreCase)),
             "invalid_player", "The lifecycle owner must be the player in this AJN installation.");
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var ownerExited = WatchOwnerAsync(player, lifetime);

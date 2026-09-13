@@ -17,7 +17,7 @@ launcher opens a lifecycle-only connection to the host. Source/profile,
 frame-sample and output permissions still require their own approvals.
 
 The bridge holds the original player's process handle, checks that its image is
-the `mpv.exe` in this installation, and closes the connection when that process
+the `mpvnet.exe` or `mpv.exe` in this installation, and closes the connection when that process
 ends. PID reuse cannot transfer its lifetime to another process. Two players
 share one addon worker but retain separate activation reasons. A killed player
 releases its reason without stopping another player or manually started work.
@@ -82,7 +82,9 @@ does not register real Windows startup. Manager tests render and exercise its
 off-by-default checkbox, cancellation, save/reopen and removal against a fixture.
 
 The optional native suite's `--lifecycle-only` mode runs two actual packaged mpv
-processes and real Wasm workers. It checks normal playback with a failing addon,
+processes and real Wasm workers. `--lifecycle-mpvnet-only` runs the same checks
+through the default mpv.net launcher with independent process instances. Both
+check normal playback with a failing addon,
 forced and normal player exits, shared/manual lifetimes, persistent private
 data, empty-installation behavior, the GUI launcher subsystem, no-opt-in exit,
 and complete helper/idle-host cleanup. Run it with a unique test installation

@@ -11,6 +11,7 @@ bool outputsOnly = args.Length == 6 && args[^1] == "--outputs-only";
 bool remoteOnly = args.Length == 6 && args[^1] == "--remote-only";
 bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
+bool lifecycleNetOnly = args.Length == 4 && args[^1] == "--lifecycle-mpvnet-only";
 if (framesOnly) args = args[..5];
 if (frameBenchmark) args = args[..3];
 if (encodingOnly) args = args[..3];
@@ -18,6 +19,7 @@ if (outputsOnly) args = args[..5];
 if (remoteOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
+if (lifecycleNetOnly) args = args[..3];
 if (args.Length is not (3 or 5)) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
 string root = Path.GetFullPath(args[0]), output = Path.GetFullPath(args[1]);
 if (Directory.Exists(output)) { Console.Error.WriteLine("Choose a new test output directory."); return 2; }
@@ -31,9 +33,9 @@ try
         File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
         return 0;
     }
-    if (lifecycleOnly)
+    if (lifecycleOnly || lifecycleNetOnly)
     {
-        await NativeLifecycleChecks.RunAsync(root, output, evidence);
+        await NativeLifecycleChecks.RunAsync(root, output, evidence, lifecycleNetOnly ? "mpvnet.exe" : "mpv.exe");
         File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
         return 0;
     }
