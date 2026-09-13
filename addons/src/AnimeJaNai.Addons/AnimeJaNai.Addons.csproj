@@ -7,6 +7,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="AnimeJaNai.Addons.NativeTests" />
     <InternalsVisibleTo Include="AnimeJaNai.Addons.Tests" />
+    <InternalsVisibleTo Include="ajn-addon-launcher" />
     <Compile Include="../../sdk/csharp/ManagementClient.cs" Link="ManagementClient.cs" />
     <EmbeddedResource Include="../../sdk/ajn.js" LogicalName="sdk.js" />
     <EmbeddedResource Include="../../sdk/ajn.d.ts" LogicalName="sdk.d.ts" />

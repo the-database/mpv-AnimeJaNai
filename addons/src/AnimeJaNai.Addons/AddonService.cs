@@ -28,12 +28,13 @@ public sealed class AddonService : IAsyncDisposable
     private readonly MediaSelections? media;
     private readonly NetworkSelections network;
     private readonly HostSettings? hostSettings;
+    private readonly LoginSettings? loginSettings;
     private readonly Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start;
     private readonly ConcurrentDictionary<string, Entry> entries = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, byte> clients = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> clients = new(StringComparer.Ordinal);
     public bool HasRunningWorkers => entries.Values.Any(e => e.Worker is { IsStopped: false });
 
-    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null, NetworkSelections? networkSelections = null, HostSettings? hostSettings = null)
+    public AddonService(string root, Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start, MediaSelections? media = null, NetworkSelections? networkSelections = null, HostSettings? hostSettings = null, LoginSettings? loginSettings = null)
     {
         this.root = root;
         registry = new(root);
@@ -41,27 +42,60 @@ public sealed class AddonService : IAsyncDisposable
         this.media = media;
         network = networkSelections ?? new(root);
         this.hostSettings = hostSettings;
+        this.loginSettings = loginSettings;
     }
 
     public async Task<JsonNode?> InvokeAsync(string client, string method, JsonObject parameters, CancellationToken token)
     {
-        if (method == "manager.hello")
+        if (method is "manager.hello" or "lifecycle.hello")
         {
             Contract.Require(Contract.Number(parameters, "major") == 1, "incompatible_api", "Manager protocol 1 is required.");
-            if (clients.TryAdd(client, 0))
+            string kind = method == "manager.hello" ? "on_manager" : Contract.Text(parameters, "kind", 32);
+            Contract.Require(kind is "on_manager" or "on_player" or "on_login", "invalid_activation", "Unknown trusted lifecycle trigger.");
+            Contract.Require(method == "manager.hello" || kind != "on_manager", "invalid_activation", "Use manager.hello for Manager connections.");
+            bool added;
+            lock (clients)
+            {
+                Contract.Require(!clients.TryGetValue(client, out var existing) || existing == kind,
+                    "client_role_fixed", "A connection cannot change its lifecycle role.");
+                Contract.Require(kind != "on_login" || loginSettings?.IsEnabled == true, "login_disabled", "Login activation has not been enabled by the user.");
+                added = clients.TryAdd(client, kind);
+            }
+            if (added)
                 foreach (string id in registry.ListIds())
                 {
                     try { await WithAsync(id, async entry => { await AutoActivateAsync(entry, client, token); return null; }, token); }
                     catch (Exception error) when (error is AddonException or IOException or UnauthorizedAccessException) { }
                 }
-            return new JsonObject { ["major"] = 1, ["minor"] = 3, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
-                ["credentialsAvailable"] = OperatingSystem.IsWindows(), ["hostSettingsAvailable"] = hostSettings is not null };
+            if (kind != "on_manager") return new JsonObject { ["major"] = 1, ["minor"] = 4, ["kind"] = kind };
+            return new JsonObject { ["major"] = 1, ["minor"] = 4, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
+                ["credentialsAvailable"] = OperatingSystem.IsWindows(), ["hostSettingsAvailable"] = hostSettings is not null, ["loginSettingsAvailable"] = loginSettings is not null };
         }
-        Contract.Require(clients.ContainsKey(client), "handshake_required", "Complete manager.hello first.");
+        Contract.Require(clients.TryGetValue(client, out var role), "handshake_required", "Complete a trusted connection handshake first.");
+        if (role != "on_manager")
+        {
+            Contract.Require(method == "lifecycle.ping", "management_denied", "Lifecycle connections can only retain their activation.");
+            if (role == "on_login" && loginSettings?.IsEnabled != true)
+            {
+                await DisconnectAsync(client); return new JsonObject { ["connected"] = false };
+            }
+            return new JsonObject { ["connected"] = true };
+        }
         switch (method)
         {
             case "host.settings": return (hostSettings ?? throw new AddonException("feature_unavailable", "This host does not expose editable resource settings.")).Describe();
             case "host.configure": return (hostSettings ?? throw new AddonException("feature_unavailable", "This host does not expose editable resource settings.")).Update(Contract.Number(parameters, "maximumConcurrentSessions"));
+            case "host.login": return (loginSettings ?? throw new AddonException("feature_unavailable", "This host does not include login startup settings.")).Describe();
+            case "host.configureLogin":
+                Contract.Require(parameters["enabled"] is JsonValue enabledValue && enabledValue.TryGetValue<bool>(out _), "invalid_request", "Expected a login startup choice.");
+                string[] closing; JsonObject saved;
+                lock (clients)
+                {
+                    saved = (loginSettings ?? throw new AddonException("feature_unavailable", "This host does not include login startup settings.")).Update(parameters["enabled"]!.GetValue<bool>());
+                    closing = parameters["enabled"]!.GetValue<bool>() ? [] : clients.Where(pair => pair.Value == "on_login").Select(pair => pair.Key).ToArray();
+                }
+                foreach (string connection in closing) await DisconnectAsync(connection);
+                return saved;
             case "addons.list":
                 string? after = parameters["after"] is null ? null : Contract.Text(parameters, "after", 100);
                 var ids = registry.ListIds().Where(id => after is null || StringComparer.Ordinal.Compare(id, after) > 0).ToArray();
@@ -266,20 +300,20 @@ public sealed class AddonService : IAsyncDisposable
         ["outputPermission"] = entry.Grant!.Allowed.Contains("media.output", StringComparer.Ordinal),
     };
 
-    private static async Task AutoActivateAsync(Entry entry, string client, CancellationToken token)
+    private async Task AutoActivateAsync(Entry entry, string client, CancellationToken token)
     {
-        if (entry.Package!.Manifest.Activation?.Contains("on_manager", StringComparer.Ordinal) != true) return;
-        try { await entry.Activation!.AcquireAsync("on_manager", client, token); }
+        if (!clients.TryGetValue(client, out string? kind) || entry.Package!.Manifest.Activation?.Contains(kind, StringComparer.Ordinal) != true) return;
+        try { await entry.Activation!.AcquireAsync(kind, client, token); }
         catch (AddonException error) { entry.Failure = error.Message; }
     }
 
     public async Task DisconnectAsync(string client)
     {
-        clients.TryRemove(client, out _);
+        if (!clients.TryRemove(client, out string? kind)) return;
         foreach (var entry in entries.Values)
         {
             await entry.Gate.WaitAsync();
-            try { if (entry.Activation is not null) await entry.Activation.ReleaseAsync("on_manager", client); }
+            try { if (entry.Activation is not null) await entry.Activation.ReleaseAsync(kind, client); }
             catch (Exception error) { entry.Failure = error.Message[..Math.Min(error.Message.Length, 1024)]; }
             finally { entry.Gate.Release(); }
         }

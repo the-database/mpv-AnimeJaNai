@@ -20,13 +20,17 @@ try
             var networkSelections = new NetworkSelections(args[1]);
             SessionRegistry? nativeSessions = media is null ? null : new(new AnimeJaNai.Addons.Native.NativeSessionProvider(args[3], args[1], media, WorkerCommand.Current(), capacity, networkSelections, hostSettings), perOwnerLimit: 16);
             var service = new AddonService(args[1], async (p, g, log, token) => await AddonWorker.StartAsync(p, g, args[2],
-                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections), media, networkSelections, hostSettings);
+                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections),
+                media, networkSelections, hostSettings, args.Length >= 4 ? new LoginSettings(args[3], args[1]) : null);
             using (var shutdown = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, e) => { e.Cancel = true; shutdown.Cancel(); };
                 await new ManagementServer(args[1], service).RunAsync(shutdown.Token);
             }
             return 0;
+        case "attach-player" when args.Length == 4:
+            Contract.Require(int.TryParse(args[3], out int playerId), "invalid_player", "Expected the owning player process id.");
+            return await PlayerAttachment.RunAsync(args[1], args[2], playerId);
         case "new" when args.Length == 3:
             DeveloperTools.New(args[1], args[2]);
             Console.WriteLine("Created addon source and editor types.");
@@ -89,6 +93,11 @@ catch (AddonException error)
     Print(new { error = new { code = error.Code, message = error.Message } });
     return 1;
 }
+catch (AnimeJaNai.Addons.Management.ManagementException error)
+{
+    Print(new { error = new { code = error.Code, message = error.Message } });
+    return 1;
+}
 catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or PlatformNotSupportedException
     or OperationCanceledException or TimeoutException or System.ComponentModel.Win32Exception or ArgumentException or AggregateException)
 {
@@ -99,11 +108,12 @@ catch (Exception error) when (error is IOException or UnauthorizedAccessExceptio
 static string[] Grants(string csv) => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 static void Print(object? value) => Console.WriteLine(JsonSerializer.Serialize(value, Contract.Json));
 static void Help() => Console.WriteLine("""
-AJN addon developer host (API 1.1 preview)
+AJN addon developer host (API 1.4 preview)
   new <new-directory> <reverse.domain.id>
   build <source-directory> <javy.exe> <new-package.ajnaddon>
   inspect <package.ajnaddon>
   serve <data-directory> <wasmtime.exe> [trusted-AJN-root] [maximum-media-sessions]
+  attach-player <trusted-AJN-root> <data-directory> <player-process-id>
   install-dev <package.ajnaddon> <data-directory> [permission,permission]
   run <addon-id> <data-directory> <wasmtime.exe> [event-name]
   settings <addon-id> <data-directory>

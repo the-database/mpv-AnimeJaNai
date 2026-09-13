@@ -17,6 +17,8 @@ if (-not (Test-Path -LiteralPath $ajnLicense)) { $ajnLicense = Join-Path $addonR
 $hostRoot = Join-Path $outputRoot 'host'
 & $Dotnet publish (Join-Path $addonRoot 'src/AnimeJaNai.Addons/AnimeJaNai.Addons.csproj') -c Release -r win-x64 --self-contained true -o $hostRoot
 if ($LASTEXITCODE -ne 0) { throw 'Host publication failed.' }
+& $Dotnet publish (Join-Path $addonRoot 'src/AnimeJaNai.Addons.Launcher/AnimeJaNai.Addons.Launcher.csproj') -c Release -r win-x64 --self-contained true -o $hostRoot
+if ($LASTEXITCODE -ne 0) { throw 'Lifecycle launcher publication failed.' }
 foreach ($name in @('runtime', 'source', 'tools', 'examples', 'sdk', 'licenses')) {
     [IO.Directory]::CreateDirectory((Join-Path $outputRoot $name)) | Out-Null
 }
@@ -37,7 +39,7 @@ foreach ($folder in $assets.packageFolders.PSObject.Properties.Name) {
 if (-not $runtimePackageDirectory) { throw 'Could not locate the .NET runtime license and notices.' }
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'LICENSE.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-LICENSE.TXT')
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-THIRD-PARTY-NOTICES.TXT')
-foreach ($name in @('README.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'NATIVE-MEDIA.md', 'NATIVE-OUTPUT.md', 'OUTPUTS.md', 'FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
+foreach ($name in @('README.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'LIFECYCLE.md', 'NATIVE-MEDIA.md', 'NATIVE-OUTPUT.md', 'OUTPUTS.md', 'FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
     Copy-Item -LiteralPath (Join-Path $addonRoot $name) -Destination $outputRoot
 }
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/bootstrap.ps1') -Destination (Join-Path $outputRoot 'tools')

@@ -1,6 +1,7 @@
 // Trusted AJN management client, protocol 1. Not part of the guest addon API.
 // Kept standalone so Manager does not need a cross-repository project reference.
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Security.Cryptography;
@@ -33,19 +34,72 @@ public sealed class ManagementClient : IAsyncDisposable
     public static string PipeName(string root) => "AJN.Addons.v1." + Convert.ToHexStringLower(SHA256.HashData(
         Encoding.UTF8.GetBytes(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant())))[..32];
 
-    public static async Task<ManagementClient> ConnectAsync(string root, CancellationToken cancellationToken = default)
+    public static Task<ManagementClient> ConnectAsync(string root, CancellationToken cancellationToken = default) =>
+        ConnectCoreAsync(root, null, cancellationToken);
+
+    // Trusted player/login bridges use a fixed, limited connection role. This
+    // does not expose player state, arbitrary commands, or any guest transport.
+    public static Task<ManagementClient> ConnectLifecycleAsync(string root, string kind, CancellationToken cancellationToken = default)
+    {
+        if (kind is not ("on_player" or "on_login")) throw new ArgumentException("Unknown lifecycle kind.", nameof(kind));
+        return ConnectCoreAsync(root, kind, cancellationToken);
+    }
+
+    private static async Task<ManagementClient> ConnectCoreAsync(string root, string? kind, CancellationToken cancellationToken)
     {
         var pipe = new NamedPipeClientStream(".", PipeName(root), PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         var client = new ManagementClient(pipe);
         try
         {
             await pipe.ConnectAsync(1500, cancellationToken).ConfigureAwait(false);
-            var hello = await client.CallAsync("manager.hello", new JsonObject { ["major"] = 1 }, cancellationToken).ConfigureAwait(false);
+            var hello = await client.CallAsync(kind is null ? "manager.hello" : "lifecycle.hello",
+                new JsonObject { ["major"] = 1, ["kind"] = kind }, cancellationToken).ConfigureAwait(false);
             if (hello?["major"]?.GetValue<int>() != 1) throw new ManagementException("incompatible_api", "Unsupported addon host version.");
+            if (kind is not null && hello?["kind"]?.GetValue<string>() != kind)
+                throw new ManagementException("incompatible_api", "The addon host does not support this lifecycle connection.");
             client.serverInfo = (JsonObject)hello.DeepClone();
             return client;
         }
         catch { await client.DisposeAsync(); throw; }
+    }
+
+    public static async Task<ManagementClient> ConnectOrStartAsync(string root, string hostPath, string runtimePath,
+        string? nativeRoot = null, string? kind = null, CancellationToken cancellationToken = default)
+    {
+        Task<ManagementClient> Connect(CancellationToken token) => kind is null ? ConnectAsync(root, token) : ConnectLifecycleAsync(root, kind, token);
+        try { return await Connect(cancellationToken).ConfigureAwait(false); }
+        catch (Exception error) when (error is TimeoutException or IOException) { }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!File.Exists(hostPath) || !File.Exists(runtimePath)) throw new IOException("The addon host or runtime is missing from this AJN build.");
+        var info = new ProcessStartInfo(Path.GetFullPath(hostPath)) {
+            UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(hostPath))!,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+        };
+        foreach (string argument in new[] { "serve", Path.GetFullPath(root), Path.GetFullPath(runtimePath) }) info.ArgumentList.Add(argument);
+        if (nativeRoot is not null) info.ArgumentList.Add(Path.GetFullPath(nativeRoot));
+        using var started = Process.Start(info) ?? throw new IOException("Could not start the addon host.");
+        _ = DrainAsync(started.StandardOutput); _ = DrainAsync(started.StandardError);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        try
+        {
+            while (true)
+            {
+                try { return await Connect(deadline.Token).ConfigureAwait(false); }
+                catch (Exception retry) when (retry is TimeoutException or IOException) { }
+                // Another player/Manager may have won the exclusive host lease.
+                // Our short-lived contender exiting is not a connection failure.
+                await Task.Delay(150, deadline.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        { throw new IOException("The addon host did not become available. Check its runtime and saved host settings."); }
+    }
+
+    private static async Task DrainAsync(StreamReader reader)
+    {
+        try { char[] bytes = new char[1024]; while (await reader.ReadAsync(bytes).ConfigureAwait(false) != 0) { } }
+        catch (Exception error) when (error is IOException or ObjectDisposedException) { }
     }
 
     public async Task<JsonNode?> CallAsync(string method, JsonObject? parameters = null, CancellationToken cancellationToken = default)

@@ -9,7 +9,7 @@ An `.ajnaddon` is a ZIP containing exactly `manifest.json` and `module.wasm`. No
 See [the example manifest](examples/counter/manifest.json). `build` adds `moduleSha256` to the source manifest. Required fields are `schemaVersion: 1`, lowercase reverse-domain `id`, `name`, `version`, `api: { major: 1, minMinor: 0 }`, `permissions`, and the generated digest. Optional fields:
 
 - `requiredCapabilities`: independently versioned required host features, for example `settings: { major: 1, minMinor: 0 }`. An unavailable requirement prevents startup.
-- `activation`: any of `manual`, `on_manager`, `on_player`, `on_login`; defaults to manual. These describe host activation sources, not authority to register startup tasks. A trusted embedding service must supply the actual events and user opt-in.
+- `activation`: any of `manual`, `on_manager`, `on_player`, `on_login`; defaults to manual. These describe host activation sources, not authority to register startup tasks. The integrated Windows preview supplies the player/Manager events and explicit login opt-in; see [LIFECYCLE.md](LIFECYCLE.md). Other embeddings must supply their actual lifecycle sources.
 - `settings`: up to 32 definitions of boolean, finite number, bounded string, or choice values. Each has a label and default. Optional descriptions, numeric minimum/maximum, string maximum length, and choice lists are validated by the host.
 - `actions`: up to 16 named actions with labels and optional descriptions.
 

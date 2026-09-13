@@ -3,9 +3,9 @@ name: Addon foundation
 on:
   push:
     branches: [feature/addon-foundation]
-    paths: ['addons/**', '.github/workflows/addon-foundation.yml']
+    paths: ['addons/**', 'BuildMpvUpscale2xAnimeJaNai/**/animejanai_addons.lua', '.github/workflows/addon-foundation.yml']
   pull_request:
-    paths: ['addons/**', '.github/workflows/addon-foundation.yml']
+    paths: ['addons/**', 'BuildMpvUpscale2xAnimeJaNai/**/animejanai_addons.lua', '.github/workflows/addon-foundation.yml']
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,9 @@ jobs:
       - name: Run contract and real worker tests
         shell: pwsh
         run: ./addons/tools/test.ps1
+      - name: Build the Windows lifecycle launcher
+        shell: pwsh
+        run: dotnet build ./addons/src/AnimeJaNai.Addons.Launcher -c Release
       - name: Preserve test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

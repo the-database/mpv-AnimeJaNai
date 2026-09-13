@@ -12,7 +12,9 @@ This is the first working part of the AJN addon framework. It combines the earli
 
 **Encoded output now works:** addons can request owned GPU video/audio outputs to approved HTTP receivers. Encoding and continuous transport stay in trusted code. Tests decode received streams, check three codecs, run concurrent outputs and revoke active access. See [OUTPUTS.md](OUTPUTS.md), the output inspector, and [NATIVE-OUTPUT.md](NATIVE-OUTPUT.md) for hardware and format limits.
 
-**Remaining integration:** remote media and other output transports, TCP/TLS/WebSockets, listeners/discovery, player/login activation, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+**Player and login activation now work:** the trusted player bridge consolidates multiple players into one addon worker and releases ownership when each player exits. Manager offers opt-in Windows sign-in startup, separately from package permissions. See [LIFECYCLE.md](LIFECYCLE.md) for installation, behavior and validation limits.
+
+**Remaining integration:** remote media and other output transports, TCP/TLS/WebSockets, listeners/discovery, shared-player/final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
 
 API 1.4 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0/1.1/1.2/1.3 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
