@@ -18,4 +18,6 @@ BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/core/currentani
 *.pyc
 /AnimeJaNaiUpdater/bin
 /AnimeJaNaiUpdater/obj
+/AnimeJaNaiBenchmark/bin
+/AnimeJaNaiBenchmark/obj
 benchmark-proxy/node_modules/.cache/wrangler/wrangler-account.json
