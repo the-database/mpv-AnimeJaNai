@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "9c223fc6-c696-46ac-aa65-581e71bc9e6f",
+  "submitted_at": "2026-09-07T03:35:38.721Z",
+  "app_version": "3.6.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5080 Laptop GPU",
+  "vram_mb": 16303,
+  "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+  "cpu_mhz": 2700,
+  "cpu_cores": 24,
+  "cpu_threads": 24,
+  "ram_mb": 16045,
+  "ram_speed_mhz": 5600,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1088",
+  "results": {
+    "Balanced": {
+      "480x360": 601.8,
+      "640x480": 401.2,
+      "768x576": 291.2,
+      "1280x720": 132.9,
+      "1920x1080": 54.5
+    },
+    "Performance": {
+      "480x360": 1215,
+      "640x480": 607.8,
+      "768x576": 608.5,
+      "1280x720": 250.1,
+      "1920x1080": 97.6
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
