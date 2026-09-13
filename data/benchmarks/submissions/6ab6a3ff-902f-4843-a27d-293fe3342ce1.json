@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "6ab6a3ff-902f-4843-a27d-293fe3342ce1",
+  "submitted_at": "2026-08-26T21:41:12.610Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 3060 Ti",
+  "vram_mb": 8192,
+  "gpu_power_w": 250,
+  "cpu": "AMD Ryzen 7 5700X 8-Core Processor",
+  "cpu_mhz": 3401,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 65462,
+  "ram_speed_mhz": 3600,
+  "os": "Microsoft Windows 10.0.19045",
+  "driver": "32.0.16.1088",
+  "results": {
+    "Balanced": {
+      "480x360": 301.5,
+      "640x480": 195.6,
+      "768x576": 139.2,
+      "1280x720": 70.2,
+      "1920x1080": 29
+    },
+    "Performance": {
+      "480x360": 602.2,
+      "640x480": 301.5,
+      "768x576": 219.8,
+      "1280x720": 107,
+      "1920x1080": 45.2
+    }
+  },
+  "submitted_by": "tiprolin",
+  "note": "OC on memory and core"
+}
