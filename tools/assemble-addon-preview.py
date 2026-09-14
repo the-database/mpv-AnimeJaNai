@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 import shutil
 import subprocess
 import tempfile
@@ -52,11 +53,16 @@ def verify_native(directory, record):
         if record.get(capability) != 1:
             raise ValueError(f"Unsupported or missing native capability: {capability}")
     files = record.get("files", {})
-    if not {"mpv.exe", "libmpv-2.dll"}.issubset(files) or not 2 <= len(files) <= 64:
+    if not {"mpv.exe", "libmpv-2.dll"}.issubset(files) or not 2 <= len(files) <= 256:
         raise ValueError("Native producer record is incomplete")
+    if len({name.lower() for name in files}) != len(files):
+        raise ValueError("Native producer record contains duplicate Windows filenames")
+    has_muxer = any(re.fullmatch(r"avformat-\d+\.dll", name) for name in files)
+    if has_muxer != (record["ffmpegLinkage"] == "shared"):
+        raise ValueError("Native binary layout disagrees with the producer linkage")
     for name, expected in files.items():
         relative(name)
-        if "/" in name or len(expected) != 64 or sha(directory / name) != expected:
+        if not re.fullmatch(r"[A-Za-z0-9._+-]{1,128}", name) or not (name.endswith(".dll") or name in ("mpv.exe", "mpv.com")) or not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected) or sha(directory / name) != expected:
             raise ValueError(f"Native artifact does not match producer record: {name}")
 
 
@@ -80,11 +86,36 @@ def extract_core(archive, expected, sevenzip, destination):
     return candidates[0]
 
 
+def retire_core_native(directory, incoming_files):
+    # Historical test cores record their shared native dependency closure.
+    # Remove only unchanged, recorded files from this newly extracted copy,
+    # so switching to a static build cannot leave old FFmpeg DLLs alongside it.
+    origins = directory / "build-info/runtime-origins.json"
+    hashes = directory / "build-info/sha256.json"
+    if not origins.is_file() or not hashes.is_file():
+        return
+    old_files = json.loads(origins.read_text())
+    old_hashes = json.loads(hashes.read_text())
+    obsolete = []
+    for name in old_files:
+        if not re.fullmatch(r"[A-Za-z0-9._+-]{1,128}", name) or not (name.endswith(".dll") or name in ("mpv.exe", "mpv.com")):
+            raise ValueError("Unrecognized core native inventory")
+        path = directory / name
+        if not path.is_file() or sha(path) != old_hashes.get(name):
+            raise ValueError(f"Core native inventory does not match its binary: {name}")
+        if name not in incoming_files:
+            obsolete.append(path)
+    for path in obsolete:
+        path.unlink()
+
+
 def assemble(args):
     output = args.output.resolve()
     archive = output.with_name(output.name + ".zip")
     if output.exists() or archive.exists():
         raise ValueError("Choose a new output directory and archive name")
+    if args.native_metadata.stat().st_size > 1024 * 1024:
+        raise ValueError("Native producer metadata is too large")
     record = json.loads(args.native_metadata.read_text(encoding="utf-8"))
     verify_native(args.native_directory, record)
     if sha(args.host_bundle / "runtime/wasmtime.exe") != RUNTIME_SHA256:
@@ -100,9 +131,13 @@ def assemble(args):
         if git("status", "--porcelain", "--untracked-files=no"):
             raise ValueError(f"Commit tracked {name} source changes before packaging")
         sources[name] = git("rev-parse", "HEAD")
-    if sources["mpv"] != record["sources"]["mpv"] or sources["winbuild"] != record["producer"]["commit"]:
-        raise ValueError("Source archive pins differ from the native producing build")
-    if sha(args.main_source / "addons/sdk/csharp/ManagementClient.cs") != sha(args.manager_source / "AnimeJaNaiConfEditor/Services/AddonHostClient.cs"):
+    if sources["mpv"] != record["sources"]["mpv"]:
+        raise ValueError("Native source pin differs from the producing build")
+    # Later build-script tests/docs do not change an already-produced binary.
+    # Archive the actual producing revision, not whichever revision is checked out.
+    sources["winbuild"] = subprocess.check_output([args.git, "-C", str(args.winbuild_source), "rev-parse", "--verify",
+        record["producer"]["commit"] + "^{commit}"], text=True).strip()
+    if (args.main_source / "addons/sdk/csharp/ManagementClient.cs").read_text() != (args.manager_source / "AnimeJaNaiConfEditor/Services/AddonHostClient.cs").read_text():
         raise ValueError("Manager's copied management client differs from the canonical client")
     output.mkdir(parents=True)
     if args.core_archive:
@@ -112,6 +147,16 @@ def assemble(args):
         with tempfile.TemporaryDirectory(prefix="ajn-core-", dir=output.parent) as work:
             core = extract_core(args.core_archive.resolve(), args.core_sha256, args.sevenzip, Path(work))
             copy_tree(core, output)
+        retire_core_native(output, record["files"])
+        info = output / "build-info"
+        if info.is_dir():
+            historical = list(info.iterdir())
+            (info / "core").mkdir()
+            for item in historical:
+                destination = info / "core" / item.name
+                if not item.resolve().is_relative_to(output) or not destination.resolve().is_relative_to(output):
+                    raise ValueError("Historical evidence path left the new package")
+                item.rename(destination)
     for name in record["files"]:
         shutil.copy2(args.native_directory / name, output / name)
     for path in args.manager_directory.iterdir():
@@ -142,6 +187,8 @@ def assemble(args):
         shutil.copy2(source, target)
     if (args.native_directory / "licenses").is_dir():
         copy_tree(args.native_directory / "licenses", output / "licenses/native")
+    if (args.native_directory / "build-info").is_dir():
+        copy_tree(args.native_directory / "build-info", output / "build-info/native")
     provenance = {"schemaVersion": 1, "version": args.version, "sources": sources, "nativeProducer": record["producer"],
                   "coreSha256": args.core_sha256, "nativeMetadataSha256": sha(args.native_metadata), "tests": []}
     for evidence in args.evidence:
@@ -166,8 +213,19 @@ def assemble(args):
         manifest.setdefault("user_preserve", []).append("animejanai/addons")
         manifest.setdefault("overlay_paths", []).extend(["addon-host", "addon-development", "addon-package.json"])
         manifest.setdefault("deps", {})["addon_native"] = sha(output / "addon-host/native-capabilities.json")
+        manifest["deps"]["mpvfork"] = "source:" + sources["mpv"]
         write(output / "manifest.json", manifest)
         (output / "version.txt").write_text(args.version + "\n", encoding="utf-8")
+        (output / "TEST-BUILD.txt").write_text(
+            f"AnimeJaNai {args.version} - Windows addon integration preview\n\n"
+            "Extract the complete folder to a new location and open mpvnet.exe.\n"
+            "Open AnimeJaNai Manager's Addons page to install a local .ajnaddon package.\n"
+            "Start with addon-development/USER-GUIDE.html. Addon authors should read\n"
+            "addon-development/CREATOR-GUIDE.html and RELEASE-INTEGRATION.html.\n\n"
+            "This is a preview, not an official stable release or a public API freeze.\n"
+            "See build-info/addon-preview.json for exact sources and test evidence;\n"
+            "build-info/core contains historical evidence for the reused core.\n",
+            encoding="utf-8")
     with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zipped:
         for path in sorted(output.rglob("*")):
             if path.is_file():

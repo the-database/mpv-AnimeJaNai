@@ -4,8 +4,23 @@ using System.Text.Json.Nodes;
 using AnimeJaNai.Addons.Native;
 using AnimeJaNai.Addons;
 
+// Test-only child: the parent terminates it after a published file so recovery
+// is exercised after process loss, without changing the shipped updater.
+if (args.Length == 4 && args[0] == "--interrupt-update-helper")
+{
+    await AnimeJaNai.Updates.AddonUpdateTransaction.ApplyAsync(args[1], args[2], new HashSet<string>(), afterPublish: _ =>
+    {
+        File.WriteAllText(args[3], "ready");
+        Thread.Sleep(Timeout.Infinite);
+    });
+    return 3;
+}
+
 bool framesOnly = args.Length == 6 && args[^1] == "--frames-only";
+bool updatesOnly = args.Length == 4 && args[^1] == "--updates-only";
+bool installerOnly = args.Length == 5 && args[^1] == "--installer-only";
 bool frameBenchmark = args.Length == 4 && args[^1] == "--frames-benchmark";
+bool nullBenchmark = args.Length == 4 && args[^1] == "--null-benchmark";
 bool encodingOnly = args.Length == 4 && args[^1] == "--encoding-only";
 bool outputsOnly = args.Length == 6 && args[^1] == "--outputs-only";
 bool remoteOnly = args.Length == 6 && args[^1] == "--remote-only";
@@ -14,7 +29,10 @@ bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
 bool lifecycleNetOnly = args.Length == 4 && args[^1] == "--lifecycle-mpvnet-only";
 if (framesOnly) args = args[..5];
+if (updatesOnly) args = args[..3];
+if (installerOnly) args = args[..4];
 if (frameBenchmark) args = args[..3];
+if (nullBenchmark) args = args[..3];
 if (encodingOnly) args = args[..3];
 if (outputsOnly) args = args[..5];
 if (remoteOnly) args = args[..5];
@@ -22,13 +40,27 @@ if (playerOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
 if (lifecycleNetOnly) args = args[..3];
-if (args.Length is not (3 or 5)) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
+if (args.Length is not (3 or 5) && !installerOnly) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
 string root = Path.GetFullPath(args[0]), output = Path.GetFullPath(args[1]);
 if (Directory.Exists(output)) { Console.Error.WriteLine("Choose a new test output directory."); return 2; }
 Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (installerOnly)
+    {
+        await NativeInstallerChecks.RunAsync(root, output, args[3], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        Console.WriteLine("PASS real installer fresh install, active-addon reinstall, preservation and uninstall.");
+        return 0;
+    }
+    if (updatesOnly)
+    {
+        await NativeUpdateChecks.RunAsync(root, output, args[2], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        Console.WriteLine("PASS packaged addon update, independent installations, restart, move and uninstall preparation.");
+        return 0;
+    }
     if (playerOnly)
     {
         await NativePlayerFrameChecks.RunAsync(root, output, args[4], evidence);
@@ -70,6 +102,12 @@ try
     if (frameBenchmark)
     {
         await NativeFrameBenchmark.RunAsync(root, output, evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
+    if (nullBenchmark)
+    {
+        await NativeNullBenchmark.RunAsync(root, output, evidence);
         File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
         return 0;
     }
@@ -170,7 +208,7 @@ try
     }
     if (Directory.EnumerateDirectories(workRoot).Any()) throw new Exception("Cancelled/failed native sessions retained work directories.");
     if (args.Length == 5) await NativeAddonChecks.RunAsync(root, output, worker, args[3], args[4], evidence);
-    if (File.Exists(Path.Combine(root, "addon-host", "native-frames.json")))
+    if (NativeSessionProvider.HasFrameRuntime(root))
         await NativeFrameChecks.RunAsync(root, output, worker, args.Length == 5 ? args[3] : null, args.Length == 5 ? args[4] : null, evidence);
     File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
     Console.WriteLine("PASS native libmpv adapter and two independent supervised sessions: 2x DirectML, status, pause, seek, resume, EOF and cleanup.");

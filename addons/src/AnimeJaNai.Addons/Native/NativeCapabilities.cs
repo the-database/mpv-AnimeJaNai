@@ -14,10 +14,13 @@ internal static class NativeCapabilities
     {
         try
         {
-            var marker = Contract.ParseObject(AddonPackage.ReadBoundedFile(Path.Combine(root, "addon-host", FileName), 64 * 1024));
+            // Shared FFmpeg builds include their complete dependency closure.
+            // The current MSYS2 producer emits 139 files and about 89 KB.
+            var marker = Contract.ParseObject(AddonPackage.ReadBoundedFile(Path.Combine(root, "addon-host", FileName), 1024 * 1024));
             if (Contract.Number(marker, "schemaVersion") != 1 || Contract.Text(marker, "platform") != "win-x64" ||
-                Contract.Number(marker, capability) != 1 || marker["files"] is not JsonObject files || files.Count is < 2 or > 64 ||
+                Contract.Number(marker, capability) != 1 || marker["files"] is not JsonObject files || files.Count is < 2 or > 256 ||
                 !files.ContainsKey("libmpv-2.dll") || !files.ContainsKey("mpv.exe")) return false;
+            if (files.Select(f => f.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Count) return false;
             if (capability == "privateOutputAbi")
             {
                 if (Contract.Text(marker, "cRuntime") != "ucrt") return false;
@@ -29,7 +32,7 @@ internal static class NativeCapabilities
             {
                 // Producer records have flat names only. Never hash a path
                 // outside the installation based on metadata contents.
-                if (file.Key.Length is < 1 or > 128 || file.Key.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_')) ||
+                if (file.Key.Length is < 1 or > 128 || file.Key.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_' or '+')) ||
                     !(file.Key.EndsWith(".dll", StringComparison.Ordinal) || file.Key is "mpv.exe" or "mpv.com")) return false;
                 string expected = Contract.Text(files, file.Key, 64);
                 if (!Contract.ValidHash(expected)) return false;

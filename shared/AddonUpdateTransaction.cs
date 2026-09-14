@@ -271,7 +271,12 @@ public static class AddonUpdateTransaction
         foreach (var file in FilesIn(transaction))
         {
             _ = Child(transaction, Path.GetRelativePath(transaction, file));
-            try { File.Delete(file); } catch (IOException) { return; }
+            // Deleting a still-loaded Windows image reports access denied,
+            // rather than the sharing-violation IOException returned for
+            // ordinary locked files. Commit has already succeeded; the next
+            // updater process finishes this disposable cleanup.
+            try { File.Delete(file); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return; }
         }
         foreach (var directory in Directory.EnumerateDirectories(transaction, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length))
         { _ = Child(transaction, Path.GetRelativePath(transaction, directory)); Directory.Delete(directory); }

@@ -27,6 +27,24 @@ internal static partial class Checks
     }
     private static async Task OutputChecks()
     {
+        await Test("Producer metadata accepts a complete shared dependency set and retains size limits", () =>
+        {
+            string area = Area(); Directory.CreateDirectory(Path.Combine(area, "addon-host"));
+            var files = new JsonObject();
+            foreach (string name in new[] { "mpv.exe", "libmpv-2.dll", "avformat-63.dll", "libstdc++-6.dll" }.Concat(Enumerable.Range(0, 135).Select(i => $"dependency-{i}.dll")))
+            {
+                File.WriteAllText(Path.Combine(area, name), name);
+                files[name] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(area, name))));
+            }
+            var marker = new JsonObject { ["schemaVersion"] = 1, ["platform"] = "win-x64", ["cRuntime"] = "ucrt",
+                ["ffmpegLinkage"] = "shared", ["privateOutputAbi"] = 1, ["files"] = files, ["buildEvidence"] = new string('x', 90_000) };
+            string path = Path.Combine(area, "addon-host", NativeCapabilities.FileName);
+            File.WriteAllText(path, marker.ToJsonString()); True(NativeSessionProvider.HasOutputRuntime(area));
+            files["LIBMPV-2.dll"] = files["libmpv-2.dll"]!.DeepClone();
+            File.WriteAllText(path, marker.ToJsonString()); True(!NativeSessionProvider.HasOutputRuntime(area));
+            files.Remove("LIBMPV-2.dll"); marker["buildEvidence"] = new string('x', 1024 * 1024);
+            File.WriteAllText(path, marker.ToJsonString()); True(!NativeSessionProvider.HasOutputRuntime(area));
+        });
         await Test("Producer metadata supports static UCRT and rejects changed, incomplete or incompatible native sets", () =>
         {
             string area = Area(); Directory.CreateDirectory(Path.Combine(area, "addon-host"));

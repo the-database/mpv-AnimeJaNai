@@ -8,6 +8,8 @@ Dispatch the ordinary `mpv-winbuild/mpv.yml` workflow with `build_target=64bit`,
 
 Use the player and development archives from that same run. Flatten their recorded binaries into one native input directory and keep the license material. The assembler verifies every native file against the producer record; it cannot manufacture native capability evidence from arbitrary DLL hashes. Static UCRT FFmpeg needs no separate `avformat` DLL. Old sealed shared-FFmpeg previews retain their legacy detection only when the new record is absent. Invalid new metadata never falls back to an old marker.
 
+Schema 1 allows up to 256 native files and 1 MiB of metadata. This accommodates the complete shared dependency closure (139 files in the tested MSYS2 build) while retaining bounded parsing and exact file checks. The producer, host and assembler enforce compatible limits. `test-build/test_native_metadata.py` in winbuild tests configuration, source pins, CRT and linkage rejection paths.
+
 The null-output hardware-frame shortcut requires `--vo-null-accept-hwframes=yes`. The owned non-encoding media worker opts in. Ordinary benchmarks retain their previous default behavior. Compare both modes on the same machine and workload before changing a benchmark baseline.
 
 ## Managed builds and assembly
@@ -19,6 +21,8 @@ The host bundle contains the runtime, examples, SDK, offline documentation, lice
 `tools/assemble-addon-preview.py` requires Python 3.12+, Git, produced native metadata/binaries, the host bundle, Manager publish directory and updater executable. Supply clean committed checkouts with `--main-source`, `--manager-source`, `--mpv-source` and `--winbuild-source`. Its `--help` lists all inputs.
 
 Omit `--core-archive` to create a support bundle zip. Supply a core archive with `--core-sha256` and `--sevenzip` to create a full preview. Choose a new `--output` and preview `--version`; repeat `--evidence` for completed JSON test evidence. The result includes `addon-package.json`, source archives, native provenance, evidence and the zip's checksum. Checksum, source pin and SDK mismatches stop packaging.
+
+When a historical core contains a native file inventory, obsolete shared dependencies are removed only from the new extracted copy and only after verifying their hashes. Core build evidence is retained under `build-info/core`; the new preview's authoritative record is `build-info/addon-preview.json`.
 
 The normal assembler accepts `--addons` only for Windows. `AJN_ADDON_BUNDLE` points to an extracted support bundle. It stages the host, launcher, runtime, Manager and matching native set, includes managed addon files in overlays, and preserves `animejanai/addons`. The native metadata checksum participates in dependency comparisons; changed native builds require full updates.
 
@@ -33,6 +37,14 @@ All replacement files and backups are staged before a prepared journal is writte
 Addon data/settings are preserved independently of the release's preservation list. **Remove addon** preserves them too. Full application uninstall retains the existing policy of deleting the app tree, including data inside it. It drains this installation and unregisters only Run values still pointing at its own quoted launcher/login command. External/shared data roots and startup entries now pointing at another installation remain untouched.
 
 Component installation/removal uses the same transaction for its runtime/model files and `components.json`, so those records recover together. Close the player first; Manager may stay open for these operations. Existing addon work stops and can be started again afterwards.
+
+## Lifecycle and native validation
+
+Run the native test executable with `<built-root> <new-output> <dotnet> --updates-only` to exercise real host shutdown, independent installations, persisted state after moving an installation, a terminated transaction process, and replacement of the running updater itself. The old executable may remain in the transaction directory until the next updater process cleans it up; that cleanup does not change a successful commit into a failed update.
+
+`installer/tests/test-addons.ps1 -BuiltRoot <preview> -Compiler <Inno-6-ISCC.exe> -OutputDirectory <new-output> -Dotnet <dotnet>` compiles and runs a real installer lifecycle test. Its `/DInstallerTest` build has a separate application name and registration, disables optional component downloads, and runs with shortcuts and associations disabled. The harness refuses a production installer. It checks fresh install, reinstall with an active addon, preservation of settings and external data, uninstall, and ownership of login entries. These test installers must never be distributed as normal releases.
+
+For GPU validation, run the native suite against the exact produced binaries; use the additional output, encoding, player-frame, remote-input, capacity and lifecycle modes as needed. `--null-benchmark` compares the native default with explicit hardware-frame acceptance using alternating 240-frame runs at 480x360 and 1920x1080 with DirectML slot 1002. It records startup-inclusive wall/CPU time and raw logs, discards one warmup per mode, and does not change the catalog benchmark or establish performance on other hardware. Run GPU measurements sequentially.
 
 ## Paths and capability limits
 

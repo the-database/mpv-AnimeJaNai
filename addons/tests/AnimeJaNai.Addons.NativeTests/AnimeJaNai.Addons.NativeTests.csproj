@@ -8,6 +8,7 @@
     <None Include="../../examples/sample-inspector/**" Link="sample-inspector/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup><Compile Include="../HttpFixture.cs" Link="HttpFixture.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../../shared/AddonUpdateTransaction.cs" Link="AddonUpdateTransaction.cs" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/output-inspector/*" Link="output-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/remote-inspector/*" Link="remote-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/player-inspector/*" Link="player-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>

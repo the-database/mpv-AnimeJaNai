@@ -7,12 +7,14 @@ name: Build Linux build image
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - build/Dockerfile.ubuntu2204
       - .github/workflows/build-image.yml
 
 jobs:
   build-image:
+    if: ${{ github.repository_owner == 'the-database' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

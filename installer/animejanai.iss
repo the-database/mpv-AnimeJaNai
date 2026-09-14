@@ -26,14 +26,23 @@
 
 ; The player application is "mpv-AnimeJaNai" (AnimeJaNai alone is the upscaling
 ; model family; this is the mpv-based player that runs it).
-#define AppName "mpv-AnimeJaNai"
+#ifdef InstallerTest
+  ; A lifecycle test must never share registration with a user's installation.
+  #define AppName "mpv-AnimeJaNai Installer Test"
+#else
+  #define AppName "mpv-AnimeJaNai"
+#endif
 #define Publisher "the-database"
 #define PlayerExe "mpvnet.exe"
 #define ManagerExe "AnimeJaNaiManager.exe"
 #define UpdaterExe "AnimeJaNaiUpdater.exe"
 
 [Setup]
+#ifdef InstallerTest
+AppId={{78315E8B-A449-4D53-940F-452A227D80AA}
+#else
 AppId={{8B2F4E1A-9C3D-4A7E-B5F6-AJANAI340MPV}
+#endif
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#Publisher}
@@ -189,7 +198,9 @@ begin
 
   ExtractTemporaryFile('{#UpdaterExe}');
   ExePath := ExpandConstant('{tmp}\{#UpdaterExe}');
+#ifndef InstallerTest
   RunRecommend(ExePath);
+#endif
 
   CompPage := CreateInputOptionPage(wpSelectTasks,
     'Components', 'Choose which AI components to install for your hardware.',
@@ -208,7 +219,11 @@ begin
   // engine (already in the core), so disable and uncheck it there.
   CompPage.Values[0] := HasNvidia;
   CompPage.CheckListBox.ItemEnabled[0] := HasNvidia;
+#ifdef InstallerTest
+  CompPage.Values[1] := False;
+#else
   CompPage.Values[1] := True;
+#endif
 end;
 
 // Install the comma-separated packs in CSV via the installed updater. Updates the
@@ -249,7 +264,9 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   failed: Integer;
   packsToInstall: String;
+#ifdef EnableAddons
   resultCode: Integer;
+#endif
 begin
   // Before the new core overwrites manifest.json, snapshot the existing one so the updater's
   // --install can tell whether an already-present component (TensorRT/RIFE) is unchanged across
@@ -279,7 +296,9 @@ begin
 
   // Re-detect from the now-installed updater: network may be available now even
   // if it wasn't at wizard start, giving authoritative GPU-matched pack names.
+#ifndef InstallerTest
   RunRecommend(ExpandConstant('{app}\{#UpdaterExe}'));
+#endif
 
   failed := 0;
   if CompPage.Values[0] and (TrtPacks <> '') then

@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,6 +20,29 @@ class NativeAssemblyTests(unittest.TestCase):
             self.record["files"][name] = assembly.sha(self.root / name)
     def test_static_needs_no_separate_muxer(self):
         assembly.verify_native(self.root, self.record)
+    def test_complete_shared_dependency_set(self):
+        self.record["ffmpegLinkage"] = "shared"
+        for name in ["avformat-63.dll", "libstdc++-6.dll", *[f"dependency-{i}.dll" for i in range(135)]]:
+            (self.root / name).write_bytes(name.encode())
+            self.record["files"][name] = assembly.sha(self.root / name)
+        assembly.verify_native(self.root, self.record)
+        self.record["ffmpegLinkage"] = "static"
+        with self.assertRaises(ValueError): assembly.verify_native(self.root, self.record)
+    def test_windows_duplicate_filenames(self):
+        self.record["files"]["LIBMPV-2.dll"] = self.record["files"]["libmpv-2.dll"]
+        with self.assertRaises(ValueError): assembly.verify_native(self.root, self.record)
+    def test_retiring_shared_dependencies_keeps_unrelated_core_files(self):
+        info = self.root / "build-info"
+        info.mkdir()
+        old = self.root / "avformat-63.dll"
+        old.write_bytes(b"old dependency")
+        unrelated = self.root / "manager-helper.dll"
+        unrelated.write_bytes(b"keep")
+        (info / "runtime-origins.json").write_text(json.dumps({old.name: "historical build path"}))
+        (info / "sha256.json").write_text(json.dumps({old.name: assembly.sha(old)}))
+        assembly.retire_core_native(self.root, self.record["files"])
+        self.assertFalse(old.exists())
+        self.assertTrue(unrelated.exists())
     def test_changed_binary(self):
         (self.root / "libmpv-2.dll").write_bytes(b"different build")
         with self.assertRaises(ValueError): assembly.verify_native(self.root, self.record)

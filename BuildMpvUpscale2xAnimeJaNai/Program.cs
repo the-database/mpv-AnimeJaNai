@@ -121,9 +121,17 @@ Console.WriteLine($"Target: {plat.Rid}");
 bool includeAddons = args.Contains("--addons");
 string? addonBundle = Environment.GetEnvironmentVariable("AJN_ADDON_BUNDLE");
 if (includeAddons && !plat.IsWindows)
-    throw new ArgumentException("Addon support is Windows only in this preview. The Linux package excludes the addon runtime.");
+{
+    Console.Error.WriteLine("Addon support is Windows only in this preview. The Linux package excludes the addon runtime.");
+    Environment.ExitCode = 2;
+    return;
+}
 if (includeAddons && (string.IsNullOrWhiteSpace(addonBundle) || !File.Exists(Path.Combine(addonBundle, "addon-package.json"))))
-    throw new ArgumentException("--addons requires AJN_ADDON_BUNDLE pointing to a verified addon support bundle.");
+{
+    Console.Error.WriteLine("--addons requires AJN_ADDON_BUNDLE pointing to a verified addon support bundle.");
+    Environment.ExitCode = 2;
+    return;
+}
 
 if (args.Length < 1 || args[0].StartsWith("--"))
 {

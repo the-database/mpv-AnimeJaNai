@@ -32,7 +32,7 @@ try
             using (var shutdown = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, e) => { e.Cancel = true; shutdown.Cancel(); };
-                await new ManagementServer(args[1], service, args.Length >= 4 ? args[3] : null).RunAsync(shutdown.Token);
+                await new ManagementServer(args[1], service, args.Length >= 4 ? args[3] : ownedInstallation).RunAsync(shutdown.Token);
             }
             return 0;
         }

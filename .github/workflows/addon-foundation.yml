@@ -38,6 +38,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Updater build failed.' }
           dotnet build ./BuildMpvUpscale2xAnimeJaNai -c Release
           if ($LASTEXITCODE -ne 0) { throw 'Assembler build failed.' }
+          dotnet build ./addons/tests/AnimeJaNai.Addons.NativeTests -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Native integration harness build failed.' }
       - name: Validate the creator tutorial and offline documentation
         shell: pwsh
         run: |
