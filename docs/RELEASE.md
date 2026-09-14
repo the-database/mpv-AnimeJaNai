@@ -32,14 +32,16 @@ Values below are the current ones; read the file for truth.
 
 | Constant | Current | Source of the value |
 |---|---|---|
-| `AjiVersion` | `v0.8.0` | `the-database/animejanai-inference` release tag |
+| `AjiVersion` | `v0.9.0` | `the-database/animejanai-inference` release tag |
 | `RifeModelsVersion` | `models-rife-fp16-1` | an animejanai-inference release tag (fp16 conversions) |
-| `MpvForkVersion` | `2026-07-23-7fc08d90c7` | `the-database/mpv-winbuild` release tag |
-| `MpvForkBuildDate` | `20260723` | the date **inside the archive filename** |
-| `MpvForkGitHash` | `7fc08d90c7` | the short hash **inside the archive filename** |
-| `MpvForkLinuxVersion` | `2026-07-23-7fc08d9` | `the-database/mpv` release tag (Linux bundle) |
-| `ManagerVersion` | `0.5.0` | `the-database/AnimeJaNaiManager` release tag |
-| `VsMlrtCudaVersion` | `v16.1.test1` | `AmusementClub/vs-mlrt` release tag (TensorRT runtime + `trtexec`) |
+| `MpvForkVersion` | `2026-09-13-d4c06dd342` | `the-database/mpv-winbuild` release tag |
+| `MpvForkBuildDate` | `20260913` | the date **inside the archive filename** |
+| `MpvForkGitHash` | `d4c06dd342` | the short hash **inside the archive filename** |
+| `MpvForkLinuxVersion` | `2026-10-13-e88bd2c` | `the-database/mpv` release tag (Linux bundle) |
+| `ManagerVersion` | `0.6.0` | `the-database/AnimeJaNaiManager` release tag |
+| `TrtVersion` | `11.3.0.99` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
+| `TrtCudaVersion` | `13.4` | the CUDA flavour of that TensorRT build |
+| `CudartVersion` | `13.4.49` | `cudart` from NVIDIA's CUDA redistributable manifest |
 | `OrtDmlVersion` | `1.24.4` | `Microsoft.ML.OnnxRuntime.DirectML` on NuGet |
 | `DirectMLVersion` | `1.15.4` | `Microsoft.AI.DirectML` on NuGet |
 | `MpvNetVersion` | `v7.1.2.0` | `mpvnet-player/mpv.net` release tag |
@@ -55,9 +57,27 @@ Values below are the current ones; read the file for truth.
 lives on the mpv fork's `master` (aji ABI v8) and that the old standalone `vf-animejanai`
 branch is stale (ABI v4) and must not be used.
 
-`VsMlrtCudaVersion` and `AjiVersion` must agree on the TensorRT major.minor — the comment in
-`Program.cs` states `v16.1.x == TensorRT 11.1 / CUDA 13.3`, and flags that `v16.1.test1` is a
-vs-mlrt **pre-release**, so recheck for a stable v16 tag before cutting a package release.
+`TrtVersion` and `AjiVersion` must agree on the TensorRT major.minor — `aji_trt` links
+`nvinfer_11` and must be built against the version it runs on.
+
+**`TrtCudaVersion` is a separate pin and is not derivable from `TrtVersion`.** NVIDIA's
+TRT↔CUDA pairing varies per release (11.0→13.2, 11.1→13.3, 11.2→13.3, 11.3→13.4); guessing it
+produces a 404. Confirm the pairing on NVIDIA's download page before bumping.
+
+The bits come straight from NVIDIA, so no third-party release gates a TensorRT bump:
+
+- Windows — `TensorRT-Enterprise-<TrtVersion>-Windows-amd64-cuda-<TrtCudaVersion>-Release-external.zip`
+  under `developer.nvidia.com/downloads/compute/machine-learning/tensorrt/<maj.min.patch>/zip/`.
+  Public, no login; the `-external` suffix marks the redistributable build. NVIDIA publishes no
+  checksum beside it, so `TrtSha256Win` is recorded from a verified download and enforced after.
+- Linux — the `.deb`s from `developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/`
+  (`libnvinfer11`, `-plugin11`, `libnvonnxparsers11`, `libnvinfer-bin` for `trtexec`). That repo's
+  `Packages` index publishes a SHA-256 per file — copy them into `trtDebSha256` when bumping.
+
+NVIDIA retains old versions (10.13.3.9 through 11.3.0.99 are all still live), so past releases
+stay buildable. If a URL ever does 404, two archival fallbacks carry the same bits:
+`pypi.nvidia.com/tensorrt-cu13-libs/` (every version, sha256 in the index, but no `trtexec`) and
+the CUDA apt repo (including `trtexec` via `libnvinfer-bin`).
 
 ## Order of operations
 
@@ -98,25 +118,29 @@ asset name (`mpv-linux-x64-<tag>.tar.zst`).
 
 ### 4. aji engine — `the-database/animejanai-inference`
 
-**Linux** is CI:
+**Linux** is CI. The workflow fetches its own TensorRT (`TRT_VERSION` / `TRT_CUDA` in its
+env) rather than taking it from the build image, so keep those in step with `TrtVersion` /
+`TrtCudaVersion` above. It publishes the release itself (`draft: false`), so a successful run
+creates the tag with `aji-linux-x64.tar.zst` on it:
 
 ```bash
 gh workflow run "Build Linux (aji)" -R the-database/animejanai-inference \
-  --ref main -f release_tag=v0.8.0
+  --ref main -f release_tag=v0.9.0
 ```
 
 **Windows has no CI.** `aji-windows-x64.zip` is built and uploaded by hand from a local
 working area (written `<aji-win>` here — see that repo's `docs/BUILD-WINDOWS.md` for the full
-dependency setup):
+dependency setup, including the `trt113` TensorRT root extracted from NVIDIA's zip):
 
 ```
 <aji-win>\build-aji-release.bat
-pwsh <aji-win>\package-aji-release.ps1 -Tag v0.8.0
-gh release upload v0.8.0 <aji-win>\dist\v0.8.0\aji-windows-x64.zip -R the-database/animejanai-inference
+pwsh <aji-win>\package-aji-release.ps1 -Tag v0.9.0
+gh release upload v0.9.0 <aji-win>\dist\v0.9.0\aji-windows-x64.zip -R the-database/animejanai-inference
 ```
 
 Full recipe and dependency setup: that repo's `docs/BUILD-WINDOWS.md`. Both assets must land on
-the **same tag**, because the assembler derives both URLs from `AjiVersion`.
+the **same tag**, because the assembler derives both URLs from `AjiVersion` — the Linux run
+publishes the tag, so the Windows upload is what completes it.
 
 → bump `AjiVersion`.
 
@@ -170,7 +194,7 @@ Skipped when `linux_only == 'true'`.
 
 Runs in `ghcr.io/the-database/animejanai-linux-build:ubuntu2204` (GHCR login via
 `github.actor` + `GITHUB_TOKEN`) with `shell: bash` forced, because the container's default
-shell is dash. Env: `TRT_LINUX_ROOT=/usr`, `CUDA_LINUX_LIB=/usr/local/cuda/lib64`.
+shell is dash. The assembler fetches its own TensorRT `.deb`s, so the job sets no TensorRT env.
 
 1. publish + run the assembler with `--target linux-x64 --packs`
 2. publish the updater self-contained single-file `linux-x64`
@@ -228,7 +252,7 @@ or the workflow).
 changes all three, so re-run it only when the Dockerfile changes.
 
 It exists to hold a low glibc floor (Ubuntu 22.04 / glibc 2.35) while pinning CUDA 13.3 +
-TensorRT 11.1.0.106 exactly (`libnvinfer11=11.1.0.106-1+cuda13.3` and its siblings), plus
+TensorRT 11.3.0.99 exactly (`libnvinfer11=11.3.0.99-1+cuda13.4` and its siblings), plus
 meson/cmake via pip, the .NET 10 SDK, `7zz`, and luajit.
 
 ## After publishing
