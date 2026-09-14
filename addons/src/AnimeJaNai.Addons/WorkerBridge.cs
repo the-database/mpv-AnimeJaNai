@@ -23,6 +23,13 @@ public static class WorkerBridge
             "runtime_mismatch", "Expected the pinned Windows x64 Wasmtime 48.0.2 runtime. Run tools/bootstrap.ps1.");
     }
 
+    internal static string ShortWorkRoot(string root)
+    {
+        string identity = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)).ToUpperInvariant();
+        string key = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity)))[..24];
+        return Path.GetFullPath(Path.Combine(Path.GetTempPath(), "ajn-work-" + key));
+    }
+
     internal static string CreateWorkDirectory(string root, string prefix)
     {
         // Native process startup and some compiler/GPU temporary-file APIs still
@@ -31,7 +38,7 @@ public static class WorkerBridge
         string name = prefix + "-" + Guid.NewGuid().ToString("N");
         root = Path.GetFullPath(root);
         if (OperatingSystem.IsWindows() && Path.Combine(root, name).Length >= 200)
-            root = Path.GetFullPath(Path.GetTempPath());
+            root = ShortWorkRoot(root);
         Contract.Require(!OperatingSystem.IsWindows() || Path.Combine(root, name).Length < 200,
             "startup_path_too_long", "Addon support needs a shorter temporary folder. Choose a shorter AnimeJaNai data folder or Windows TEMP folder.");
         return SafeFiles.DirectoryPath(root, name);

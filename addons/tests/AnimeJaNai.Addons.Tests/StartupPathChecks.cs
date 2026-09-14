@@ -6,6 +6,39 @@ internal static partial class Checks
     private static async Task StartupPathChecks()
     {
         if (!OperatingSystem.IsWindows()) return;
+        await Test("Restart recovers relocated worker modules without touching another data root", () =>
+        {
+            string deep = Area();
+            while (deep.Length < 300) deep = Path.Combine(deep, new string('r', 60));
+            string firstData = Path.Combine(deep, "first"), secondData = Path.Combine(deep, "second");
+            var created = new List<string>();
+            string Worker(string data, string file)
+            {
+                string directory = WorkerBridge.CreateWorkDirectory(Path.Combine(data, "workers"), "worker");
+                created.Add(directory); File.WriteAllText(Path.Combine(directory, file), "test-owned disposable content");
+                return directory;
+            }
+            try
+            {
+                string first = Worker(firstData, "module.wasm"), other = Worker(secondData, "module.wasm"), unfamiliar = Worker(firstData, "keep.txt");
+                using (var lease = new HostLease(firstData))
+                {
+                    True(!Directory.Exists(first), "Relocated stale worker survived restart cleanup");
+                    True(Directory.Exists(other) && File.Exists(Path.Combine(unfamiliar, "keep.txt")), "Cleanup crossed data ownership or removed unfamiliar content");
+                }
+                using var second = new HostLease(secondData);
+                True(!Directory.Exists(other));
+            }
+            finally
+            {
+                foreach (string directory in created)
+                    if (Directory.Exists(directory))
+                    {
+                        File.Delete(Path.Combine(directory, "module.wasm")); File.Delete(Path.Combine(directory, "keep.txt"));
+                        Directory.Delete(directory); // Only these new, non-recursive fixture directories.
+                    }
+            }
+        });
         await Test("Deep data uses disposable short work paths and reports unsupported launch paths", async () =>
         {
             string data = Area();
@@ -15,7 +48,7 @@ internal static partial class Checks
             string work = WorkerBridge.CreateWorkDirectory(data, "worker");
             try
             {
-                True(work.Length < 200 && Path.GetDirectoryName(work) == Path.TrimEndingDirectorySeparator(Path.GetTempPath()));
+                True(work.Length < 200 && Path.GetDirectoryName(work) == WorkerBridge.ShortWorkRoot(data));
                 var info = WorkerBridge.ProcessInfo(executable, work);
                 True(info.WorkingDirectory == work);
                 True(info.Environment["TEMP"] == work && info.Environment["TMP"] == work);

@@ -50,4 +50,6 @@ For GPU validation, run the native suite against the exact produced binaries; us
 
 Deep persistent data paths are supported by relocating disposable compiler and worker files to a short uniquely named temporary directory. No directory is exposed to the guest. Executable paths of 260 characters or more, or a temporary folder too long for this policy, produce a readable startup diagnostic. Move the application/tools or choose a shorter Windows TEMP folder. Windows Run-command length is checked separately.
 
+Relocated runtime workers use a temporary parent specific to their data root. After an interrupted host, its next exclusive data-directory lease recovers the known disposable worker modules from both normal and relocated paths. Unfamiliar contents and another data root's temporary workers are left alone.
+
 Samples represent processed SDR images using DirectML/D3D11. CUDA/TensorRT, HDR, subtitles/OSD and final display composition require separate implementations. Encoded output retains the private UCRT descriptor handoff. Native test results apply only to the exact binaries, backends and hardware recorded for each preview; unit tests and metadata alone do not establish GPU support.

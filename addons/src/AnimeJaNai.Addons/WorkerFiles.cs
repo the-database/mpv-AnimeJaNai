@@ -7,6 +7,14 @@ internal static class WorkerFiles
     internal static void Recover(string dataRoot)
     {
         string root = Path.Combine(Path.GetFullPath(dataRoot), "workers");
+        RecoverRoot(root);
+        // Relocated workers use a stable directory specific to this data root.
+        // The same exclusive host lease therefore protects both locations.
+        if (OperatingSystem.IsWindows()) RecoverRoot(WorkerBridge.ShortWorkRoot(root));
+    }
+
+    private static void RecoverRoot(string root)
+    {
         try
         {
             SafeFiles.CheckParents(root);
