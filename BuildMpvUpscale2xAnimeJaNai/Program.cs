@@ -908,7 +908,7 @@ void WriteVersionAndManifest()
     overlayPaths.AddRange(plat.AjiLibs.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.AjiTools.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.ManagerOverlay);
-    if (includeAddons) overlayPaths.AddRange(new[] { "addon-host", "addon-development", "addon-package.json" });
+    if (includeAddons) overlayPaths.AddRange(new[] { "addon-host", "addon-development", "addon-package.json", "build-info" });
     overlayPaths.Add("portable_config/scripts");
     overlayPaths.Add("portable_config/shaders");
     // Managed defaults files, overwritten on update. The user-facing

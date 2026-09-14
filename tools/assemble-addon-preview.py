@@ -66,6 +66,32 @@ def verify_native(directory, record):
             raise ValueError(f"Native artifact does not match producer record: {name}")
 
 
+def verify_host_bundle(directory, main_source, git):
+    path = directory / "host-build.json"
+    if not path.is_file() or path.stat().st_size > 1024 * 1024:
+        raise ValueError("Use a host bundle with the producer record emitted by addons/tools/package.ps1")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if record.get("schemaVersion") != 1 or record.get("platform") != "win-x64" or not re.fullmatch(r"[0-9a-f]{40}", record.get("sourceCommit", "")):
+        raise ValueError("Unsupported host build record")
+    for name in ("addons", "shared", "LICENSE"):
+        actual = subprocess.check_output([git, "-C", str(main_source), "rev-parse", "HEAD:" + name], text=True).strip()
+        if record.get("sourceObjects", {}).get(name) != actual:
+            raise ValueError(f"Host bundle and committed source differ: {name}")
+    files = record.get("files", {})
+    required = {"host/ajn-addon.exe", "host/ajn-addon-launcher.exe", "host/ajn-addon.deps.json", "runtime/wasmtime.exe"}
+    if not required.issubset(files):
+        raise ValueError("Host producer inventory is incomplete")
+    actual_files = {p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file()}
+    if actual_files != set(files) | {"host-build.json"}:
+        raise ValueError("Host bundle contents differ from the producing build inventory")
+    for name, expected in files.items():
+        relative(name)
+        file = directory / name
+        if not file.resolve().is_relative_to(directory.resolve()) or sha(file) != expected:
+            raise ValueError(f"Host bundle file differs from the producing build: {name}")
+    return record
+
+
 def extract_core(archive, expected, sevenzip, destination):
     if sha(archive) != expected:
         raise ValueError("Core archive checksum mismatch")
@@ -123,6 +149,7 @@ def assemble(args):
         raise ValueError("Native producer metadata is too large")
     record = json.loads(args.native_metadata.read_text(encoding="utf-8"))
     verify_native(args.native_directory, record)
+    host_record = verify_host_bundle(args.host_bundle, args.main_source, args.git)
     if sha(args.host_bundle / "runtime/wasmtime.exe") != RUNTIME_SHA256:
         raise ValueError("Host bundle does not contain the pinned Wasmtime runtime")
     for name in ("ajn-addon.exe", "ajn-addon-launcher.exe", "ajn-addon.deps.json"):
@@ -195,7 +222,9 @@ def assemble(args):
     if (args.native_directory / "build-info").is_dir():
         copy_tree(args.native_directory / "build-info", output / "build-info/native")
     provenance = {"schemaVersion": 1, "version": args.version, "sources": sources, "nativeProducer": record["producer"],
+                  "hostProducer": {k: host_record[k] for k in ("sourceCommit", "sourceObjects", "dotnetSdk")},
                   "coreSha256": args.core_sha256, "nativeMetadataSha256": sha(args.native_metadata), "tests": []}
+    write(output / "build-info/host-build.json", host_record)
     for evidence in args.evidence:
         target = output / "build-info/addon-tests" / evidence.name
         if target.exists():
@@ -216,7 +245,7 @@ def assemble(args):
             raise ValueError("Linux core packages cannot include this Windows addon runtime")
         manifest["package_version"] = args.version
         manifest.setdefault("user_preserve", []).append("animejanai/addons")
-        manifest.setdefault("overlay_paths", []).extend(["addon-host", "addon-development", "addon-package.json"])
+        manifest.setdefault("overlay_paths", []).extend(["addon-host", "addon-development", "addon-package.json", "build-info"])
         manifest.setdefault("deps", {})["addon_native"] = sha(output / "addon-host/native-capabilities.json")
         manifest["deps"]["mpvfork"] = "source:" + sources["mpv"]
         write(output / "manifest.json", manifest)

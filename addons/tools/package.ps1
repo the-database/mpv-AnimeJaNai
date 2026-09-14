@@ -1,10 +1,25 @@
 #requires -Version 7
 param(
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
-    [string]$Dotnet = 'dotnet'
+    [string]$Dotnet = 'dotnet',
+    [string]$Git = 'git'
 )
 $ErrorActionPreference = 'Stop'
 $addonRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repository = [IO.Path]::GetFullPath((Join-Path $addonRoot '..'))
+function Git-Value([string[]]$CommandArgs) {
+    $value = & $Git -C $repository @CommandArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Git could not identify the committed host source. Supply -Git if it is not on PATH.' }
+    return ($value | Out-String).Trim()
+}
+if (Git-Value -CommandArgs @('status', '--porcelain', '--untracked-files=no')) { throw 'Commit tracked source changes before producing a host bundle.' }
+$sourceCommit = Git-Value -CommandArgs @('rev-parse', 'HEAD')
+$sourceObjects = [ordered]@{}
+foreach ($name in @('addons', 'shared', 'LICENSE')) { $sourceObjects[$name] = Git-Value -CommandArgs @('rev-parse', "HEAD:$name") }
+$tracked = & $Git -C $repository -c core.quotepath=false ls-files -- addons shared
+if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate tracked host source files.' }
+$dotnetSdk = (& $Dotnet --version | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Could not identify the .NET SDK.' }
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
 $archive = $outputRoot + '.zip'
 if ((Test-Path -LiteralPath $outputRoot) -or (Test-Path -LiteralPath $archive)) {
@@ -24,7 +39,12 @@ foreach ($name in @('runtime', 'source', 'tools', 'examples', 'sdk', 'licenses')
 }
 # The updater transaction tests share this source with the normal updater.
 # Preserve the same relative layout for the bundle's buildable test project.
-Copy-Item -LiteralPath (Join-Path $addonRoot '../shared') -Destination (Join-Path $outputRoot 'shared') -Recurse
+[IO.Directory]::CreateDirectory((Join-Path $outputRoot 'shared')) | Out-Null
+foreach ($relative in $tracked | Where-Object { $_.StartsWith('shared/') }) {
+    $destination = Join-Path $outputRoot $relative
+    [IO.Directory]::CreateDirectory((Split-Path $destination)) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repository $relative) -Destination $destination
+}
 Copy-Item -LiteralPath $metadata.wasmtime.path -Destination (Join-Path $outputRoot 'runtime/wasmtime.exe')
 Copy-Item -LiteralPath (Join-Path (Split-Path $metadata.wasmtime.path) 'LICENSE') -Destination (Join-Path $outputRoot 'licenses/Wasmtime-LICENSE')
 Copy-Item -LiteralPath $ajnLicense -Destination (Join-Path $outputRoot 'licenses/AJN-LICENSE')
@@ -61,14 +81,14 @@ Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/player-inspector') -Desti
 Copy-Item -Path (Join-Path $addonRoot 'sdk/*') -Destination (Join-Path $outputRoot 'sdk') -Recurse
 # Include buildable AJN source without caches, binaries, or user data.
 $sourceRoot = Join-Path $outputRoot 'source'
-foreach ($source in Get-ChildItem -LiteralPath $addonRoot -Recurse -File) {
-    $relative = [IO.Path]::GetRelativePath($addonRoot, $source.FullName)
+foreach ($trackedFile in $tracked | Where-Object { $_.StartsWith('addons/') }) {
+    $relative = $trackedFile.Substring('addons/'.Length)
     $normalized = $relative.Replace('\', '/')
     if ($relative -match '(^|[\\/])(bin|obj|\.work|\.tools)([\\/]|$)' -or $relative -match '\.wasm$' -or
         ($relative -match '\.ajnaddon$' -and $normalized -ne 'tests/fixtures/counter-api-1.0.ajnaddon')) { continue }
     $destination = Join-Path $sourceRoot $relative
     [IO.Directory]::CreateDirectory((Split-Path $destination)) | Out-Null
-    Copy-Item -LiteralPath $source.FullName -Destination $destination
+    Copy-Item -LiteralPath (Join-Path $addonRoot $relative) -Destination $destination
 }
 Copy-Item -LiteralPath $ajnLicense -Destination (Join-Path $sourceRoot 'LICENSE')
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/counter') $metadata.javy.path (Join-Path $outputRoot 'counter.ajnaddon')
@@ -86,5 +106,16 @@ if ($LASTEXITCODE -ne 0) { throw 'Remote inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/player-inspector') $metadata.javy.path (Join-Path $outputRoot 'player-inspector.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'Player inspector compilation failed.' }
 & (Join-Path $addonRoot 'tools/render-docs.ps1') -Directory $outputRoot
+if ((Git-Value -CommandArgs @('rev-parse', 'HEAD')) -ne $sourceCommit -or (Git-Value -CommandArgs @('status', '--porcelain', '--untracked-files=no'))) {
+    throw 'The committed source changed while the host was being packaged.'
+}
+$files = [ordered]@{}
+foreach ($file in Get-ChildItem -LiteralPath $outputRoot -Recurse -File | Sort-Object FullName) {
+    $relative = [IO.Path]::GetRelativePath($outputRoot, $file.FullName).Replace('\', '/')
+    $files[$relative] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+@{ schemaVersion = 1; platform = 'win-x64'; sourceCommit = $sourceCommit; sourceObjects = $sourceObjects;
+   dotnetSdk = $dotnetSdk; files = $files } | ConvertTo-Json -Depth 8 |
+    Set-Content -LiteralPath (Join-Path $outputRoot 'host-build.json') -Encoding utf8NoBOM
 [IO.Compression.ZipFile]::CreateFromDirectory($outputRoot, $archive, [IO.Compression.CompressionLevel]::Optimal, $false)
 Get-FileHash -LiteralPath $archive -Algorithm SHA256 | Format-List

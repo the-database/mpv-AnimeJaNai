@@ -16,6 +16,8 @@ The null-output hardware-frame shortcut requires `--vo-null-accept-hwframes=yes`
 
 Use PowerShell 7, .NET SDK 10 and the pinned tools from `addons/tools/bootstrap.ps1`. Run `addons/tools/test.ps1`, then `addons/tools/package.ps1 -OutputDirectory <new-host-bundle>`. Publish the updater normally with `dotnet publish AnimeJaNaiUpdater -c Release -r win-x64 -o <output>`. In the matching Manager checkout, run `tools/check-addon-client.ps1` before publishing `AnimeJaNaiConfEditor` for win-x64 with self-contained and single-file options. Tests can pass `-p:UsedAvaloniaProducts=` to suppress the dependency's telemetry task.
 
+Host packaging requires a clean Git checkout; `-Git <git-executable>` selects Git when it is not on PATH. It copies tracked source files and emits `host-build.json` with the source commit, source tree identities, SDK version and all bundle file hashes. Full/support assembly checks those trees against the supplied main checkout and verifies the bundle inventory. Later changes outside the host source trees do not require recompiling an identical host. This producer record establishes build coherence, not a publisher signature.
+
 The host bundle contains the runtime, examples, SDK, offline documentation, licenses and buildable source, including the transaction source shared with the updater.
 
 `tools/assemble-addon-preview.py` requires Python 3.12+, Git, produced native metadata/binaries, the host bundle, Manager publish directory and updater executable. Supply clean committed checkouts with `--main-source`, `--manager-source`, `--mpv-source` and `--winbuild-source`. Its `--help` lists all inputs.
@@ -24,7 +26,7 @@ Omit `--core-archive` to create a support bundle zip. Supply a core archive with
 
 When a historical core contains a native file inventory, obsolete shared dependencies are removed only from the new extracted copy and only after verifying their hashes. Core build evidence is retained under `build-info/core`; the new preview's authoritative record is `build-info/addon-preview.json`.
 
-The normal assembler accepts `--addons` only for Windows. `AJN_ADDON_BUNDLE` points to an extracted support bundle. It stages the host, launcher, runtime, Manager and matching native set, includes managed addon files in overlays, and preserves `animejanai/addons`. The native metadata checksum participates in dependency comparisons; changed native builds require full updates.
+The normal assembler accepts `--addons` only for Windows. `AJN_ADDON_BUNDLE` points to an extracted support bundle. It stages the host, launcher, runtime, Manager and matching native set, includes managed addon files and build provenance in overlays, and preserves `animejanai/addons`. The native metadata checksum participates in dependency comparisons; changed native builds require full updates.
 
 Deployment's optional `addons` input takes a support bundle HTTPS URL and SHA-256. It verifies that download and enables `/DEnableAddons` in Inno Setup. The normal installer path remains available with this option off. Addon installers stage files before invoking the updater transaction.
 

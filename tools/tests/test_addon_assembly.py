@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("assembly", Path(__file__).parents[1] / "assemble-addon-preview.py")
 assembly = importlib.util.module_from_spec(spec)
@@ -56,5 +57,47 @@ class NativeAssemblyTests(unittest.TestCase):
         self.assertEqual(assembly.relative("addon-host/runtime/wasmtime.exe"), "addon-host/runtime/wasmtime.exe")
         for name in ("../file", "/file", "D:/file", "folder\\file", ""):
             with self.subTest(name=name), self.assertRaises(ValueError): assembly.relative(name)
+
+class HostAssemblyTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.record = dict(schemaVersion=1, platform="win-x64", sourceCommit="a" * 40,
+            sourceObjects={"addons": "b" * 40, "shared": "c" * 40, "LICENSE": "d" * 40}, dotnetSdk="fixture", files={})
+        for name in ("host/ajn-addon.exe", "host/ajn-addon-launcher.exe", "host/ajn-addon.deps.json", "runtime/wasmtime.exe"):
+            path = self.root / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(name.encode())
+            self.record["files"][name] = assembly.sha(path)
+        self.expected_objects = dict(self.record["sourceObjects"])
+        self.mock_git = patch.object(assembly.subprocess, "check_output", side_effect=lambda args, **kwargs:
+            self.expected_objects[args[-1].split(":")[-1]] + "\n")
+        self.mock_git.start()
+        self.addCleanup(self.mock_git.stop)
+        self.save()
+
+    def save(self):
+        (self.root / "host-build.json").write_text(json.dumps(self.record))
+
+    def verify(self):
+        return assembly.verify_host_bundle(self.root, self.root, "fixture-git")
+
+    def test_producing_bundle_matches_committed_source(self):
+        self.assertEqual(self.verify()["sourceCommit"], "a" * 40)
+
+    def test_stale_host_source_tree(self):
+        self.record["sourceObjects"]["addons"] = "e" * 40
+        self.save()
+        with self.assertRaisesRegex(ValueError, "committed source differ"): self.verify()
+
+    def test_changed_host_binary(self):
+        (self.root / "host/ajn-addon.exe").write_bytes(b"another build")
+        with self.assertRaisesRegex(ValueError, "file differs"): self.verify()
+
+    def test_unrecorded_bundle_file(self):
+        (self.root / "host/extra.dll").write_bytes(b"unexpected")
+        with self.assertRaisesRegex(ValueError, "contents differ"): self.verify()
+
 
 if __name__ == "__main__": unittest.main()
