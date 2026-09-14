@@ -93,6 +93,7 @@ Source: "{#SourceDir}\portable_config\settings.xml";     DestDir: "{app}\portabl
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#UpdaterExe},animejanai\animejanai.conf,portable_config\mpv.conf,portable_config\input.conf,portable_config\saved-props.json,portable_config\settings.xml"; Flags: recursesubdirs createallsubdirs ignoreversion
 #endif
 
+#ifndef InstallerTest
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#PlayerExe}"
 ; The companion tool keeps its own name ("AnimeJaNai Manager" - it manages the
@@ -100,12 +101,14 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#PlayerExe}"
 Name: "{group}\AnimeJaNai Manager"; Filename: "{app}\{#ManagerExe}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#PlayerExe}"; Tasks: desktopicon
+#endif
 
 ; Per-user (HKCU) video file associations, gated on the assocvideo task. Registers
 ; an AnimeJaNai.mpv ProgID and adds it to each extension's Open-with list plus the
 ; per-user default. (Win10+ protects the *effective* default behind a UserChoice
 ; hash setup can't forge; this is the standard achievable registration - it makes
 ; AnimeJaNai available and the per-user fallback default.)
+#ifndef InstallerTest
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv"; ValueType: string; ValueName: ""; ValueData: "{#AppName} Video"; Flags: uninsdeletekey; Tasks: assocvideo
 ; FriendlyAppName is what the "Open with" / default-app picker shows, instead of
@@ -135,6 +138,7 @@ Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\shell\open"; ValueType: str
 {#Assoc(".3gp")}
 {#Assoc(".mts")}
 {#Assoc(".m2v")}
+#endif
 
 ; Remove the whole per-user app folder on uninstall, including files created at
 ; runtime that the installer never tracked (built engines + timing caches in

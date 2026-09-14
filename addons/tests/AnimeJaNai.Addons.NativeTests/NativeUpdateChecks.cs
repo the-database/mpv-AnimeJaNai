@@ -20,6 +20,25 @@ internal static class NativeUpdateChecks
         foreach (string argument in arguments) info.ArgumentList.Add(argument);
         return info;
     }
+    private static Process MainHost(string installation)
+    {
+        string expected = Path.GetFullPath(Path.Combine(installation, "addon-host/ajn-addon.exe"));
+        var processes = Process.GetProcessesByName("ajn-addon");
+        try
+        {
+            var owned = new List<Process>();
+            foreach (var process in processes)
+                try { if (process.MainModule?.FileName.Equals(expected, StringComparison.OrdinalIgnoreCase) == true) owned.Add(process); }
+                catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            // The management host starts before the worker processes it owns.
+            var tracked = Process.GetProcessById(owned.OrderBy(p => p.StartTime).First().Id);
+            // Open and retain the handle before exit; a PID-only object cannot
+            // retrieve an exit code after Windows removes the process record.
+            try { _ = tracked.Handle; return tracked; }
+            catch { tracked.Dispose(); throw; }
+        }
+        finally { foreach (var process in processes) process.Dispose(); }
+    }
     private static async Task RunCommandAsync(string log, string executable, params string[] arguments)
     {
         using var process = Process.Start(Command(executable, arguments)) ?? throw new IOException("Test process did not start");
@@ -82,6 +101,19 @@ internal static class NativeUpdateChecks
         string one = Path.Combine(output, "installation-one"), two = Path.Combine(output, "installation-two");
         string dataOne = Path.Combine(output, "external-data-one"), dataTwo = Path.Combine(output, "external-data-two");
         foreach (string installation in new[] { one, two }) Copy(Path.Combine(packageRoot, "addon-host"), Path.Combine(installation, "addon-host"));
+        // An overlay omits native/Manager dependencies; validation must resolve
+        // their exact inventory hashes from the installed package.
+        string inventory = Path.Combine(packageRoot, AddonUpdateTransaction.PackageManifest);
+        var listed = JsonNode.Parse(File.ReadAllText(inventory))!["files"]!.AsObject();
+        foreach (var entry in listed)
+        {
+            string destination = Path.GetFullPath(Path.Combine(one, entry.Key));
+            Check(destination.StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(one)) + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase), "Package inventory escaped the test installation");
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(Path.Combine(packageRoot, entry.Key), destination, true);
+        }
+        File.Copy(inventory, Path.Combine(one, AddonUpdateTransaction.PackageManifest));
         var package = AddonPackage.Load(Path.Combine(packageRoot, "addon-development", "counter.ajnaddon"));
         foreach (string data in new[] { dataOne, dataTwo }) new AddonRegistry(data).Install(package, ["log.write", "storage.read", "storage.write"]);
         async Task<ManagementClient> Connect(string install, string data)
@@ -100,7 +132,11 @@ internal static class NativeUpdateChecks
             Check(new AddonStorage(dataOne, package.Manifest.Id).Get("starts")!.GetValue<int>() == 1, "First real addon did not start");
             string staged = Path.Combine(output, "replacement"); Directory.CreateDirectory(staged);
             File.WriteAllText(Path.Combine(staged, "managed.txt"), "updated");
+            File.Copy(inventory, Path.Combine(staged, AddonUpdateTransaction.PackageManifest));
+            Directory.CreateDirectory(Path.Combine(staged, "addon-host"));
+            File.Copy(Path.Combine(packageRoot, "addon-host/ajn-addon.dll"), Path.Combine(staged, "addon-host/ajn-addon.dll"));
             bool excluded = false;
+            using var originalHost = MainHost(one);
             var timer = Stopwatch.StartNew();
             await AddonUpdateTransaction.ApplyAsync(staged, one, new HashSet<string>(), afterPublish: _ =>
             {
@@ -108,7 +144,10 @@ internal static class NativeUpdateChecks
                 catch (ManagementException e) when (e.Code == "update_in_progress") { excluded = true; }
             });
             timer.Stop();
-            Check(timer.Elapsed < TimeSpan.FromSeconds(7), "Current packaged host needed the legacy forced-stop fallback");
+            // Large native inventories spend time hashing before shutdown.
+            // Observe the host's actual normal exit instead of inferring forced
+            // termination from the duration of the entire update transaction.
+            Check(originalHost.HasExited && originalHost.ExitCode == 0, "Current packaged host did not exit normally for the update");
             Check(excluded, "Concurrent startup was allowed during replacement");
             Check((await second.ListAsync()).Count == 1, "Updating one installation stopped the other");
             Check(new AddonStorage(dataOne, package.Manifest.Id).Get("starts")!.GetValue<int>() == 1, "Update changed private data");
@@ -131,7 +170,7 @@ internal static class NativeUpdateChecks
                 await AddonUpdateTransaction.PrepareUninstallAsync(moved);
             }
             Check(Directory.Exists(dataOne) && (await second.ListAsync()).Count == 1, "Uninstall preparation affected external data or the other install");
-            evidence.Add(new() { ["name"] = "packaged update, restart, moved installation and uninstall preparation",
+            evidence.Add(new() { ["name"] = "packaged overlay, unchanged dependency inventory, restart, moved installation and uninstall preparation",
                 ["passed"] = true, ["updateMilliseconds"] = timer.Elapsed.TotalMilliseconds, ["externalDataPreserved"] = true });
         }
         finally

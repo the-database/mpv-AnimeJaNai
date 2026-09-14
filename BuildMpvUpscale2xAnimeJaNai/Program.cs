@@ -884,6 +884,14 @@ void WriteVersionAndManifest()
 {
     var version = args[0];
     File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
+    string? addonMpvRevision = null;
+    if (includeAddons)
+    {
+        using var native = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-host", "native-capabilities.json")));
+        addonMpvRevision = native.RootElement.GetProperty("sources").GetProperty("mpv").GetString();
+        if (addonMpvRevision is null || !System.Text.RegularExpressions.Regex.IsMatch(addonMpvRevision, "^[0-9a-f]{40}$"))
+            throw new InvalidDataException("The addon bundle does not identify its native player revision.");
+    }
 
     // Platform-specific managed program files for the overlay update. aji and
     // its tools are small and update often, so they ride the overlay; the
@@ -925,7 +933,7 @@ void WriteVersionAndManifest()
         deps = new
         {
             mpvnet = plat.IsWindows ? MpvNetVersion : (string?)null,
-            mpvfork = plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
+            mpvfork = includeAddons ? "source:" + addonMpvRevision : plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
                                      : $"{MpvForkLinuxVersion}",
             inference_runtime = $"trt-{TrtVersion}",
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,

@@ -20,7 +20,7 @@ internal static class NativeInstallerChecks
     public static async Task RunAsync(string packageRoot, string output, string setup, List<JsonObject> evidence)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Installer checks require Windows");
-        Check(FileVersionInfo.GetVersionInfo(setup).ProductName == "mpv-AnimeJaNai Installer Test", "Compile with /DInstallerTest; production installers must not run in this test");
+        Check(FileVersionInfo.GetVersionInfo(setup).ProductName?.Trim() == "mpv-AnimeJaNai Installer Test", "Compile with /DInstallerTest; production installers must not run in this test");
         using (var existing = Registry.CurrentUser.OpenSubKey(TestUninstallKey))
             Check(existing is null, "An earlier installer test is still registered; uninstall that test before proceeding");
         string installation = Path.GetFullPath(Path.Combine(output, "installed"));

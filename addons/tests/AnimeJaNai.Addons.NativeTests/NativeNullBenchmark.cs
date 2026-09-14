@@ -30,19 +30,26 @@ internal static class NativeNullBenchmark
                 var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true,
                     RedirectStandardOutput = true, RedirectStandardError = true };
                 foreach (string argument in new[] { "--no-config", "--load-scripts=no", "--load-select=no", "--vo=null", "--hwdec=d3d11va",
-                    "--untimed", "--no-audio", "--sub=no", "--loop-file=inf", "--frames=240", "--terminal=yes", "--msg-level=all=v", "--vf=" + filter, source })
+                    "--untimed", "--no-audio", "--sub=no", "--frames=240", "--terminal=yes", "--msg-level=all=v", "--vf=" + filter, source })
                     info.ArgumentList.Add(argument);
                 // The control omits the switch to check the actual native default.
                 if (enabled) info.ArgumentList.Add("--vo-null-accept-hwframes=yes");
                 var timer = Stopwatch.StartNew();
                 using var process = Process.Start(info) ?? throw new IOException("Benchmark player did not start");
                 var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
+                bool timedOut = false;
                 try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(90)); }
-                catch { if (!process.HasExited) process.Kill(true); throw; }
+                catch (TimeoutException)
+                {
+                    timedOut = true;
+                    if (!process.HasExited) process.Kill(true);
+                    await process.WaitForExitAsync();
+                }
                 timer.Stop();
                 string text = await stdout + await stderr;
                 string name = $"{Path.GetFileNameWithoutExtension(clip)}-{(enabled ? "opt-in" : "default")}-{pass}.log";
                 File.WriteAllText(Path.Combine(output, name), text);
+                if (timedOut) throw new TimeoutException("Benchmark player exceeded its deadline; inspect " + name);
                 string dimensions = clip.StartsWith("480") ? "960x720" : "3840x2160";
                 if (process.ExitCode != 0 || !text.Contains(dimensions) || !text.Contains("d3d11va"))
                     throw new Exception("Benchmark did not complete the expected DirectML workload; inspect " + name);
