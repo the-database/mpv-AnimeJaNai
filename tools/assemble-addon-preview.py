@@ -96,14 +96,19 @@ def retire_core_native(directory, incoming_files):
         return
     old_files = json.loads(origins.read_text())
     old_hashes = json.loads(hashes.read_text())
+    hashes_by_name = {name.lower(): (name, digest) for name, digest in old_hashes.items()}
+    if len(hashes_by_name) != len(old_hashes):
+        raise ValueError("Ambiguous Windows filenames in the core native inventory")
+    incoming_names = {name.lower() for name in incoming_files}
     obsolete = []
     for name in old_files:
         if not re.fullmatch(r"[A-Za-z0-9._+-]{1,128}", name) or not (name.endswith(".dll") or name in ("mpv.exe", "mpv.com")):
             raise ValueError("Unrecognized core native inventory")
-        path = directory / name
-        if not path.is_file() or sha(path) != old_hashes.get(name):
+        recorded_name, expected = hashes_by_name.get(name.lower(), (name, None))
+        path = directory / recorded_name
+        if not path.is_file() or sha(path) != expected:
             raise ValueError(f"Core native inventory does not match its binary: {name}")
-        if name not in incoming_files:
+        if name.lower() not in incoming_names:
             obsolete.append(path)
     for path in obsolete:
         path.unlink()

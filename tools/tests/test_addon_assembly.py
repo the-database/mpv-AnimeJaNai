@@ -34,11 +34,11 @@ class NativeAssemblyTests(unittest.TestCase):
     def test_retiring_shared_dependencies_keeps_unrelated_core_files(self):
         info = self.root / "build-info"
         info.mkdir()
-        old = self.root / "avformat-63.dll"
+        old = self.root / "libSvtAv1Enc-4.dll"
         old.write_bytes(b"old dependency")
         unrelated = self.root / "manager-helper.dll"
         unrelated.write_bytes(b"keep")
-        (info / "runtime-origins.json").write_text(json.dumps({old.name: "historical build path"}))
+        (info / "runtime-origins.json").write_text(json.dumps({old.name.lower(): "historical build path"}))
         (info / "sha256.json").write_text(json.dumps({old.name: assembly.sha(old)}))
         assembly.retire_core_native(self.root, self.record["files"])
         self.assertFalse(old.exists())
