@@ -5,7 +5,7 @@
 # mainstream distro from ~2022 on (the NVIDIA libs we bundle need just
 # glibc 2.17-2.27, so they are never the constraint).
 #
-# This image carries the *toolchain + apt-able deps + CUDA 13.3 + TensorRT 11*.
+# This image carries the *toolchain + apt-able deps + CUDA 13.4 + TensorRT 11*.
 # The modern stack that 22.04 ships too old (wayland, FFmpeg, libplacebo, mpv,
 # aji) is built from source by build-stack.sh, run inside a container from this
 # image with the repos mounted, so that step stays iterable without image rebuilds.
@@ -58,32 +58,35 @@ RUN curl -fsSL https://www.7-zip.org/a/7z2602-linux-x64.tar.xz -o /tmp/7z.tar.xz
     && mkdir -p /tmp/7z && tar -xf /tmp/7z.tar.xz -C /tmp/7z \
     && install -m755 /tmp/7z/7zz /usr/local/bin/7zz && rm -rf /tmp/7z /tmp/7z.tar.xz
 
-# CUDA 13.3 toolkit + TensorRT 11.1.0 from NVIDIA's apt repo (ubuntu2204).
-# Matches the TensorRT the Windows package ships (vs-mlrt v16.1.x = TRT 11.1 /
-# CUDA 13.3), so aji_trt is built against the same major.minor it runs on.
-# TRT 11.1.0 members are pinned explicitly (the metapackage drags in Windows /
-# python bits, and minor-version resolution differs across apt versions).
+# CUDA 13.4 toolkit + TensorRT 11.3.0 from NVIDIA's apt repo (ubuntu2204).
+# Must match TrtVersion/TrtCudaVersion in mpv-AnimeJaNai's Program.cs, so that
+# aji_trt and vf_animejanai are built against the same major.minor the package
+# ships. This image no longer feeds the package itself -- the assembler fetches
+# its own TensorRT .debs -- these are purely build-time headers/libs for the
+# sibling repos' compiles.
+# TRT members are pinned explicitly (the metapackage drags in Windows / python
+# bits, and minor-version resolution differs across apt versions).
 RUN curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -o /tmp/cuda-keyring.deb \
     && dpkg -i /tmp/cuda-keyring.deb && rm /tmp/cuda-keyring.deb \
     && apt-get update && apt-get install -y --no-install-recommends \
-        cuda-nvcc-13-3 cuda-cudart-dev-13-3 cuda-nvrtc-13-3 \
-        cuda-driver-dev-13-3 \
-        libnvinfer11=11.1.0.106-1+cuda13.3 \
-        libnvinfer-plugin11=11.1.0.106-1+cuda13.3 \
-        libnvinfer-vc-plugin11=11.1.0.106-1+cuda13.3 \
-        libnvinfer-lean11=11.1.0.106-1+cuda13.3 \
-        libnvinfer-dispatch11=11.1.0.106-1+cuda13.3 \
-        libnvonnxparsers11=11.1.0.106-1+cuda13.3 \
-        libnvinfer-headers-dev=11.1.0.106-1+cuda13.3 \
-        libnvinfer-safe-headers-dev=11.1.0.106-1+cuda13.3 \
-        libnvinfer-headers-plugin-dev=11.1.0.106-1+cuda13.3 \
-        libnvinfer-dev=11.1.0.106-1+cuda13.3 \
-        libnvinfer-plugin-dev=11.1.0.106-1+cuda13.3 \
-        libnvonnxparsers-dev=11.1.0.106-1+cuda13.3 \
-        libnvinfer-bin=11.1.0.106-1+cuda13.3 \
+        cuda-nvcc-13-4 cuda-cudart-dev-13-4 cuda-nvrtc-13-4 \
+        cuda-driver-dev-13-4 \
+        libnvinfer11=11.3.0.99-1+cuda13.4 \
+        libnvinfer-plugin11=11.3.0.99-1+cuda13.4 \
+        libnvinfer-vc-plugin11=11.3.0.99-1+cuda13.4 \
+        libnvinfer-lean11=11.3.0.99-1+cuda13.4 \
+        libnvinfer-dispatch11=11.3.0.99-1+cuda13.4 \
+        libnvonnxparsers11=11.3.0.99-1+cuda13.4 \
+        libnvinfer-headers-dev=11.3.0.99-1+cuda13.4 \
+        libnvinfer-safe-headers-dev=11.3.0.99-1+cuda13.4 \
+        libnvinfer-headers-plugin-dev=11.3.0.99-1+cuda13.4 \
+        libnvinfer-dev=11.3.0.99-1+cuda13.4 \
+        libnvinfer-plugin-dev=11.3.0.99-1+cuda13.4 \
+        libnvonnxparsers-dev=11.3.0.99-1+cuda13.4 \
+        libnvinfer-bin=11.3.0.99-1+cuda13.4 \
     && rm -rf /var/lib/apt/lists/*
-ENV PATH="/usr/local/cuda-13.3/bin:${PATH}"
-ENV CUDACXX=/usr/local/cuda-13.3/bin/nvcc
+ENV PATH="/usr/local/cuda-13.4/bin:${PATH}"
+ENV CUDACXX=/usr/local/cuda-13.4/bin/nvcc
 
 # Where build-stack.sh installs the from-source stack (kept off /usr so it is
 # easy to collect for bundling).

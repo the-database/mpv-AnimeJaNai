@@ -30,7 +30,7 @@ It contains:
    `mpv.exe`** (from the same release's *player* archive — a self-contained static build with the
    filter compiled in, shipped next to `mpvnet.exe` for users who prefer plain mpv; it auto-detects
    the same `portable_config/`), the **`aji` native inference shim** (`aji.dll` + `aji_trt.dll` /
-   `aji_dml.dll`), the **TensorRT runtime + `trtexec`** (lifted from the vs-mlrt cuda archive),
+   `aji_dml.dll`), the **TensorRT runtime + `trtexec`** (from NVIDIA's own redistributable download),
    **ONNX Runtime DirectML + `DirectML.dll`**, RIFE models, `yt-dlp`, the AnimeJaNai Manager, and
    the AnimeJaNaiUpdater — then layers the runtime files in
    `BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/` on top to produce the redistributable
@@ -64,10 +64,10 @@ libmpv fork and the aji release and bump **both** `MpvForkVersion` and `AjiVersi
 exe and 7z package. The per-platform names/paths are centralised in the `Platform` descriptor
 at the bottom of `Program.cs`.
 
-Windows-only pieces (no Linux equivalent installed): mpv.net, the DirectML backend
-(`aji_dml.dll`, ONNX Runtime DirectML, `DirectML.dll` — `HasDirectML = false` on Linux), and
-the vsmlrt-cuda Windows binaries. Linux gets its mpv bundle from a `the-database/mpv` release
-and its TensorRT runtime from the build container.
+Windows-only pieces (no Linux equivalent installed): mpv.net, and the DirectML backend
+(`aji_dml.dll`, ONNX Runtime DirectML, `DirectML.dll` — `HasDirectML = false` on Linux).
+Linux gets its mpv bundle from a `the-database/mpv` release; both platforms fetch the
+TensorRT runtime straight from NVIDIA (the Windows zip, the Linux `.deb`s).
 
 When adding or changing build/runtime tooling, keep it portable:
 
@@ -100,7 +100,7 @@ to decide overlay-vs-full updates (`overlay_paths` = files an in-place update ov
 `user_preserve` = what it keeps).
 
 The download/version pins are constants at the top of `Program.cs` (`AjiVersion`, `MpvForkVersion`,
-`VsMlrtCudaVersion`, `OrtDmlVersion`, `DirectMLVersion`, `RifeModelsVersion`, `MpvNetVersion`,
+`TrtVersion`, `TrtCudaVersion`, `OrtDmlVersion`, `DirectMLVersion`, `RifeModelsVersion`, `MpvNetVersion`,
 `ManagerVersion`). Bumping a component = bump its constant.
 
 All three csproj target **net10.0**, and `.github/workflows/deploy.yml` pins

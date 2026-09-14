@@ -84,8 +84,9 @@ These env vars are the actual dev hooks. All are read in
 | `MPV_LINUX_LOCAL` | Use a local meson build dir for `mpv` + `libmpv.so*` (e.g. `~/src/mpv/build`) instead of the `the-database/mpv` release asset. |
 | `MPV_LINUX_EXTRA_LIBS` | `:`-separated dirs; globs `libplacebo.so*` into `mpv/`. Pair with `MPV_LINUX_LOCAL` when your local mpv links a libplacebo the bundle does not carry. |
 | `MANAGER_LOCAL` | A local directory (copied) **or** a zip / `tar.zst` (extracted) for the AnimeJaNai Manager, instead of its release asset. |
-| `TRT_LINUX_ROOT` | Linux TensorRT source root; default `/usr`. Reads `$root/lib/x86_64-linux-gnu` and `$root/bin/trtexec`. |
-| `CUDA_LINUX_LIB` | Source dir for `libcudart.so*`; default `/usr/local/cuda-13.3/lib64`. CI overrides it to `/usr/local/cuda/lib64`. |
+| `TRT_LOCAL_ZIP` | Windows: an already-downloaded NVIDIA TensorRT zip, instead of re-fetching ~2 GB each run. |
+| `TRT_LINUX_ROOT` | Linux TensorRT source root (e.g. `/usr`). Reads `$root/lib/x86_64-linux-gnu` and `$root/bin/trtexec`. Unset = download the `.deb`s from NVIDIA. |
+| `CUDA_LINUX_LIB` | Source dir for `libcudart.so*`. Unset = download the CUDA redistributable archive. |
 | `ANIMEJANAI_PACKS_DIR` | **Updater**, not the assembler (`AnimeJaNaiUpdater/Program.cs:857`). Point at a local dir holding `packs.json` + the pack archives so `--components` / `--install` / `--recommend` work against **unpublished** packs. Essential while a release is still a draft: the public releases API cannot see draft assets. |
 | `ANIMEJANAI_ROOT` | **Benchmark tool** fallback for the install root when `--install-root` is not given. |
 | `AJI_ORT_VERBOSE=1` | Runtime, not build: makes ONNX Runtime log node placement to stderr. Use it to confirm no `Conv`/`PReLU` landed on `CPUExecutionProvider` on the DirectML backend. |

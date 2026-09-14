@@ -108,8 +108,6 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     env:
       VER: ${{ github.event.inputs.release_version }}
-      TRT_LINUX_ROOT: /usr
-      CUDA_LINUX_LIB: /usr/local/cuda/lib64
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -119,7 +117,9 @@ jobs:
 
     - name: Run assembler (linux-x64, with packs)
       # Downloads aji-linux-x64.tar.zst + the Linux mpv fork bundle from the
-      # sibling repos' releases; copies the TensorRT runtime from the image.
+      # sibling repos' releases, and the TensorRT .debs from NVIDIA's CUDA repo
+      # (TrtVersion in Program.cs) - the image's own TensorRT is only there for
+      # the sibling repos' compiles, so assembly is independent of it.
       # --packs emits component-*.7z + packs.json and slims the core tree.
       run: ./publish/BuildMpvUpscale2xAnimeJaNai "$VER" --target linux-x64 --packs
 
