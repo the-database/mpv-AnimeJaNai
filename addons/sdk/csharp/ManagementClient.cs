@@ -66,6 +66,8 @@ public sealed class ManagementClient : IAsyncDisposable
     public static async Task<ManagementClient> ConnectOrStartAsync(string root, string hostPath, string runtimePath,
         string? nativeRoot = null, string? kind = null, CancellationToken cancellationToken = default)
     {
+        string installation = nativeRoot ?? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(hostPath)!, ".."));
+        using var startup = InstallationActivity.Acquire(installation);
         Task<ManagementClient> Connect(CancellationToken token) => kind is null ? ConnectAsync(root, token) : ConnectLifecycleAsync(root, kind, token);
         try { return await Connect(cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is TimeoutException or IOException) { }
@@ -172,4 +174,32 @@ public sealed class ManagementClient : IAsyncDisposable
     {
         lifetime.Cancel(); pipe.Dispose(); return ValueTask.CompletedTask;
     }
+}
+
+// Shared by Manager, lifecycle helpers, the host and the updater. A reader is
+// held for the lifetime of a host/helper, and across Manager's startup attempt.
+// The updater first records durable intent, drains readers, then holds exclusive
+// access through replacement. An interrupted update stays blocked until recovery.
+public sealed class InstallationActivity : IDisposable
+{
+    public const string DirectoryName = ".ajn-update";
+    private readonly FileStream held;
+    private InstallationActivity(FileStream held) { this.held = held; }
+    public static bool Pending(string root) => File.Exists(Path.Combine(root, DirectoryName, "pending"));
+    public static string LockPath(string root) => Path.Combine(Path.GetFullPath(root), ".ajn-addon-activity.lock");
+    public static void Check(string root)
+    {
+        if (Pending(root)) throw new ManagementException("update_in_progress",
+            "AnimeJaNai is being updated. If it was interrupted, close the player and Manager, then run the installer again to recover.");
+    }
+    public static InstallationActivity Acquire(string root)
+    {
+        Check(root);
+        FileStream stream;
+        try { stream = new(LockPath(root), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite); }
+        catch (IOException) { Check(root); throw; }
+        try { Check(root); return new(stream); }
+        catch { stream.Dispose(); throw; }
+    }
+    public void Dispose() => held.Dispose();
 }

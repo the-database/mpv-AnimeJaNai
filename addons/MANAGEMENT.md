@@ -17,6 +17,7 @@ Messages use the guest protocol's bounded JSON-RPC profile: UTF-8 JSON objects, 
 | Method | Parameters | Behavior |
 | --- | --- | --- |
 | `manager.hello` | `{major:1}` | Register this connection; acquire declared `on_manager` activations |
+| `maintenance.prepare` | `{installRoot}` | Trusted updater only: requires durable update intent for this installation, drains and exits without acquiring Manager activation |
 | `host.settings` | `{}` | Global native-session limit, bounds, editability and override source |
 | `host.configure` | `{maximumConcurrentSessions}` | Atomically save the operator's 1–16 session limit; existing sessions continue |
 | `host.login` | `{}` | Sign-in registration, launcher availability and moved-installation state |
@@ -49,8 +50,8 @@ UI operations, distinct from guest `network.*` methods. Reviewed addresses stay
 in host memory until approval; client parameters cannot replace them. See
 [NETWORK.md](NETWORK.md) for the authority and credential limits.
 
-Management 1.3 adds `hostSettingsAvailable`. Matching Managers offer **Host
-settings** independently of addon selection. The default native-session limit
+Management 1.3 adds `hostSettingsAvailable`. Matching Managers offer **Performance**
+independently of addon selection. The default native-session limit
 is two. Saving a limit changes admission for future sessions without stopping
 existing or already-reserved work; if usage exceeds the new limit, opens are
 denied until enough sessions close. Addons cannot change this host policy.

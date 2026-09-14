@@ -14,6 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../addons/sdk/csharp/ManagementClient.cs" Link="ManagementClient.cs" />
+    <Compile Include="../shared/AddonUpdateTransaction.cs" Link="AddonUpdateTransaction.cs" />
     <PackageReference Include="SevenZipExtractor" Version="1.0.19" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
   </ItemGroup>

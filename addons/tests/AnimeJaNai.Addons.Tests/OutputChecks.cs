@@ -27,6 +27,31 @@ internal static partial class Checks
     }
     private static async Task OutputChecks()
     {
+        await Test("Producer metadata supports static UCRT and rejects changed, incomplete or incompatible native sets", () =>
+        {
+            string area = Area(); Directory.CreateDirectory(Path.Combine(area, "addon-host"));
+            File.WriteAllBytes(Path.Combine(area, "mpv.exe"), [1, 2]);
+            File.WriteAllBytes(Path.Combine(area, "libmpv-2.dll"), [3, 4]);
+            var files = new JsonObject();
+            foreach (string name in new[] { "mpv.exe", "libmpv-2.dll" })
+                files[name] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(area, name))));
+            var marker = new JsonObject { ["schemaVersion"] = 1, ["platform"] = "win-x64", ["cRuntime"] = "ucrt",
+                ["ffmpegLinkage"] = "static", ["privateSampleAbi"] = 1, ["privateOutputAbi"] = 1, ["privatePlayerSampleAbi"] = 1, ["files"] = files };
+            string path = Path.Combine(area, "addon-host", NativeCapabilities.FileName);
+            void Save() => File.WriteAllText(path, marker.ToJsonString());
+            Save(); True(NativeSessionProvider.HasOutputRuntime(area) && NativeSessionProvider.HasFrameRuntime(area));
+            True(NativePlayerObservations.Available(area));
+            marker["schemaVersion"] = 2; Save(); True(!NativeSessionProvider.HasOutputRuntime(area));
+            marker["schemaVersion"] = 1; marker["ffmpegLinkage"] = "shared"; Save(); True(!NativeSessionProvider.HasOutputRuntime(area));
+            files["avformat-63.dll"] = new string('0', 64); Save(); True(!NativeSessionProvider.HasOutputRuntime(area));
+            files.Remove("avformat-63.dll"); marker["ffmpegLinkage"] = "static";
+            marker["privateOutputAbi"] = 2; Save(); True(!NativeSessionProvider.HasOutputRuntime(area));
+            marker["privateOutputAbi"] = 1; marker["cRuntime"] = "msvcrt"; Save(); True(!NativeSessionProvider.HasOutputRuntime(area));
+            marker["cRuntime"] = "ucrt"; files["../outside.dll"] = new string('0', 64); Save(); True(!NativeSessionProvider.HasOutputRuntime(area));
+            files.Remove("../outside.dll"); Save();
+            File.WriteAllBytes(Path.Combine(area, "mpv.exe"), [9]); True(!NativeSessionProvider.HasOutputRuntime(area));
+            File.WriteAllText(path, "{"); True(!NativeSessionProvider.HasOutputRuntime(area));
+        });
         await Test("Native output capability requires matching player, UCRT muxer and private ABI", () =>
         {
             string area = Area(); Directory.CreateDirectory(Path.Combine(area, "addon-host"));

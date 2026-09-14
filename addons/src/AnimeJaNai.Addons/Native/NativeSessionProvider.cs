@@ -36,6 +36,9 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
 
     internal static bool HasOutputRuntime(string root)
     {
+        // Preserve the sealed shared-FFmpeg previews when the new producer
+        // record is absent. A broken new record never falls back to stale data.
+        if (NativeCapabilities.Present(root)) return NativeCapabilities.Has(root, "privateOutputAbi");
         try
         {
             var marker = Contract.ParseObject(AddonPackage.ReadBoundedFile(Path.Combine(root, "addon-host", "native-output.json"), 4096));
@@ -54,6 +57,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
 
     internal static bool HasFrameRuntime(string root)
     {
+        if (NativeCapabilities.Present(root)) return NativeCapabilities.Has(root, "privateSampleAbi");
         try
         {
             var marker = Contract.ParseObject(AddonPackage.ReadBoundedFile(Path.Combine(root, "addon-host", "native-frames.json"), 4096));

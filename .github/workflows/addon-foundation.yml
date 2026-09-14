@@ -2,10 +2,10 @@ name: Addon foundation
 
 on:
   push:
-    branches: [feature/addon-foundation]
-    paths: ['addons/**', 'BuildMpvUpscale2xAnimeJaNai/**/animejanai_addons.lua', '.github/workflows/addon-foundation.yml']
+    branches: [main, integration/addons, feature/addon-foundation]
+    paths: ['addons/**', 'shared/**', 'tools/**', 'AnimeJaNaiUpdater/**', 'installer/**', 'BuildMpvUpscale2xAnimeJaNai/**', '.github/workflows/addon-foundation.yml']
   pull_request:
-    paths: ['addons/**', 'BuildMpvUpscale2xAnimeJaNai/**/animejanai_addons.lua', '.github/workflows/addon-foundation.yml']
+    paths: ['addons/**', 'shared/**', 'tools/**', 'AnimeJaNaiUpdater/**', 'installer/**', 'BuildMpvUpscale2xAnimeJaNai/**', '.github/workflows/addon-foundation.yml']
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,15 @@ jobs:
       - name: Build the Windows lifecycle launcher
         shell: pwsh
         run: dotnet build ./addons/src/AnimeJaNai.Addons.Launcher -c Release
+      - name: Check package assembly and updater integration
+        shell: pwsh
+        run: |
+          python -B -m unittest discover -s ./tools/tests -p test_addon_assembly.py
+          if ($LASTEXITCODE -ne 0) { throw 'Addon assembly validation failed.' }
+          dotnet build ./AnimeJaNaiUpdater -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Updater build failed.' }
+          dotnet build ./BuildMpvUpscale2xAnimeJaNai -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Assembler build failed.' }
       - name: Validate the creator tutorial and offline documentation
         shell: pwsh
         run: |

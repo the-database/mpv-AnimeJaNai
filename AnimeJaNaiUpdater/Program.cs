@@ -23,6 +23,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AnimeJaNai.Updates;
 using static Downloader;
 
 const string Repo = "the-database/mpv-upscale-2x_animejanai";
@@ -67,6 +68,25 @@ try
 {
     switch (mode)
     {
+        case "--prepare-uninstall":
+            await AddonUpdateTransaction.PrepareUninstallAsync(installDir);
+            return 0;
+        case "--recover":
+            await AddonUpdateTransaction.RecoverAsync(installDir);
+            Console.WriteLine("Update recovery completed. Addon settings and data were preserved.");
+            return 0;
+        case "--recover-target" when args.Length == 2:
+            await AddonUpdateTransaction.RecoverAsync(Path.GetFullPath(args[1]));
+            return 0;
+        case "--apply-staged" when args.Length == 3:
+        {
+            string target = Path.GetFullPath(args[1]), source = Path.GetFullPath(args[2]);
+            var preserved = ReadUserPreserve(Path.Combine(target, "manifest.json"));
+            preserved.UnionWith(ReadUserPreserve(Path.Combine(source, "manifest.json")));
+            await AddonUpdateTransaction.ApplyAsync(source, target, preserved);
+            Console.WriteLine("Installation completed. Existing user settings and addon data were preserved.");
+            return 0;
+        }
         case "--check":
             await CheckAsync();
             return 0;
@@ -91,6 +111,8 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"Updater error: {ex.Message}");
+    if (AnimeJaNai.Addons.Management.InstallationActivity.Pending(installDir))
+        Console.WriteLine("Addon startup is paused. Close AnimeJaNai and run AnimeJaNaiUpdater --recover, or run the installer again.");
     return 1;
 }
 
@@ -679,6 +701,13 @@ string FindVersionedRoot(string staging)
 void ApplyOver(string sourceRoot, string targetRoot, bool overlay)
 {
     var preserve = overlay ? new HashSet<string>() : ReadUserPreserve(Path.Combine(targetRoot, "manifest.json"));
+    if (OperatingSystem.IsWindows() && (File.Exists(Path.Combine(sourceRoot, AddonUpdateTransaction.PackageManifest)) ||
+        File.Exists(Path.Combine(targetRoot, AddonUpdateTransaction.PackageManifest))))
+    {
+        preserve.UnionWith(ReadUserPreserve(Path.Combine(sourceRoot, "manifest.json")));
+        AddonUpdateTransaction.ApplyAsync(sourceRoot, targetRoot, preserve).GetAwaiter().GetResult();
+        return;
+    }
 
     // Self-update: a running exe can't be overwritten, but it can be renamed out of the way first.
     // Derive the name from the running process so this works whether it's AnimeJaNaiUpdater.exe
@@ -1174,7 +1203,8 @@ async Task<int> InstallComponentAsync(string name)
         }
     }
 
-    string work = Path.Combine(Path.GetTempPath(), "animejanai-packs");
+    bool addonUpdate = OperatingSystem.IsWindows() && File.Exists(Path.Combine(installDir, AddonUpdateTransaction.PackageManifest));
+    string work = Path.Combine(Path.GetTempPath(), addonUpdate ? "animejanai-packs-" + Guid.NewGuid().ToString("N") : "animejanai-packs");
     Directory.CreateDirectory(work);
     string archive = Path.Combine(work, pack.Asset);
     if (pack.Url.Contains("://"))
@@ -1186,6 +1216,18 @@ async Task<int> InstallComponentAsync(string name)
         File.Copy(pack.Url, archive, true); // ANIMEJANAI_PACKS_DIR dev path
     }
     Console.WriteLine($"Installing {pack.Name}...");
+    if (addonUpdate)
+    {
+        string staging = Path.Combine(work, "staged");
+        Extract(archive, staging);
+        var state = ReadInstalledComponents(index);
+        state[pack.Name] = target != "" ? target : index.PackageVersion;
+        File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
+        await AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true);
+        TryDelete(() => Directory.Delete(work, true));
+        Console.WriteLine($"{pack.Name} installed. Addon work was stopped for the component update; start it again when ready.");
+        return 0;
+    }
     Extract(archive, installDir);
     TryDelete(() => File.Delete(archive));
 
@@ -1206,6 +1248,18 @@ int RemoveComponent(string name)
     {
         Console.WriteLine($"Unknown pack '{name}'. Available: {string.Join(", ", index.Packs.Select(p => p.Name))}");
         return 2;
+    }
+    if (OperatingSystem.IsWindows() && File.Exists(Path.Combine(installDir, AddonUpdateTransaction.PackageManifest)))
+    {
+        string staging = Path.Combine(Path.GetTempPath(), "animejanai-remove-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(staging);
+        var state = ReadInstalledComponents(index); state.Remove(pack.Name);
+        File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
+        AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true,
+            removals: pack.Files.Select(f => f.Replace('\\', '/'))).GetAwaiter().GetResult();
+        Directory.Delete(staging, true);
+        Console.WriteLine($"{pack.Name} removed. Addon work was stopped; engine caches and added models were preserved.");
+        return 0;
     }
     int gone = 0;
     foreach (var f in pack.Files)

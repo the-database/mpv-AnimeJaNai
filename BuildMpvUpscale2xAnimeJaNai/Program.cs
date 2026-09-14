@@ -118,6 +118,12 @@ TargetOs SelectTarget(string[] a)
 var target = SelectTarget(args);
 var plat = target == TargetOs.Windows ? Platform.Win : Platform.Linux;
 Console.WriteLine($"Target: {plat.Rid}");
+bool includeAddons = args.Contains("--addons");
+string? addonBundle = Environment.GetEnvironmentVariable("AJN_ADDON_BUNDLE");
+if (includeAddons && !plat.IsWindows)
+    throw new ArgumentException("Addon support is Windows only in this preview. The Linux package excludes the addon runtime.");
+if (includeAddons && (string.IsNullOrWhiteSpace(addonBundle) || !File.Exists(Path.Combine(addonBundle, "addon-package.json"))))
+    throw new ArgumentException("--addons requires AJN_ADDON_BUNDLE pointing to a verified addon support bundle.");
 
 if (args.Length < 1 || args[0].StartsWith("--"))
 {
@@ -886,6 +892,7 @@ void WriteVersionAndManifest()
     overlayPaths.AddRange(plat.AjiLibs.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.AjiTools.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.ManagerOverlay);
+    if (includeAddons) overlayPaths.AddRange(new[] { "addon-host", "addon-development", "addon-package.json" });
     overlayPaths.Add("portable_config/scripts");
     overlayPaths.Add("portable_config/shaders");
     // Managed defaults files, overwritten on update. The user-facing
@@ -916,12 +923,15 @@ void WriteVersionAndManifest()
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,
             sevenzip = SevenZipVersion,
             rife = RifeModelsVersion,
+            addon_native = includeAddons ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(Path.Combine(installDirectory, "addon-host", "native-capabilities.json")))) : null,
         },
         overlay_paths = overlayPaths.ToArray(),
         // User data never overwritten by an update (full updates preserve these explicitly).
         user_preserve = new[]
         {
             "animejanai/animejanai.conf",
+            "animejanai/addons",
             "animejanai/currentanimejanai.log",
             "portable_config/mpv.conf",
             "portable_config/input.conf",
@@ -1100,6 +1110,13 @@ async Task Main()
     PortConfigsForTarget();
     GenerateInputConf();
     await InstallAnimeJaNaiManager();
+    if (includeAddons)
+    {
+        AnimeJaNai.Updates.AddonUpdateTransaction.ValidatePackage(addonBundle!, installDirectory);
+        CopyDirectory(addonBundle!, installDirectory);
+    }
+    if (!plat.IsWindows)
+        File.Delete(Path.Combine(installDirectory, "portable_config", "scripts", "animejanai_addons.lua"));
     WriteThirdPartyNotices();
     WriteLinuxLauncher();
     WriteVersionAndManifest();

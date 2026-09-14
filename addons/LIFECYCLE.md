@@ -56,7 +56,9 @@ per addon data directory, with the name derived from the same canonical path
 identity as the private host endpoint. Other applications' entries are untouched.
 That value is the persistent choice; there is no second file whose saved flag
 could disagree with Windows registration. A moved installation is shown in the
-dialog and replaced or removed only when the user saves their choice.
+dialog. Enabling startup can explicitly register this installation. Disabling
+it only removes an entry still owned by this installation; an older/moved copy
+cannot remove a value now pointing at another installation.
 
 The launcher derives the installation from its own location and omits the
 standard data directory from its command. Custom data paths are quoted using

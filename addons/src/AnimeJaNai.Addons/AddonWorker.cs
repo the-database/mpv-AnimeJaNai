@@ -53,7 +53,7 @@ public sealed class AddonWorker : IAddonInstance
         {
             broker = new Broker(package, grant, dataRoot, log, sessions, networkSelections, playerFrames);
             job = new WindowsJob();
-            directory = SafeFiles.DirectoryPath(workRoot, "worker-" + Guid.NewGuid().ToString("N"));
+            directory = WorkerBridge.CreateWorkDirectory(workRoot, "worker");
             string module = Path.Combine(directory, "module.wasm");
             package.WriteModule(module);
             var info = WorkerBridge.ProcessInfo(command.Executable, directory);

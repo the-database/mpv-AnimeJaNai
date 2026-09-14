@@ -24,7 +24,7 @@ public sealed class HostLease : IDisposable
     public void Dispose() => held.Dispose();
 }
 
-public sealed class ManagementServer(string root, AddonService service)
+public sealed class ManagementServer(string root, AddonService service, string? installRoot = null)
 {
     public static string PipeName(string root) => "AJN.Addons.v1." + Convert.ToHexStringLower(SHA256.HashData(
         Encoding.UTF8.GetBytes(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant())))[..32];
@@ -33,6 +33,7 @@ public sealed class ManagementServer(string root, AddonService service)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("The management service currently supports Windows only.");
         using var lease = new HostLease(root);
+        using var activity = installRoot is null ? null : Management.InstallationActivity.Acquire(installRoot);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var slots = new SemaphoreSlim(8, 8);
         var tasks = new ConcurrentDictionary<long, Task>();
@@ -41,11 +42,12 @@ public sealed class ManagementServer(string root, AddonService service)
         NamedPipeServerStream? listener = NewPipe(first: true);
         var idle = Task.Run(async () =>
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
             try
             {
                 while (await timer.WaitForNextTickAsync(lifetime.Token))
                 {
+                    if (installRoot is not null && Management.InstallationActivity.Pending(installRoot)) { lifetime.Cancel(); break; }
                     if (Volatile.Read(ref connections) > 0 || service.HasRunningWorkers) Interlocked.Exchange(ref lastActivity, Stopwatch.GetTimestamp());
                     else if (exitWhenIdle && Stopwatch.GetElapsedTime(Interlocked.Read(ref lastActivity)) > TimeSpan.FromSeconds(30)) lifetime.Cancel();
                 }
@@ -66,7 +68,7 @@ public sealed class ManagementServer(string root, AddonService service)
                 long number = Interlocked.Increment(ref next);
                 var task = Task.Run(async () =>
                 {
-                    try { await HandleAsync(accepted, lifetime.Token); }
+                    try { await HandleAsync(accepted, lifetime); }
                     finally { Interlocked.Decrement(ref connections); Interlocked.Exchange(ref lastActivity, Stopwatch.GetTimestamp()); slots.Release(); }
                 });
                 tasks[number] = task;
@@ -97,8 +99,9 @@ public sealed class ManagementServer(string root, AddonService service)
             PipeOptions.Asynchronous | (first ? PipeOptions.FirstPipeInstance : PipeOptions.None), 4096, 4096, security);
     }
 
-    private async Task HandleAsync(NamedPipeServerStream pipe, CancellationToken cancellationToken)
+    private async Task HandleAsync(NamedPipeServerStream pipe, CancellationTokenSource lifetime)
     {
+        var cancellationToken = lifetime.Token;
         using (pipe)
         {
             string client = Guid.NewGuid().ToString("N");
@@ -115,13 +118,30 @@ public sealed class ManagementServer(string root, AddonService service)
                     using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     deadline.CancelAfter(TimeSpan.FromSeconds(30));
                     JsonObject response;
-                    try { response = JsonRpc.Result(id, await service.InvokeAsync(client, method, (JsonObject)request["params"]!, deadline.Token)); }
+                    bool prepareUpdate = false;
+                    try
+                    {
+                        if (method == "maintenance.prepare")
+                        {
+                            Contract.Require(installRoot is not null && string.Equals(Path.GetFullPath(Contract.Text((JsonObject)request["params"]!, "installRoot", 32768)),
+                                Path.GetFullPath(installRoot), StringComparison.OrdinalIgnoreCase), "wrong_installation", "Update preparation belongs to another installation.");
+                            Contract.Require(Management.InstallationActivity.Pending(installRoot!), "update_not_prepared", "The updater must record update intent before draining addons.");
+                            prepareUpdate = true;
+                            response = JsonRpc.Result(id, new JsonObject { ["draining"] = true, ["processId"] = Environment.ProcessId });
+                        }
+                        else
+                        {
+                            Contract.Require(installRoot is null || !Management.InstallationActivity.Pending(installRoot), "update_in_progress", "AnimeJaNai is being updated; addon activation is paused.");
+                            response = JsonRpc.Result(id, await service.InvokeAsync(client, method, (JsonObject)request["params"]!, deadline.Token));
+                        }
+                    }
                     catch (AddonException error) { response = JsonRpc.Error(id, error.Code, error.Message); }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or OperationCanceledException)
                     { response = JsonRpc.Error(id, "host_error", "The host could not complete this operation: " + error.Message[..Math.Min(error.Message.Length, 1024)]); }
                     try { await channel.WriteAsync(response, cancellationToken); }
                     catch (AddonException error) when (error.Code == "message_too_large")
                     { await channel.WriteAsync(JsonRpc.Error(id, error.Code, error.Message), cancellationToken); }
+                    if (prepareUpdate) { lifetime.Cancel(); break; }
                 }
             }
             catch (Exception error) when (error is AddonException or IOException or OperationCanceledException) { }

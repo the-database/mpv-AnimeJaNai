@@ -9,6 +9,7 @@
 | Add video, image samples, service access or output | [Recipes and complete examples](CREATOR-RECIPES.md) |
 | Look up protocol, limits and compatibility | [API reference](API.md) and [SDK types](sdk/ajn.d.ts) |
 | Resolve a specific error | [Troubleshooting](TROUBLESHOOTING.md) |
+| Build, package, update or recover a preview | [Release integration](RELEASE-INTEGRATION.md) |
 
 Full previews and developer bundles include offline HTML guides as well as this
 source documentation. In Manager, open **Addons → Help**. Opening Addons prepares
@@ -16,7 +17,7 @@ local support automatically; there is no manual connection step.
 
 ## Implementation status
 
-This is the first working part of the AJN addon framework. It combines the earlier proposals' lifecycle, declarative settings/actions, JSON-RPC, and developer replay with an enforced Wasm sandbox. It is developed on `feature/addon-foundation` independently of the 3.6.1 player fixes.
+This working preview combines lifecycle, declarative settings/actions, JSON-RPC and developer replay with an enforced Wasm sandbox. The coordinated `integration/addons` branches build on current upstream, including the merged 3.6.1 fixes. The original feature branches and sealed previews remain historical snapshots.
 
 **Working now:** compile a JavaScript addon, inspect/install an unsigned development package with explicit permissions, run it in an isolated worker, save private addon data, change typed settings, invoke declared actions, replay events, restore the previous package, and disable its registration. A persistent per-user host and the companion Manager Addons tab share one activation controller per addon. Tests cover library behavior, real Windows workers, the private management connection, and rendered Manager controls.
 

@@ -48,7 +48,7 @@ public static class DeveloperTools
             ?? throw new AddonException("invalid_manifest", "Missing manifest.");
         manifest.Validate();
         string source = new UTF8Encoding(false, true).GetString(AddonPackage.ReadBoundedFile(Path.Combine(directory, "addon.js"), 256 * 1024));
-        string temporary = SafeFiles.DirectoryPath(directory, "build-" + Guid.NewGuid().ToString("N"));
+        string temporary = WorkerBridge.CreateWorkDirectory(directory, "build");
         string js = Path.Combine(temporary, "addon.js"), wasm = Path.Combine(temporary, "module.wasm");
         try
         {

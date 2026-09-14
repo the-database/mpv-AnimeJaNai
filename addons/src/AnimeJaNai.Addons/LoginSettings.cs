@@ -47,7 +47,7 @@ public sealed class LoginSettings
             Contract.Require(command.Length <= 260, "startup_path_too_long", "Windows login startup needs a shorter installation or addon data path (the command exceeds 260 characters).");
             store.Write(name, command);
         }
-        else store.Delete(name);
+        else if (IsEnabled) store.Delete(name);
         return Describe();
     }
     internal static string Quote(string value)

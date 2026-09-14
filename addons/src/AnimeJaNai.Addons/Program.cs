@@ -7,6 +7,10 @@ try
     if (args.Length == 3 && args[0] == "worker") return await WorkerBridge.RunAsync(args[1], args[2]);
     if (args.Length == 1 && args[0] == "media-worker") return await AnimeJaNai.Addons.Native.MediaWorker.RunAsync();
     if (args.Length == 0) { Help(); return 0; }
+    string baseDirectory = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+    string? ownedInstallation = Path.GetFileName(baseDirectory).Equals("addon-host", StringComparison.OrdinalIgnoreCase)
+        ? Path.GetDirectoryName(baseDirectory) : null;
+    using var activity = ownedInstallation is null ? null : AnimeJaNai.Addons.Management.InstallationActivity.Acquire(ownedInstallation);
     using var offlineLease = args.Length >= 3 && args[0] is "install-dev" or "rollback" or "disable" or "configure" or "action" or "replay" or "run"
         ? new HostLease(args[2]) : null;
     switch (args[0])
@@ -28,7 +32,7 @@ try
             using (var shutdown = new CancellationTokenSource())
             {
                 Console.CancelKeyPress += (_, e) => { e.Cancel = true; shutdown.Cancel(); };
-                await new ManagementServer(args[1], service).RunAsync(shutdown.Token);
+                await new ManagementServer(args[1], service, args.Length >= 4 ? args[3] : null).RunAsync(shutdown.Token);
             }
             return 0;
         }

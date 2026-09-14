@@ -4,6 +4,11 @@ The Windows host can run independent AJN processing sessions in supervised nativ
 
 ## Select media in Manager
 
+Frame samples currently require DirectML/D3D11 and represent processed SDR
+images. CUDA/TensorRT and final-display samples are unavailable. The owned
+worker opts into `vo-null-accept-hwframes`; ordinary null-output benchmarks keep
+their previous default. See [release integration](RELEASE-INTEGRATION.md).
+
 Use the integrated native-media preview. Install a local addon requesting `sessions.manage`, approve that permission, then use its **Processing access** section:
 
 1. **Allow a media file**: choose one local video and review its exact path and the addon receiving access.
@@ -11,7 +16,7 @@ Use the integrated native-media preview. Install a local addon requesting `sessi
 3. Start the addon and use its declared actions. The generic `session-controller` example processes the first approved source/profile and supports independent session controls.
 4. **Remove access** stops the addon and drains its sessions before removing that selection. If cleanup fails, the approval is retained and the operation reports an error; retrying continues cleanup. Removing the addon also removes its media approvals and preserves ordinary settings/storage.
 
-Approvals belong to the exact package hash, not merely the addon name. New package versions see no previous file/profile approvals. Up to 16 sources and eight profile snapshots can be approved per addon. Files are read-only. Currently supported local container families are MP4/MOV, Matroska/WebM, AVI and MPEG-TS. Playlists, network paths, external media references and automatic sidecar loading are disabled. Network sources need a future scoped service capability.
+Approvals belong to the exact package hash, not merely the addon name. New package versions see no previous file/profile approvals. Up to 16 sources and eight profile snapshots can be approved per addon. Files are read-only. Supported local container families are MP4/MOV, Matroska/WebM, AVI and MPEG-TS. Playlists, network paths, external references and automatic sidecar loading are disabled. API1.5 provides separately approved [HTTP media sources](REMOTE-INPUTS.md).
 
 ## Public contract
 

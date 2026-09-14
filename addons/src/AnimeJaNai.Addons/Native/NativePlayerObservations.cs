@@ -16,6 +16,7 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
     internal static bool Available(string root)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) return false;
+        if (NativeCapabilities.Present(root)) return NativeCapabilities.Has(root, "privatePlayerSampleAbi");
         try
         {
             var marker = Contract.ParseObject(AddonPackage.ReadBoundedFile(Path.Combine(root, "addon-host", "native-player-frames.json"), 4096));

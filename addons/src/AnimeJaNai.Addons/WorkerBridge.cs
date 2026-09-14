@@ -23,9 +23,32 @@ public static class WorkerBridge
             "runtime_mismatch", "Expected the pinned Windows x64 Wasmtime 48.0.2 runtime. Run tools/bootstrap.ps1.");
     }
 
+    internal static string CreateWorkDirectory(string root, string prefix)
+    {
+        // Native process startup and some compiler/GPU temporary-file APIs still
+        // have MAX_PATH limits even when managed persistent storage does not.
+        // Relocate disposable work only. Persistent state stays in the data root.
+        string name = prefix + "-" + Guid.NewGuid().ToString("N");
+        root = Path.GetFullPath(root);
+        if (OperatingSystem.IsWindows() && Path.Combine(root, name).Length >= 200)
+            root = Path.GetFullPath(Path.GetTempPath());
+        Contract.Require(!OperatingSystem.IsWindows() || Path.Combine(root, name).Length < 200,
+            "startup_path_too_long", "Addon support needs a shorter temporary folder. Choose a shorter AnimeJaNai data folder or Windows TEMP folder.");
+        return SafeFiles.DirectoryPath(root, name);
+    }
+
     internal static ProcessStartInfo ProcessInfo(string executable, string directory)
     {
-        var info = new ProcessStartInfo(Path.GetFullPath(executable))
+        executable = Path.GetFullPath(executable);
+        directory = Path.GetFullPath(directory);
+        if (OperatingSystem.IsWindows())
+        {
+            Contract.Require(executable.Length < 260, "startup_path_too_long",
+                "The addon executable path is too long for this preview. Move AnimeJaNai (or the developer tools) to a shorter installation folder.");
+            Contract.Require(directory.Length < 240, "startup_path_too_long",
+                "Addon support needs a shorter working folder. Choose a shorter AnimeJaNai data folder or Windows TEMP folder.");
+        }
+        var info = new ProcessStartInfo(executable)
         {
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,

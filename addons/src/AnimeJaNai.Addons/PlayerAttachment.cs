@@ -13,6 +13,7 @@ internal static class PlayerAttachment
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Player addon activation currently supports Windows.");
         installRoot = Path.GetFullPath(installRoot); dataRoot = Path.GetFullPath(dataRoot);
+        using var activity = InstallationActivity.Acquire(installRoot);
         Contract.Require(playerId > 0 && playerId != Environment.ProcessId, "invalid_player", "Expected the owning AJN player process.");
         Contract.Require(instance is null || Contract.ValidKey(instance), "invalid_player", "Invalid player bridge instance.");
         string? control = instance is null ? null : Path.Combine(SafeFiles.DirectoryPath(dataRoot, "player-control"), instance + ".json");
@@ -46,6 +47,7 @@ internal static class PlayerAttachment
                     }
                     while (true)
                     {
+                        if (InstallationActivity.Pending(installRoot)) return 0;
                         if (observing)
                         {
                             var configuration = (JsonObject)(await client.CallAsync("player.poll", cancellationToken: lifetime.Token))!;
@@ -59,6 +61,7 @@ internal static class PlayerAttachment
                 }
                 catch (Exception error) when (error is IOException or TimeoutException)
                 {
+                    if (InstallationActivity.Pending(installRoot)) return 0;
                     if (attempt == 2) throw;
                     await Task.Delay(TimeSpan.FromSeconds(2), lifetime.Token);
                 }
@@ -66,7 +69,7 @@ internal static class PlayerAttachment
             return 0;
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { return 0; }
-        catch (ManagementException error) when (error.Code == "player_closed") { return 0; }
+        catch (ManagementException error) when (error.Code is "player_closed" or "update_in_progress") { return 0; }
         finally
         {
             lifetime.Cancel(); await ownerExited;

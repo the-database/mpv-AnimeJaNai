@@ -9,6 +9,16 @@ on:
       linux_only:
         description: 'Build only the Linux artifacts (skip the Windows leg)'
         default: 'false'
+      addons:
+        description: 'Include Windows addon support (preview)'
+        type: boolean
+        default: false
+      addon_bundle_url:
+        description: 'HTTPS URL of the verified addon support bundle zip'
+        type: string
+      addon_bundle_sha256:
+        description: 'SHA-256 of the addon support bundle zip'
+        type: string
 
 jobs:
   deploy:
@@ -30,7 +40,24 @@ jobs:
     - name: Run the console app
       # --packs also emits component-*.7z + packs.json (publish/packs-v<ver>/) for the
       # AnimeJaNai Manager (updater --components/--install/--remove/--auto).
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe ${{ github.event.inputs.release_version }} --packs
+      shell: pwsh
+      env:
+        ADDONS: ${{ inputs.addons }}
+        ADDON_BUNDLE_URL: ${{ inputs.addon_bundle_url }}
+        ADDON_BUNDLE_SHA256: ${{ inputs.addon_bundle_sha256 }}
+        RELEASE_VERSION: ${{ inputs.release_version }}
+      run: |
+        $arguments = @($env:RELEASE_VERSION, '--packs')
+        if ($env:ADDONS -eq 'true') {
+          if ($env:ADDON_BUNDLE_URL -notmatch '^https://' -or $env:ADDON_BUNDLE_SHA256 -notmatch '^[a-f0-9]{64}$') { throw 'Provide an HTTPS addon bundle URL and SHA-256.' }
+          Invoke-WebRequest -Uri $env:ADDON_BUNDLE_URL -OutFile addon-bundle.zip
+          if ((Get-FileHash addon-bundle.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:ADDON_BUNDLE_SHA256) { throw 'Addon bundle checksum mismatch.' }
+          Expand-Archive addon-bundle.zip addon-bundle
+          $env:AJN_ADDON_BUNDLE = (Resolve-Path addon-bundle).Path
+          $arguments += '--addons'
+        }
+        & ./publish/BuildMpvUpscale2xAnimeJaNai.exe @arguments
+        if ($LASTEXITCODE -ne 0) { throw 'Package assembly failed.' }
 
     - name: Build updater and add it to the package
       shell: pwsh
@@ -49,7 +76,10 @@ jobs:
       run: |
         choco install innosetup -y
         $ver = "${{ github.event.inputs.release_version }}"
+        $addonFlags = @()
+        if ('${{ inputs.addons }}' -eq 'true') { $addonFlags += '/DEnableAddons' }
         & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+          @addonFlags `
           "/DAppVersion=$ver" `
           "/DSourceDir=$(Resolve-Path "publish/mpv-upscale-2x_animejanai-v$ver")" `
           "/O$(Get-Location)" `

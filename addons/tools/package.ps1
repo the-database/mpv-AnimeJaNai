@@ -22,6 +22,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Lifecycle launcher publication failed.' }
 foreach ($name in @('runtime', 'source', 'tools', 'examples', 'sdk', 'licenses')) {
     [IO.Directory]::CreateDirectory((Join-Path $outputRoot $name)) | Out-Null
 }
+# The updater transaction tests share this source with the normal updater.
+# Preserve the same relative layout for the bundle's buildable test project.
+Copy-Item -LiteralPath (Join-Path $addonRoot '../shared') -Destination (Join-Path $outputRoot 'shared') -Recurse
 Copy-Item -LiteralPath $metadata.wasmtime.path -Destination (Join-Path $outputRoot 'runtime/wasmtime.exe')
 Copy-Item -LiteralPath (Join-Path (Split-Path $metadata.wasmtime.path) 'LICENSE') -Destination (Join-Path $outputRoot 'licenses/Wasmtime-LICENSE')
 Copy-Item -LiteralPath $ajnLicense -Destination (Join-Path $outputRoot 'licenses/AJN-LICENSE')
@@ -43,6 +46,7 @@ foreach ($name in @('README.md', 'USER-GUIDE.md', 'CREATOR-GUIDE.md', 'CREATOR-R
     Copy-Item -LiteralPath (Join-Path $addonRoot $name) -Destination $outputRoot
 }
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/bootstrap.ps1') -Destination (Join-Path $outputRoot 'tools')
+Copy-Item -LiteralPath (Join-Path $addonRoot 'RELEASE-INTEGRATION.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/run-example.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/test-tutorial.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/render-docs.ps1') -Destination (Join-Path $outputRoot 'tools')

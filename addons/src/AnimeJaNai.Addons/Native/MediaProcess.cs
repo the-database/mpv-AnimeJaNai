@@ -47,7 +47,8 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
         Contract.Require((source is null) != (remoteSource is null), "invalid_source", "Choose one approved media source.");
         remoteSource?.Validate();
         workRoot = Path.GetFullPath(workRoot);
-        string directory = SafeFiles.DirectoryPath(workRoot, "media-" + Guid.NewGuid().ToString("N"));
+        string directory = WorkerBridge.CreateWorkDirectory(workRoot, "media");
+        workRoot = Path.GetDirectoryName(directory)!;
         WindowsJob? job = null; Process? process = null; MediaProcess? result = null;
         NativeFrameBuffer? frames = null;
         NativeEncodedPipe? encoded = null;

@@ -55,7 +55,11 @@ execution gate. The host releases its local copy of that write handle. The
 worker transfers ownership into the shared Windows UCRT and FFmpeg duplicates
 the descriptor for its pipe protocol. Descriptors close after encoder/muxer
 flush and native destruction. This private adapter requires the packaged UCRT
-FFmpeg build; it is not a portable public file-descriptor ABI.
+FFmpeg build; it is not a portable public file-descriptor ABI. Producer metadata
+supports static FFmpeg inside libmpv as well as the older shared-FFmpeg previews.
+The static layout needs no separate `avformat` DLL. See
+[release integration](RELEASE-INTEGRATION.md) for producer validation and the
+required hardware test gates.
 
 The DLL graph remains loaded for the native process's lifetime. Individual mpv
 contexts are destroyed normally, but the adapter does not unload and reload

@@ -58,6 +58,12 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: unchecked
 Name: "assocvideo"; Description: "Associate common &video file types with {#AppName}"
 
 [Files]
+#ifdef EnableAddons
+; Stage the complete replacement before the updater drains addons and commits
+; its recoverable transaction. Normal installers retain their existing path.
+Source: "{#SourceDir}\{#UpdaterExe}"; Flags: dontcopy
+Source: "{#SourceDir}\*"; DestDir: "{tmp}\ajn-staged"; Flags: recursesubdirs createallsubdirs ignoreversion
+#else
 ; The updater needs its own entry (not just the wildcard) so ExtractTemporaryFile
 ; can run it for GPU detection during the wizard; exclude it from the wildcard to
 ; avoid listing it twice.
@@ -76,6 +82,7 @@ Source: "{#SourceDir}\portable_config\saved-props.json"; DestDir: "{app}\portabl
 Source: "{#SourceDir}\portable_config\settings.xml";     DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
 
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#UpdaterExe},animejanai\animejanai.conf,portable_config\mpv.conf,portable_config\input.conf,portable_config\saved-props.json,portable_config\settings.xml"; Flags: recursesubdirs createallsubdirs ignoreversion
+#endif
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#PlayerExe}"
@@ -242,6 +249,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   failed: Integer;
   packsToInstall: String;
+  resultCode: Integer;
 begin
   // Before the new core overwrites manifest.json, snapshot the existing one so the updater's
   // --install can tell whether an already-present component (TensorRT/RIFE) is unchanged across
@@ -257,6 +265,14 @@ begin
 
   if CurStep <> ssPostInstall then
     Exit;
+
+#ifdef EnableAddons
+  WizardForm.StatusLabel.Caption := 'Updating AnimeJaNai and preserving addon settings...';
+  if not Exec(ExpandConstant('{tmp}\ajn-staged\{#UpdaterExe}'),
+    '--apply-staged "' + ExpandConstant('{app}') + '" "' + ExpandConstant('{tmp}\ajn-staged') + '"',
+    ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, resultCode) or (resultCode <> 0) then
+    RaiseException('AnimeJaNai could not complete the update. Close the player and Manager, then run this installer again. Existing addon data is preserved.');
+#endif
 
   // Refresh the shell so the new file associations take effect.
   SHChangeNotify($08000000, $0000, 0, 0);
@@ -285,3 +301,27 @@ begin
            '(Ctrl+E in the player) later to finish installing them.',
            mbInformation, MB_OK);
 end;
+
+#ifdef EnableAddons
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  resultCode, i: Integer;
+  names: TArrayOfString;
+  current, prefix: String;
+begin
+  if CurUninstallStep <> usUninstall then Exit;
+  if FileExists(ExpandConstant('{app}\{#UpdaterExe}')) then
+    if not Exec(ExpandConstant('{app}\{#UpdaterExe}'), '--prepare-uninstall', ExpandConstant('{app}'),
+      SW_HIDE, ewWaitUntilTerminated, resultCode) or (resultCode <> 0) then
+      RaiseException('Close the player and AnimeJaNai Manager before uninstalling.');
+  // A data directory may have been shared or moved. Compare the complete
+  // quoted executable and login verb, rather than deleting a name by itself.
+  prefix := '"' + ExpandConstant('{app}\addon-host\ajn-addon-launcher.exe') + '" "login"';
+  if RegGetValueNames(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', names) then
+    for i := 0 to GetArrayLength(names) - 1 do
+      if Pos('AnimeJaNai.Addons.', names[i]) = 1 then
+        if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', names[i], current) then
+          if (CompareText(current, prefix) = 0) or (CompareText(Copy(current, 1, Length(prefix) + 1), prefix + ' ') = 0) then
+            RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', names[i]);
+end;
+#endif

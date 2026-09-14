@@ -38,6 +38,7 @@ internal static partial class Checks
             True(failed && login.IsEnabled && store.Values.Values.Single() == prior);
             store.FailWrite = false; store.Values[store.Values.Keys.Single()] = "Previous installation";
             True(!login.IsEnabled && login.Describe()["registeredElsewhere"]!.GetValue<bool>());
+            login.Update(false); True(store.Values.Values.Single() == "Previous installation");
             login.Update(true); True(login.IsEnabled);
         });
         await Test("Login command arguments preserve Windows paths and missing launchers cannot be enabled", async () =>

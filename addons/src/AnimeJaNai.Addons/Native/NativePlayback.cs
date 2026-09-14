@@ -55,6 +55,13 @@ internal sealed class NativePlayback : IDisposable
                 "input-default-bindings", "input-terminal", "terminal", "audio", "sub", "access-references" }) Set(name, "no");
             Set("sub-auto", "no"); Set("audio-file-auto", "no"); Set("cover-art-auto", "no");
             Set("vo", "null"); Set("hwdec", backend == "DirectML" ? "d3d11va" : "cuda"); Set("idle", "yes");
+            if (encoding is null)
+            {
+                // Opt in only for our discard sink. Older native previews used
+                // this behavior globally and do not expose the new option.
+                int discard = option(player, "vo-null-accept-hwframes", "yes");
+                if (discard != -5) Check(discard); // MPV_ERROR_OPTION_NOT_FOUND
+            }
             if (encoding is not null)
             {
                 Set("o", "pipe:" + outputDescriptor.ToString(CultureInfo.InvariantCulture));
