@@ -204,6 +204,10 @@ def assemble(args):
     for path in args.host_bundle.iterdir():
         if path.is_file() and path.suffix in (".ajnaddon", ".md", ".html"):
             shutil.copy2(path, output / "addon-development" / path.name)
+    # The standalone bundle's quick start uses host/ and runtime/ beside it.
+    # An integrated package opens with the Manager instructions and its own paths.
+    for suffix in (".md", ".html"):
+        shutil.copy2(args.host_bundle / ("USER-GUIDE" + suffix), output / "addon-development" / ("START-HERE" + suffix))
     write(output / "addon-host/native-capabilities.json", record)
     write(output / "addon-host/native-media.json", {"schemaVersion": 1, "sessionApi": {"major": 1, "minor": 1}, "mpvRevision": sources["mpv"]})
     script = args.main_source / "BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/portable_config/scripts/animejanai_addons.lua"
