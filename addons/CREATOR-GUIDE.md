@@ -1,7 +1,7 @@
 # Create an AJN addon
 
 Build a small addon, run it, save its settings, and package an update. This guide
-uses **plain JavaScript** and AJN API 1.6's supported API 1.0 subset. The tutorial
+uses **plain JavaScript** and AJN API 1.7's supported API 1.0 subset. The tutorial
 needs no GPU or inference engines. Video features can be added afterwards using
 the same package and permission model.
 
@@ -220,6 +220,11 @@ local packages; catalog signing and automatic updates are future work.
 | Talk to a service/device | `network`; network 1.0 | `network.connect`, approved destination; optional `credentials.use` |
 | Process a remote video | `sessions.openRemote`; remoteSources 1.0, API 1.5 | `media.input` + `sessions.manage` + `network.connect`, approved service/profile |
 | Deliver encoded video/audio | `outputs`; outputs 1.0, API 1.4 | `media.output` + session/network grants, approved input/profile/receiver; remote input adds its own requirements |
+| Receive client requests | `httpServer`; httpServer 1.0, API 1.7 | `network.listen`, reviewed listener and HTTPS certificate where applicable |
+| Forward HTTP/WebSockets | `httpProxy`; httpProxy 1.0, API 1.7 | `network.proxy` + `network.connect`, approved upstream; forwarding also uses a listener |
+| Probe and serve processed media | `mediaProbe`, `mediaStreams`, `outputPlayback`; API 1.7 | Source/profile, input/output/session grants, plus listener and remote-source grants as needed; see `STREAMING.md` |
+| Use a client's upstream credential | `requestCredentials`; API 1.7 | `credentials.delegate` + `credentials.use`, declared sensitive fields and approved destination; addon must validate the client |
+| Burn or extract subtitles | `outputPlayback`, `subtitles`; API 1.7 | Selected source/track, explicit external resource approvals and the matching native capability |
 
 Read [Recipes and examples](CREATOR-RECIPES.md), [API reference](API.md) and
 [SDK types](sdk/ajn.d.ts). Each feature guide documents its exact limits. Do not
@@ -286,6 +291,6 @@ keep callbacks synchronous and bounded, explain every requested permission,
 handle unavailable capabilities, and supply reproducible build/test steps. Check
 its output for invented Node/browser APIs and undocumented native shortcuts.
 
-See [Troubleshooting](TROUBLESHOOTING.md) for error codes and recovery. API 1.6 is
+See [Troubleshooting](TROUBLESHOOTING.md) for error codes and recovery. API 1.7 is
 still a preview contract; public stability and deprecation policy must be frozen
 before a community release.

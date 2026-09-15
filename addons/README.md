@@ -2,12 +2,12 @@
 
 ## Start here
 
-The current working tree also contains an **API 1.7 development**
-[HTTP, proxy and credential APIs](HTTP-SERVER.md), including reviewed HTTPS and network listeners. These are groundwork for the
-streaming requirements, with the full [streaming API contract](STREAMING.md).
-The sealed integration.1 release and its standalone
-developer guide remain the API 1.6 baseline; the new streaming feature set is
-not complete or released.
+This branch implements **API 1.7 preview**, including
+[HTTP, proxy and credential APIs](HTTP-SERVER.md), reviewed HTTPS listeners and
+the [streaming API](STREAMING.md). The native qualification and packaging checks
+in [STREAMING-TESTS.md](STREAMING-TESTS.md) must pass before a matching runtime is
+released. The sealed integration.1 release remains the API 1.6 baseline and does
+not contain these additions.
 
 | Your goal | Guide |
 | --- | --- |
@@ -45,7 +45,7 @@ This working preview combines lifecycle, declarative settings/actions, JSON-RPC 
 
 **Remaining integration:** API 1.7 native qualification and release packaging, discovery, unrestricted transport APIs, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
 
-API 1.6 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.5 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+API 1.7 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.6 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 
