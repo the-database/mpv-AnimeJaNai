@@ -416,7 +416,7 @@ a passing JavaScript build does not validate a media pipeline.
 
 The maintained tutorial check extracts this guide's manifest and JavaScript,
 compiles and runs them, checks denied permissions, saved state, settings, update
-and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/eddbe80ee6dd6ee980738401c346a2b6743020c9/addons/tools/test-tutorial.ps1). The host's
+and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/5b980a033cf50e663e5e51c046ed3c48da8ca9b5/addons/tools/test-tutorial.ps1). The host's
 separate suite also runs an unchanged older API 1.0 binary. Keep those old-client
 fixtures when adding a feature; do not silently change existing field meanings.
 
@@ -1626,7 +1626,8 @@ byte position. Use a replacement stream to begin at a new time.
 
 Call `setDemand(streamId, absoluteSourceSeconds)` from actual client playback
 progress. Downloading a segment is not proof that the client viewed it. Production
-pauses at roughly 15 seconds ahead and resumes below five seconds. `pause(id,
+pauses when the next packet would exceed 15 seconds ahead and resumes when
+updated demand lets that packet fit within the window. `pause(id,
 true)` is a separate user pause; `pause(id, false)` resumes the same generation.
 Periodic demand/pause ownership updates are needed during a long intentional pause.
 
@@ -3474,12 +3475,12 @@ for completing the tutorial or using the public API.
 
 | Component | Reviewed implementation revision |
 | --- | --- |
-| Host, SDK, CLI and examples | `eddbe80ee6dd6ee980738401c346a2b6743020c9` |
+| Host, SDK, CLI and examples | `5b980a033cf50e663e5e51c046ed3c48da8ca9b5` |
 | Manager | `601cedcf584a248fe3a46607fedb7e362cab3d79` |
 | Native player | `d59e80cfe4c9f784654b8d5f924f29a0065d7ff2` |
-| Windows build integration | `5784cece2a46aab0f963d1ee487d777d531fc075` |
+| Windows build integration | `6701fe294b69bcca825cfb3bf68c4fdaac6b7f34` |
 
-[Host and SDK source](https://github.com/422415/mpv-AnimeJaNai/tree/eddbe80ee6dd6ee980738401c346a2b6743020c9/addons)
+[Host and SDK source](https://github.com/422415/mpv-AnimeJaNai/tree/5b980a033cf50e663e5e51c046ed3c48da8ca9b5/addons)
 contains the implementation used for this edition. A documentation-only revision
 may package this guide without changing those runtime/API revisions. This guide
 does not assert that any particular upstream release has been published.
