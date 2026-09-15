@@ -49,7 +49,8 @@ def copy_tree(source, target):
 def verify_native(directory, record):
     if record.get("schemaVersion") != 1 or record.get("platform") != "win-x64" or record.get("cRuntime") != "ucrt" or record.get("ffmpegLinkage") not in ("shared", "static"):
         raise ValueError("Unsupported producer native metadata")
-    for capability in ("privateSampleAbi", "privatePlayerSampleAbi", "privateOutputAbi", "nullHardwareFramesOptIn"):
+    for capability in ("privateSampleAbi", "privatePlayerSampleAbi", "privateOutputAbi", "nullHardwareFramesOptIn",
+                       "privateProbeAbi", "privateMuxAbi", "privateSubtitlesAbi"):
         if record.get(capability) != 1:
             raise ValueError(f"Unsupported or missing native capability: {capability}")
     files = record.get("files", {})

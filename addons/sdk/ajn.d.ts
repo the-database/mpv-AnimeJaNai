@@ -1,7 +1,33 @@
-/** AJN addon API 1.6 preview. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.7 development. Plain JavaScript, with optional editor type checking. */
 interface AjnRemoteSource {
     type?: "http"; destinationId: string; path?: string; useCredential?: boolean;
+    /** API 1.7: temporary request-derived context. Mutually exclusive with useCredential. */
+    credentialId?: string;
 }
+type AjnProbeSource = { type: "local"; sourceId: string } | AjnRemoteSource;
+interface AjnProbeResult {
+    representationId: string; container: string | null; durationSeconds: number | null;
+    startSeconds: number | null; seekable: boolean;
+    tracks: AjnProbeTrack[];
+    chapters: { startSeconds: number | null; endSeconds: number | null; title: string | null }[];
+    attachments: { streamIndex: number; name: string | null; mimeType: string | null; byteLength: number; font: boolean }[];
+}
+interface AjnProbeTrack {
+    trackId: string; streamIndex: number; typeOrdinal: number;
+    type: "video" | "audio" | "subtitle"; codec: string | null;
+    language: string | null; title: string | null; default: boolean; forced: boolean; startSeconds: number | null;
+    width?: number | null; height?: number | null;
+    pixelFormat?: string | null;
+    pixelAspectRatio?: AjnRatio | null; displayAspectRatio?: AjnRatio | null;
+    averageFrameRate?: AjnRatio | null; nominalFrameRate?: AjnRatio | null;
+    /** null means the bounded probe cannot establish CFR or VFR. */
+    variableFrameRate?: boolean | null; fieldOrder?: "progressive" | "interlaced" | null;
+    colorPrimaries?: string | null; colorTransfer?: string | null; colorMatrix?: string | null; colorRange?: string | null;
+    rotationDegrees?: number | null; hasMasteringDisplayMetadata?: boolean; hasContentLightMetadata?: boolean;
+    channels?: number | null; sampleRate?: number | null; channelLayout?: string | null;
+    subtitleKind?: "text" | "bitmap" | null;
+}
+interface AjnRatio { numerator: number; denominator: number; }
 interface AjnRemoteFormats {
     types: string[]; protocols: string[]; containers: string[]; playlists: boolean; redirects: boolean; seek: string;
     maximumBytes: number; maximumBytesPerSecond: number; maximumReadBytes: number; maximumRequests: number;
@@ -11,12 +37,46 @@ interface AjnOutputOptions {
     encoding: {
         videoCodec: "h264" | "hevc" | "av1"; container: "matroska" | "mpegts" | "fragmentedMp4";
         videoKbps: number; audioCodec?: "none" | "aac" | "opus"; audioKbps?: number;
-        keyframeFrames?: number; lengthSeconds?: number;
+        keyframeFrames?: number; lengthSeconds?: number; audioChannels?: 2;
     };
     destination: {
         type?: "httpUpload"; destinationId: string; path?: string; method?: "POST" | "PUT";
         useCredential?: boolean;
-    };
+    } | { type: "servedStream"; mode?: "segments" | "continuous"; segmentSeconds?: number };
+    playback?: AjnOutputPlayback;
+}
+interface AjnOutputPlayback {
+    startSeconds?: number;
+    audioTrack?: "default" | "none" | { trackId: string };
+    subtitles?: { mode: "none" } | { mode: "burn"; trackId: string } | { mode: "burn"; externalSourceId: string }
+        | { mode: "burn"; externalRemoteSource: AjnRemoteSource };
+}
+interface AjnStreamOptions {
+    encoding: AjnOutputOptions["encoding"]; playback?: AjnOutputPlayback;
+    mode?: "segments" | "continuous"; segmentSeconds?: number;
+}
+interface AjnStreamHandle { sessionId: string; streamId: string; generationId: string; }
+interface AjnStreamSegment {
+    resourceId: string; generationId: string; sequence: number;
+    sourceStartSeconds: number; sourceEndSeconds: number; durationSeconds: number;
+    encodedTimestampOriginSeconds: number | null; byteLength: number;
+    independent: boolean; initializationId: string | null; etag: string;
+}
+interface AjnStreamPage {
+    generationId: string; segments: AjnStreamSegment[]; nextCursor: string;
+    initializationId: string | null; continuousResourceId: string | null;
+}
+interface AjnStreamStatus extends AjnStreamHandle {
+    state: "opening" | "starting" | "probing" | "loadingSubtitles" | "loading" | "running" | "finishing" | "paused" | "bufferPaused" | "producerCompleted" | "closing" | "closed" | "failed" | "cleanupFailed";
+    nativeCapacityReleased: boolean; requestedStartSeconds: number; demandPositionSeconds: number; userPaused: boolean;
+    retainedStartSeconds: number | null; retainedEndSeconds: number | null;
+    native: Record<string, unknown>; transfer: Record<string, number>;
+    /** Measured from a completed encoded object; null until one is inspected (continuous: at EOF). */
+    encodedMedia: { container: string | null; durationSeconds: number | null; startSeconds: number | null;
+        tracks: Omit<AjnProbeTrack, "trackId" | "language" | "title">[] } | null;
+    measurements: { processingMediaSecondsPerWallSecond: number | null; speedMeasurementWallSeconds: number | null;
+        effectiveBitrateKbps: number | null; bitrateMeasurementMediaSeconds: number | null; bitrateBasis: string };
+    error: { code: string; message: string } | null;
 }
 interface AjnOutputFormats {
     encoders: string[]; requires: string; videoCodecs: string[]; containers: string[]; audioCodecs: string[]; destinations: string[];
@@ -81,25 +141,126 @@ interface AjnHostInfo {
     features: string[];
     capabilities: Record<string, { major: number; minor: number }>;
 }
+interface AjnProxyOptions {
+    path?: string;
+    requestHeaders?: { name: string; values: string[] | null }[];
+    responseHeaders?: { name: string; values: string[] | null }[];
+    /** Explicitly opt in to incoming sensitive headers and outgoing Set-Cookie. */
+    passRequestHeaders?: string[];
+    passResponseHeaders?: string[];
+    useCredential?: boolean;
+    credentialId?: string;
+}
+interface AjnListenerBinding {
+    address: string;
+    port: number;
+    sensitiveHeaders: string[];
+    sensitiveQuery: string[];
+    scheme: "http" | "https";
+    scope: "loopback" | "lan" | "public";
+    certificateId: string | null;
+    certificateHost: string | null;
+    publicBaseUrl: string | null;
+    allowedHosts: string[] | null;
+    cors: { origins: string[]; methods: string[]; headers: string[]; exposeHeaders: string[]; allowCredentials: boolean } | null;
+}
 interface AjnApi {
     info(): AjnHostInfo;
+    /** API 1.7 development: explicitly approved HTTP(S) listeners. */
+    httpServer: {
+        selections(): { listeners: { id: string; name: string; binding: AjnListenerBinding }[] };
+        formats(): { protocols: string[]; scope: string; maximumInlineBytes: number; maximumBufferedBytes: number; maximumRequests: number; maximumActiveRequests: number; maximumListeners: number; maximumConnectionsPerListener: number; decisionSeconds: number; maximumDecisionSeconds: number; requestBodyReading: boolean; webSockets: boolean; cors: string };
+        open(listenerId: string): { serverId: string };
+        status(serverId: string): { serverId: string; listenerId: string; state: string; publicBaseUrl: string | null; reachability: "unverified"; certificateExpires: string | null; error: { code: string; message: string } | null };
+        requestClose(serverId: string): void;
+        requestStatus(requestId: string): { requestId: string; state: "pending" | "claimed"; bodyState: "unread" | "reading" | "ready" | "failed"; bodyLength: number | null; bodyError: string | null; decisionRemainingSeconds: number | null };
+        cancelRequest(requestId: string): void;
+        /** Extend from now, capped at 120 seconds after arrival. Does not renew an expired request. */
+        extend(requestId: string, seconds: number): void;
+        readBody(requestId: string): void;
+        bodyChunk(requestId: string, offset: number, count?: number): { body: Uint8Array; byteLength: number; totalBytes: number; offset: number; eof: boolean };
+        /** Begin claims the request. Append chunks up to 32 KiB, total up to 256 KiB, then finish within the decision deadline. */
+        beginResponse(requestId: string, response: { status: number; headers?: { name: string; values: string[] }[] }): void;
+        appendResponse(requestId: string, body: Uint8Array | string): void;
+        finishResponse(requestId: string): void;
+        /** Claims the request once; up to 32 KiB body. Framing and CORS headers are host-owned. */
+        respond(requestId: string, response: { status: number; headers?: { name: string; values: string[] }[]; body?: Uint8Array | string }): void;
+    };
     log(message: string): void;
+    /** API 1.7 development. Requires network.proxy and network.connect; forward also requires network.listen. */
+    httpProxy: {
+        formats(): { nativeForwarding: boolean; webSockets: boolean; maximumBufferedBytes: number; maximumChunkBytes: number; maximumOperations: number; maximumBufferedOperations: number; headerTimeoutSeconds: number; ioTimeoutSeconds: number; maximumLifetimeSeconds: number; maximumTransferBytes: number; maximumWebSocketMessageBytes: number };
+        forward(requestId: string, destinationId: string, options?: AjnProxyOptions): { operationId: string };
+        buffer(destinationId: string, options?: AjnProxyOptions & { method?: string; body?: Uint8Array | string; maximumBytes?: number }): { operationId: string };
+        status(operationId: string): { operationId: string; state: "pending" | "completed" | "failed"; status: number | null; headers: { name: string; values: string[] }[]; bodyLength: number | null; representationLength: number | null; cleanupReady: boolean; error: { code: string; message: string } | null };
+        read(operationId: string, offset: number, count?: number): { body: Uint8Array; byteLength: number; totalBytes: number; offset: number; eof: boolean };
+        cancel(operationId: string): void;
+        /** Wait for cleanupReady before releasing a completed/cancelled operation. */
+        close(operationId: string): void;
+    };
+    /** API 1.7 development. Capture is not authentication. Validate the client with the upstream before serving protected content. */
+    requestCredentials: {
+        formats(): { maximumContexts: number; maximumLifetimeSeconds: number; maximumFields: number; maximumBytes: number; captureAuthenticatesClient: false };
+        capture(requestId: string, destinationId: string, mappings: { from: "header" | "query"; name: string; to: "header" | "query"; target: string }[], seconds?: number): { credentialId: string };
+        status(credentialId: string): { credentialId: string; destinationId: string; expires: string; present: true; authenticated: false; fields: { kind: string; name: string; present: true }[] };
+        release(credentialId: string): void;
+    };
     /** Host-owned declarative settings. Only the user/host can change them. */
     settings: { get(): Record<string, boolean | number | string> };
     /** API 1.5, remoteSources capability 1.0 and media.input permission.
      * The trusted reader streams media; bytes never enter the Wasm runtime. */
     remoteSources: { formats(): AjnRemoteFormats };
-    /** Requires media.output, sessions.manage, network.connect and output
-     * capability 1.0. Source/profile/service consent is checked independently.
-     * Returned IDs use sessions.status/pause/requestClose; seek needs a new
-     * stream. Encoded bytes flow in trusted code, never through this SDK. */
+    /** API 1.7. Probes have their own capacity and do not start an encoder. */
+    mediaProbe: {
+        formats(): { maximumJobs: number; maximumSeconds: number; maximumResultBytes: number; maximumChunkBytes: number; startsEncoder: false };
+        open(source: AjnProbeSource): { probeId: string };
+        status(probeId: string): { probeId: string; state: "pending" | "completed" | "failed"; byteLength: number | null; error: { code: string; message: string } | null };
+        /** Complete result, assembled through at most eight bounded native reads. Wait for completed status first. */
+        result(probeId: string): AjnProbeResult;
+        read(probeId: string, offset: number, count?: number): { body: Uint8Array; byteLength: number; totalBytes: number; offset: number; eof: boolean };
+        cancel(probeId: string): void;
+        /** Cancel if active, then wait for terminal status before closing. */
+        close(probeId: string): void;
+    };
+    /** Requires media.input and sessions.manage; remote sources also require network.connect.
+     * Source consent and request credential scope are checked independently. */
+    subtitles: {
+        formats(): { burn: boolean; extract: string[]; textCodecs: string[]; bitmapExtraction: boolean; preservesAssLayout: boolean;
+            timestampTimeline: "source"; maximumJobs: number; maximumHostJobs: number; maximumResultBytes: number; maximumChunkBytes: number; maximumSeconds: number };
+        /** Omit trackId only for a standalone approved subtitle file. Text conversion loses ASS positioning/fonts/drawing. */
+        open(source: AjnProbeSource, options?: { trackId?: string; startSeconds?: number; endSeconds?: number; allowStylingLoss?: boolean }): { subtitleId: string };
+        status(subtitleId: string): { subtitleId: string; state: "pending" | "completed" | "failed"; byteLength: number | null;
+            contentType: string; timestampTimeline: "source"; error: { code: string; message: string } | null };
+        read(subtitleId: string, offset: number, count?: number): { body: Uint8Array; byteLength: number; offset: number; totalBytes: number; eof: boolean };
+        /** Authorize each client request first; the host serves WebVTT bytes directly. */
+        serve(requestId: string, subtitleId: string): void;
+        cancel(subtitleId: string): void;
+        /** Cancel and wait for pending work/responses first. Retry subtitles_active until cleanup completes. */
+        close(subtitleId: string): void;
+    };
+    mediaStreams: {
+        formats(): Record<string, unknown>;
+        open(source: AjnProbeSource, profileId: string | null, options: AjnStreamOptions): AjnStreamHandle;
+        status(streamId: string): AjnStreamStatus;
+        segments(streamId: string, cursor?: string | null, limit?: number): AjnStreamPage;
+        /** Absolute source playback position, within the produced timeline. Refresh while paused to retain ownership. */
+        setDemand(streamId: string, seconds: number): void;
+        pause(streamId: string, paused: boolean): void;
+        /** Authorize the client before each call. Handles confer no client authentication. */
+        serve(requestId: string, streamId: string, generationId: string, resourceId: string): void;
+        requestClose(streamId: string): void;
+    };
     outputs: {
+        open(sourceId: string, profileId: string | null, options: AjnOutputOptions & { destination: { type: "servedStream" } }): AjnStreamHandle;
+        openRemote(source: AjnRemoteSource, profileId: string | null, options: AjnOutputOptions & { destination: { type: "servedStream" } }): AjnStreamHandle;
         formats(): AjnOutputFormats;
         open(sourceId: string, profileId: string | null, options: AjnOutputOptions): { sessionId: string };
         /** Also requires media.input and remoteSources capability 1.0.
          * Input and receiver must each be independently approved. */
         openRemote(source: AjnRemoteSource, profileId: string | null, options: AjnOutputOptions): { sessionId: string };
     };
+    outputPlayback: { formats(): { startOffsets: boolean; audioTrackSelection: boolean; audioChannels: number[]; subtitleModes: string[];
+        externalSubtitleSources: string[]; maximumExternalSubtitleBytes: number; seekStrategy: "closeAndReopen"; maximumStartSeconds: number } };
     /** Requires network.connect plus destination consent. Saved credentials
      * also require credentials.use. No redirects, cookies or OS credentials. */
     network: {

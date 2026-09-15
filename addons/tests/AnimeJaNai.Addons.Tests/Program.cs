@@ -37,6 +37,8 @@ internal static partial class Checks
     private static Task Error(string code, Action action) => Error(code, () => { action(); return Task.CompletedTask; });
     private static async Task Test(string name, Func<Task> action)
     {
+        string? filter = Environment.GetEnvironmentVariable("AJN_TEST_FILTER");
+        if (!string.IsNullOrEmpty(filter) && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)) return;
         var timer = Stopwatch.StartNew();
         try
         {
@@ -67,9 +69,23 @@ internal static partial class Checks
         await PlayerFrameChecks();
         if (OperatingSystem.IsWindows()) await PlayerMappingChecks();
         await NetworkChecks();
+        await HttpServerChecks();
+        await HttpRequestChecks();
+        await HttpProxyChecks();
+        await ListenerPolicyChecks();
+        await RequestCredentialChecks();
         await EncodingChecks();
         await OutputChecks();
         await RemoteInputChecks();
+        await MediaProbeChecks();
+        await OutputPlaybackChecks();
+        await MuxQuotaChecks();
+        await SegmentIndexChecks();
+        await StreamCacheChecks();
+        await MuxDemandChecks();
+        await StreamHttpChecks();
+        await MediaStreamsChecks();
+        await SubtitleChecks();
         await HostSettingsChecks();
         await LifecycleChecks();
         await LoginChecks();
@@ -81,10 +97,14 @@ internal static partial class Checks
         if (args.Length == 4) await FrameRuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await NetworkRuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await ServiceInspectorChecks(args[1], args[2], args[3]);
+        if (args.Length == 4) await HttpServerRuntimeChecks(args[1], args[2], args[3]);
+        if (args.Length == 4) await HttpBridgeRuntimeChecks(args[1], args[2], args[3]);
+        if (args.Length == 4) await MediaStreamRuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await OutputRuntimeChecks(args[1], args[2], args[3]);
         string report = Path.Combine(root, "results.json");
         await File.WriteAllTextAsync(report, JsonSerializer.Serialize(new { passed = results.Count - failed, failed, results }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"{results.Count - failed} passed; {failed} failed. {report}");
+        if (results.Count == 0) { Console.WriteLine("No tests matched the filter."); return 2; }
         return failed == 0 ? 0 : 1;
     }
 

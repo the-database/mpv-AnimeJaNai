@@ -61,12 +61,26 @@ foreach ($folder in $assets.packageFolders.PSObject.Properties.Name) {
 }
 if (-not $runtimePackageDirectory) { throw 'Could not locate the .NET runtime license and notices.' }
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'LICENSE.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-LICENSE.TXT')
+foreach ($aspPackage in @($deps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'runtimepack.Microsoft.AspNetCore.App.Runtime.win-x64/*' })) {
+    $aspVersion = $aspPackage.Split('/')[-1]
+    $aspDirectory = $null
+    foreach ($folder in $assets.packageFolders.PSObject.Properties.Name) {
+        $candidate = Join-Path $folder "microsoft.aspnetcore.app.runtime.win-x64/$aspVersion"
+        if (Test-Path -LiteralPath (Join-Path $candidate 'LICENSE.TXT')) { $aspDirectory = $candidate; break }
+    }
+    if (-not $aspDirectory) { throw 'Could not locate the ASP.NET Core runtime license and notices.' }
+    Copy-Item -LiteralPath (Join-Path $aspDirectory 'LICENSE.TXT') -Destination (Join-Path $outputRoot 'licenses/aspnetcore-LICENSE.TXT')
+    Copy-Item -LiteralPath (Join-Path $aspDirectory 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $outputRoot 'licenses/aspnetcore-THIRD-PARTY-NOTICES.TXT')
+}
 Copy-Item -LiteralPath (Join-Path $runtimePackageDirectory 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $outputRoot 'licenses/dotnet-THIRD-PARTY-NOTICES.TXT')
-foreach ($name in @('README.md', 'USER-GUIDE.md', 'CREATOR-GUIDE.md', 'CREATOR-RECIPES.md', 'TROUBLESHOOTING.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'LIFECYCLE.md', 'NATIVE-MEDIA.md', 'NATIVE-OUTPUT.md', 'OUTPUTS.md', 'REMOTE-INPUTS.md', 'FRAMES.md', 'PLAYER-FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
+foreach ($name in @('README.md', 'DEVELOPER-GUIDE.md', 'USER-GUIDE.md', 'CREATOR-GUIDE.md', 'CREATOR-RECIPES.md', 'TROUBLESHOOTING.md', 'API.md', 'ARCHITECTURE.md', 'ROADMAP.md', 'MANAGEMENT.md', 'LIFECYCLE.md', 'NATIVE-MEDIA.md', 'NATIVE-OUTPUT.md', 'OUTPUTS.md', 'REMOTE-INPUTS.md', 'FRAMES.md', 'PLAYER-FRAMES.md', 'FRAME-PERFORMANCE.md', 'NETWORK.md')) {
     Copy-Item -LiteralPath (Join-Path $addonRoot $name) -Destination $outputRoot
 }
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/bootstrap.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'RELEASE-INTEGRATION.md') -Destination $outputRoot
+Copy-Item -LiteralPath (Join-Path $addonRoot 'HTTP-SERVER.md') -Destination $outputRoot
+Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING.md') -Destination $outputRoot
+Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING-TESTS.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/run-example.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/test-tutorial.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/render-docs.ps1') -Destination (Join-Path $outputRoot 'tools')
@@ -78,6 +92,9 @@ Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/service-inspector') -Dest
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/output-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/remote-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/player-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
+Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/http-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
+Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/http-bridge') -Destination (Join-Path $outputRoot 'examples') -Recurse
+Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/media-stream') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -Path (Join-Path $addonRoot 'sdk/*') -Destination (Join-Path $outputRoot 'sdk') -Recurse
 # Include buildable AJN source without caches, binaries, or user data.
 $sourceRoot = Join-Path $outputRoot 'source'
@@ -105,6 +122,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Output inspector compilation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Remote inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/player-inspector') $metadata.javy.path (Join-Path $outputRoot 'player-inspector.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'Player inspector compilation failed.' }
+& (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/http-inspector') $metadata.javy.path (Join-Path $outputRoot 'http-inspector.ajnaddon')
+if ($LASTEXITCODE -ne 0) { throw 'HTTP listener inspector compilation failed.' }
+& (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/http-bridge') $metadata.javy.path (Join-Path $outputRoot 'http-bridge.ajnaddon')
+if ($LASTEXITCODE -ne 0) { throw 'HTTP bridge compilation failed.' }
+& (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/media-stream') $metadata.javy.path (Join-Path $outputRoot 'media-stream.ajnaddon')
+if ($LASTEXITCODE -ne 0) { throw 'Media stream example compilation failed.' }
 & (Join-Path $addonRoot 'tools/render-docs.ps1') -Directory $outputRoot
 if ((Git-Value -CommandArgs @('rev-parse', 'HEAD')) -ne $sourceCommit -or (Git-Value -CommandArgs @('status', '--porcelain', '--untracked-files=no'))) {
     throw 'The committed source changed while the host was being packaged.'

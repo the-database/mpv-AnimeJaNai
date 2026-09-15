@@ -14,7 +14,7 @@ public sealed class MediaSelections(string root)
 {
     private sealed record State(int Version, string Hash, List<ApprovedSource> Sources, List<ApprovedProfile> Profiles);
     private static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase)
-        { ".mkv", ".webm", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".mts", ".m2ts" };
+        { ".mkv", ".webm", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".mts", ".m2ts", ".srt", ".ass", ".ssa", ".vtt" };
     private string DirectoryFor(AddonPackage package, PermissionGrant grant)
     {
         Contract.Require(package.Hash == grant.PackageHash, "invalid_grant", "Resource consent belongs to a different package.");
@@ -89,6 +89,14 @@ public sealed class MediaSelections(string root)
         var source = state.Sources.Find(s => s.Id == sourceId);
         Contract.Require(source is not null, "source_not_granted", "This media source has not been approved for this addon version.");
         return new(source, SelectProfile(state, profileId));
+    }
+    public ApprovedSource ResolveSource(AddonPackage package, PermissionGrant grant, string sourceId)
+    {
+        string directory = DirectoryFor(package, grant);
+        using var held = SafeFiles.Lock(directory);
+        var source = Read(directory, package.Hash).Sources.Find(s => s.Id == sourceId);
+        Contract.Require(source is not null, "source_not_granted", "This media source is not approved for this addon version.");
+        return source;
     }
 
     public ApprovedProfile ResolveProfile(AddonPackage package, PermissionGrant grant, string? profileId)

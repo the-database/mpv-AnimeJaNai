@@ -7,12 +7,13 @@ namespace AnimeJaNai.Addons;
 // A destination is an approved opaque selection, never an arbitrary URL/path.
 public sealed record OutputRequest(string DestinationId, string Path, string Method, bool UseCredential,
     string VideoCodec, string Container, int VideoKbps, string AudioCodec = "none", int AudioKbps = 128,
-    int KeyframeFrames = 60, double LengthSeconds = 0)
+    int KeyframeFrames = 60, double LengthSeconds = 0, OutputPlayback? Playback = null, int? AudioChannels = null)
 {
-    internal NativeEncoding NativeOptions => new(VideoCodec, Container, VideoKbps, AudioCodec, AudioKbps, KeyframeFrames, LengthSeconds);
+    internal NativeEncoding NativeOptions => new(VideoCodec, Container, VideoKbps, AudioCodec, AudioKbps, KeyframeFrames, LengthSeconds, AudioChannels);
     public void Validate()
     {
         NativeOptions.Validate();
+        Playback?.Validate();
         Contract.Require(DestinationId.Length is > 0 and <= 64 && Path.Length is > 0 and <= 2048 && Method is "POST" or "PUT",
             "invalid_output", "Choose an approved service, a relative path and POST or PUT.");
     }
@@ -25,7 +26,8 @@ public sealed record OutputRequest(string DestinationId, string Path, string Met
         var encoding = NativeEncoding.Parse((JsonObject)value["encoding"]!);
         var result = new OutputRequest(Contract.Text(destination, "destinationId", 64), Contract.Text(destination, "path", 2048),
             Contract.Text(destination, "method", 16), destination["useCredential"]!.GetValue<bool>(), encoding.VideoCodec, encoding.Container,
-            encoding.VideoKbps, encoding.AudioCodec, encoding.AudioKbps, encoding.KeyframeFrames, encoding.LengthSeconds);
+            encoding.VideoKbps, encoding.AudioCodec, encoding.AudioKbps, encoding.KeyframeFrames, encoding.LengthSeconds,
+            value["playback"] is null ? null : OutputPlayback.Parse(value["playback"]!.AsObject()), encoding.AudioChannels);
         result.Validate(); return result;
     }
 }

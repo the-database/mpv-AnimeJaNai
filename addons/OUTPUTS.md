@@ -69,10 +69,13 @@ session. Other encoders/transports can be added through capability negotiation.
 | Duration | 0 for the source's remaining duration, or up to 86,400 seconds |
 | Receiver | Approved HTTP/HTTPS origin, relative path, POST or PUT |
 
-Encoding starts at the beginning of the selected source. Seeking requires a new
-output; pause/resume retains the current timeline. The receiver sees one muxed
-video stream and optional selected audio track. Software subtitles/OSD are
-disabled on the direct hardware path. Encoding proceeds at the producer's rate
+Without playback options, encoding starts at the beginning of the selected source.
+API 1.7 adds explicit start offsets, audio/subtitle choices, and a `servedStream`
+destination; see [STREAMING.md](STREAMING.md) for the complete contract. Seeking
+requires closing and reopening output; pause/resume retains the current timeline.
+The receiver sees one muxed video stream and optional selected audio track.
+Subtitle burn-in uses the separately selected software composition path.
+Encoding proceeds at the producer's rate
 with transport backpressure; this is not a guarantee of realtime pacing or a
 particular client latency. Format/color limitations and native details are in
 [NATIVE-OUTPUT.md](NATIVE-OUTPUT.md).

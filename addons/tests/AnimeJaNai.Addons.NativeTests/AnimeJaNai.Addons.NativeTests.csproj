@@ -12,4 +12,6 @@
   <ItemGroup><Content Include="../../examples/output-inspector/*" Link="output-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/remote-inspector/*" Link="remote-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/player-inspector/*" Link="player-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/media-stream/*" Link="media-stream/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><None Update="fixtures/*" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

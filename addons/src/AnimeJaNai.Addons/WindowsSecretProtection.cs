@@ -33,7 +33,9 @@ internal static class WindowsSecretProtection
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }
 
-    private static unsafe byte[] Transform(byte[] bytes, string context, bool encrypt)
+    internal static byte[] ProtectBytes(byte[] bytes, string context) => Transform(bytes, context, true, 1024 * 1024 + 4096);
+    internal static byte[] UnprotectBytes(byte[] bytes, string context) => Transform(bytes, context, false, 1024 * 1024 + 4096);
+    private static unsafe byte[] Transform(byte[] bytes, string context, bool encrypt, int maximum = 16384)
     {
         if (!OperatingSystem.IsWindows()) throw new AddonException("feature_unavailable", "Protected credentials currently require Windows.");
         byte[] entropy = SHA256.HashData(Encoding.UTF8.GetBytes(context));
@@ -46,7 +48,7 @@ internal static class WindowsSecretProtection
             {
                 bool ok = encrypt ? CryptProtectData(ref input, null, ref extra, IntPtr.Zero, IntPtr.Zero, 1, out output)
                     : CryptUnprotectData(ref input, IntPtr.Zero, ref extra, IntPtr.Zero, IntPtr.Zero, 1, out output);
-                Contract.Require(ok && output.Length is > 0 and <= 16384 && output.Data != IntPtr.Zero,
+                Contract.Require(ok && output.Length > 0 && output.Length <= maximum && output.Data != IntPtr.Zero,
                     "credential_unavailable", "The saved credential cannot be protected or opened for this Windows user.");
                 var result = new byte[output.Length]; Marshal.Copy(output.Data, result, 0, result.Length); return result;
             }
@@ -54,7 +56,7 @@ internal static class WindowsSecretProtection
             {
                 if (output.Data != IntPtr.Zero)
                 {
-                    if (output.Length is > 0 and <= 16384) CryptographicOperations.ZeroMemory(new Span<byte>((void*)output.Data, output.Length));
+                    if (output.Length > 0 && output.Length <= maximum) CryptographicOperations.ZeroMemory(new Span<byte>((void*)output.Data, output.Length));
                     LocalFree(output.Data);
                 }
                 CryptographicOperations.ZeroMemory(entropy);

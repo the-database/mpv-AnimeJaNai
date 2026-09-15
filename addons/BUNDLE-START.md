@@ -1,5 +1,9 @@
 # Try the addon foundation
 
+For the complete standalone reference, open **DEVELOPER-GUIDE.html**. It includes
+the tutorial, API declarations, feature examples and release/testing instructions
+in one document, including instructions for use with an LLM.
+
 For a step-by-step first addon, open **CREATOR-GUIDE.html** in your browser.
 It runs entirely from this bundle with PowerShell 7 and the downloaded compiler.
 For installation and Manager controls, read **USER-GUIDE.html**.
@@ -18,6 +22,14 @@ See `OUTPUTS.md` for source/profile/receiver permissions and supported formats.
 The player inspector observes small images from ordinary AJN playback after its
 two permissions are approved. It requires a matching integrated native build.
 See `PLAYER-FRAMES.md` for shared observations, limits and the example actions.
+
+The HTTP inspector and bridge demonstrate approved listeners, responses, native
+proxying and client credential validation. The media stream example probes an
+approved source and serves processed output through AJN. Open `HTTP-SERVER.html`
+and `STREAMING.html` for setup and contracts. These examples default to loopback;
+the media example is a local diagnostic, not a production client authorization
+policy. Streaming additionally requires the matching native runtime and a
+supported GPU/profile. The release's test report identifies what was measured.
 
 Extract the ZIP to a writable folder. Open PowerShell 7 there and run:
 

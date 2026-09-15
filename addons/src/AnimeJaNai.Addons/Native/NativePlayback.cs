@@ -11,6 +11,7 @@ internal sealed class NativePlayback : IDisposable
 {
     private readonly IntPtr library;
     private readonly SelectedFileStream selectedFile;
+    private readonly SelectedFileStream? selectedSubtitles;
     private IntPtr player;
     private readonly Destroy destroy;
     private readonly Command command;
@@ -23,7 +24,8 @@ internal sealed class NativePlayback : IDisposable
     public bool Failed { get; private set; }
 
     public NativePlayback(string installRoot, string? source, string configuration, string workDirectory, int slot, string backend,
-        long sampleMapping = 0, NativeEncoding? encoding = null, int outputDescriptor = -1, Stream? sourceStream = null)
+        long sampleMapping = 0, NativeEncoding? encoding = null, int outputDescriptor = -1, Stream? sourceStream = null,
+        OutputPlayback? playback = null, JsonObject? resolvedPlayback = null, Action? sourceCancel = null, Stream? externalSubtitles = null)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) throw new PlatformNotSupportedException("Native media currently requires Windows x64.");
         Contract.Require(sourceStream is null ? source is not null && Path.IsPathFullyQualified(source) && File.Exists(source)
@@ -71,24 +73,41 @@ internal sealed class NativePlayback : IDisposable
                     "fragmentedMp4" => "movflags=frag_keyframe+empty_moov+default_base_moof,frag_duration=1000000,flush_packets=1",
                     _ => "mpegts_flags=+resend_headers,flush_packets=1",
                 });
-                Set("ovc", encoding.VideoCodec + "_nvenc"); Set("ovc-hwframes", "yes");
+                Set("ovc", encoding.VideoCodec + "_nvenc"); Set("ovc-hwframes", playback?.SubtitleMode == "burn" ? "no" : "yes");
                 Set("ovcopts", "preset=p4,tune=ll,bf=0,rc-lookahead=0,b=" + (encoding.VideoKbps * 1000).ToString(CultureInfo.InvariantCulture)
-                    + ",g=" + encoding.KeyframeFrames.ToString(CultureInfo.InvariantCulture));
+                    + ",g=" + encoding.KeyframeFrames.ToString(CultureInfo.InvariantCulture) + (encoding.KeyframeSeconds > 0 ? ",forced-idr=1" : ""));
+                if (encoding.KeyframeSeconds > 0) Set("ovc-keyframe-seconds", encoding.KeyframeSeconds.ToString("R", CultureInfo.InvariantCulture));
                 Set("ocopy-metadata", "no");
-                if (encoding.AudioCodec != "none")
+                if (encoding.AudioCodec != "none" && playback?.AudioTrack != "none")
                 {
-                    Set("audio", "auto"); Set("oac", encoding.AudioCodec == "opus" ? "libopus" : "aac");
+                    Set("audio", resolvedPlayback?["audioTrack"]?["typeOrdinal"]?.GetValue<long>().ToString(CultureInfo.InvariantCulture) ?? "auto");
+                    Set("oac", encoding.AudioCodec == "opus" ? "libopus" : "aac");
                     Set("oacopts", "b=" + (encoding.AudioKbps * 1000).ToString(CultureInfo.InvariantCulture));
+                    if (encoding.AudioChannels == 2) Set("audio-channels", "stereo");
                 }
                 if (encoding.LengthSeconds > 0) Set("length", encoding.LengthSeconds.ToString("R", CultureInfo.InvariantCulture));
                 status["encoding"] = encoding.ToJson();
+                if (playback is not null)
+                {
+                    if (playback.StartSeconds > 0) Set("start", playback.StartSeconds.ToString("R", CultureInfo.InvariantCulture));
+                    Set("hr-seek", "yes"); Set("hr-seek-framedrop", "no");
+                    status["playback"] = resolvedPlayback?.DeepClone();
+                    if (playback.SubtitleMode == "burn")
+                    {
+                        string sid = externalSubtitles is not null ? resolvedPlayback!["externalSubtitleOrdinal"]!.GetValue<int>().ToString(CultureInfo.InvariantCulture)
+                            : resolvedPlayback!["subtitleTrack"]!["typeOrdinal"]!.GetValue<long>().ToString(CultureInfo.InvariantCulture);
+                        Set("sub", sid); Set("sub-visibility", "yes"); Set("sub-ass", "yes"); Set("embeddedfonts", "yes");
+                        if (externalSubtitles is not null) Set("sub-files", "ajnsubtitle://media");
+                    }
+                }
             }
             // Use our already-opened file, restrict container parsers, and deny
             // nested protocol opens. Playlists and external references cannot
             // turn a selected file into additional file/network access.
             Set("demuxer", "lavf");
-            const string formats = "matroska,webm,mov,avi,mpegts";
-            Set("demuxer-lavf-o", "protocol_whitelist=ajnselected,format_whitelist=%" + formats.Length + "%" + formats);
+            const string formats = "matroska,webm,mov,avi,mpegts,srt,ass,webvtt";
+            const string protocols = "ajnselected,ajnsubtitle";
+            Set("demuxer-lavf-o", "protocol_whitelist=%" + protocols.Length + "%" + protocols + ",format_whitelist=%" + formats.Length + "%" + formats);
             string inference = Path.Combine(installRoot, "animejanai", "inference");
             var parameters = new Dictionary<string, string>
             {
@@ -101,8 +120,13 @@ internal sealed class NativePlayback : IDisposable
             if (sampleMapping > 0) filters += ",@ajn-sample:ajn-sample:mapping=" + sampleMapping.ToString(CultureInfo.InvariantCulture);
             Set("vf", filters);
             selectedFile = sourceStream is null ? new SelectedFileStream(source!)
-                : new SelectedFileStream(sourceStream, sourceStream is RemoteMediaStream remote ? remote.Cancel : null);
+                : new SelectedFileStream(sourceStream, sourceCancel ?? (sourceStream is RemoteMediaStream remote ? remote.Cancel : null));
             Check(selectedFile.Register(library, player));
+            if (externalSubtitles is not null)
+            {
+                selectedSubtitles = new SelectedFileStream(externalSubtitles, selectedUri: "ajnsubtitle://media");
+                Check(selectedSubtitles.Register(library, player));
+            }
             Check(initialize(player));
             ulong number = 0;
             foreach (var property in Properties)
@@ -113,6 +137,7 @@ internal sealed class NativePlayback : IDisposable
         {
             if (player != IntPtr.Zero) destroy!(player);
             selectedFile?.Dispose();
+            selectedSubtitles?.Dispose();
             throw;
         }
     }
@@ -197,7 +222,7 @@ internal sealed class NativePlayback : IDisposable
         lock (controlGate)
         {
             if (player == IntPtr.Zero) return;
-            destroy(player); player = IntPtr.Zero; selectedFile.Dispose();
+            destroy(player); player = IntPtr.Zero; selectedFile.Dispose(); selectedSubtitles?.Dispose();
         }
     }
 
@@ -207,6 +232,11 @@ internal sealed class NativePlayback : IDisposable
         new("video-params/w", "inputWidth", 4), new("video-params/h", "inputHeight", 4),
         new("video-out-params/w", "outputWidth", 4), new("video-out-params/h", "outputHeight", 4),
         new("video-out-params/pixelformat", "pixelFormat", 1), new("hwdec-current", "decoder", 1),
+        new("video-out-params/aspect", "displayAspectRatio", 5), new("container-fps", "containerFrameRate", 5),
+        new("video-out-params/par", "pixelAspectRatio", 5), new("video-params/par", "inputPixelAspectRatio", 5),
+        new("audio-params/channel-count", "inputAudioChannels", 4), new("audio-params/samplerate", "inputAudioSampleRate", 4),
+        new("audio-out-params/channel-count", "audioChannels", 4), new("audio-out-params/samplerate", "audioSampleRate", 4),
+        new("audio-out-params/channels", "audioLayout", 1),
         new("decoder-frame-drop-count", "decoderDroppedFrames", 4), new("frame-drop-count", "outputDroppedFrames", 4),
     ];
     [StructLayout(LayoutKind.Sequential)] private struct Event { public int Id, Error; public ulong UserData; public IntPtr Data; }

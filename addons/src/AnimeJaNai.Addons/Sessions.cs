@@ -33,6 +33,7 @@ public interface IProcessingSessionProvider
     int ApiMinor => 0;
     bool SupportsFrames => false;
     bool SupportsOutputs => false;
+    bool SupportsOutputPlayback => false;
     bool SupportsRemoteSources => false;
     JsonObject RemoteSourceFormats() => throw new AddonException("feature_unavailable", "Remote media sources are unavailable.");
     Task<IProcessingSession> OpenRemoteAsync(RemoteInputRequest source, string? profileId, CancellationToken cancellationToken) =>
@@ -44,6 +45,7 @@ public interface IProcessingSessionProvider
         throw new AddonException("feature_unavailable", "Encoded output is unavailable.");
     Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken cancellationToken);
     IProcessingSessionProvider ForAddon(AddonPackage package, PermissionGrant grant) => this;
+    IProcessingSessionProvider ForAddon(AddonPackage package, PermissionGrant grant, RequestCredentials credentials) => ForAddon(package, grant);
 }
 
 public sealed class SessionRegistry(IProcessingSessionProvider provider, int totalLimit = 16, int perOwnerLimit = 4)
@@ -69,9 +71,14 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
     private int pending;
     public Owner CreateOwner() => new(provider);
     public Owner CreateOwner(AddonPackage package, PermissionGrant grant) => new(provider.ForAddon(package, grant));
+    public Owner CreateOwner(AddonPackage package, PermissionGrant grant, RequestCredentials credentials) => new(provider.ForAddon(package, grant, credentials));
+    internal IMediaProbeProvider? ProbeProvider(Owner owner) => owner.Provider is IMediaProbeProvider { SupportsProbes: true } probe ? probe : null;
     public int CapabilityMinor(Owner owner) => owner.Provider.ApiMinor;
     public bool SupportsFrames(Owner owner) => owner.Provider.SupportsFrames;
     public bool SupportsOutputs(Owner owner) => owner.Provider.SupportsOutputs;
+    public bool SupportsOutputPlayback(Owner owner) => owner.Provider.SupportsOutputPlayback;
+    internal IMediaStreamProvider? StreamProvider(Owner owner) => owner.Provider is IMediaStreamProvider { SupportsStreams: true } streams ? streams : null;
+    internal ISubtitleProvider? SubtitleProvider(Owner owner) => owner.Provider is ISubtitleProvider { SupportsSubtitles: true } subtitles ? subtitles : null;
     public bool SupportsRemoteSources(Owner owner) => owner.Provider.SupportsRemoteSources;
     public JsonObject RemoteSourceFormats(Owner owner)
     {
@@ -159,6 +166,7 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
     {
         output.Validate();
         Contract.Require(owner.Provider.SupportsOutputs, "feature_unavailable", "Encoded output is unavailable.");
+        Contract.Require(output.Playback is null || owner.Provider.SupportsOutputPlayback, "feature_unavailable", "Output playback controls are unavailable.");
         return OpenCoreAsync(owner, token => owner.Provider.OpenOutputAsync(source, profile, output, token), cancellationToken);
     }
 
@@ -167,6 +175,7 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
         source.Validate(); output?.Validate();
         Contract.Require(owner.Provider.SupportsRemoteSources, "feature_unavailable", "Remote media sources are unavailable.");
         Contract.Require(output is null || owner.Provider.SupportsOutputs, "feature_unavailable", "Encoded output is unavailable.");
+        Contract.Require(output?.Playback is null || owner.Provider.SupportsOutputPlayback, "feature_unavailable", "Output playback controls are unavailable.");
         return OpenCoreAsync(owner, token => output is null ? owner.Provider.OpenRemoteAsync(source, profile, token)
             : owner.Provider.OpenRemoteOutputAsync(source, profile, output, token), cancellationToken);
     }

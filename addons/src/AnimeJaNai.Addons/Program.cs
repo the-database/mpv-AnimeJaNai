@@ -6,6 +6,8 @@ try
 {
     if (args.Length == 3 && args[0] == "worker") return await WorkerBridge.RunAsync(args[1], args[2]);
     if (args.Length == 1 && args[0] == "media-worker") return await AnimeJaNai.Addons.Native.MediaWorker.RunAsync();
+    if (args.Length == 1 && args[0] == "probe-worker") return await AnimeJaNai.Addons.Native.NativeProbeWorker.RunAsync();
+    if (args.Length == 1 && args[0] == "subtitle-worker") return await AnimeJaNai.Addons.Native.NativeProbeWorker.RunAsync(subtitles: true);
     if (args.Length == 0) { Help(); return 0; }
     string baseDirectory = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
     string? ownedInstallation = Path.GetFileName(baseDirectory).Equals("addon-host", StringComparison.OrdinalIgnoreCase)
@@ -116,7 +118,7 @@ catch (Exception error) when (error is IOException or UnauthorizedAccessExceptio
 static string[] Grants(string csv) => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 static void Print(object? value) => Console.WriteLine(JsonSerializer.Serialize(value, Contract.Json));
 static void Help() => Console.WriteLine("""
-AJN addon developer host (API 1.6 preview)
+AJN addon developer host (API 1.7 development)
   new <new-directory> <reverse.domain.id>
   build <source-directory> <javy.exe> <new-package.ajnaddon>
   inspect <package.ajnaddon>

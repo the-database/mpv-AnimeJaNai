@@ -184,6 +184,13 @@ public sealed class AddonWorker : IAddonInstance
                     await SendEventAsync("host.ping", cancellationToken: lifetime.Token);
                     lastPing = Stopwatch.GetTimestamp();
                 }
+                if (broker.HttpServers.TakeEvent() is { } http)
+                {
+                    var wait = TimeSpan.FromSeconds(1.0 / 60) - Stopwatch.GetElapsedTime(lastTimer);
+                    if (wait > TimeSpan.Zero) await Task.Delay(wait, lifetime.Token);
+                    await SendEventAsync(http.Name, http.Data, lifetime.Token);
+                    lastTimer = Stopwatch.GetTimestamp();
+                }
                 if (broker.Timers.Due() is { } ticket)
                 {
                     // Bound all background timer callbacks together to 60 Hz.
@@ -196,6 +203,7 @@ public sealed class AddonWorker : IAddonInstance
                 else
                 {
                     var untilPing = TimeSpan.FromSeconds(5) - Stopwatch.GetElapsedTime(lastPing);
+                    if (broker.HttpServers.HasListeners && untilPing > TimeSpan.FromMilliseconds(25)) untilPing = TimeSpan.FromMilliseconds(25);
                     await broker.Timers.WaitAsync(untilPing > TimeSpan.Zero ? untilPing : TimeSpan.Zero, lifetime.Token);
                 }
             }

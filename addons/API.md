@@ -1,4 +1,4 @@
-# Addon API 1.6 preview
+# Addon API 1.7 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -12,6 +12,7 @@ See [the example manifest](examples/counter/manifest.json). `build` adds `module
 - `activation`: any of `manual`, `on_manager`, `on_player`, `on_login`; defaults to manual. These describe host activation sources, not authority to register startup tasks. The integrated Windows preview supplies the player/Manager events and explicit login opt-in; see [LIFECYCLE.md](LIFECYCLE.md). Other embeddings must supply their actual lifecycle sources.
 - `settings`: up to 32 definitions of boolean, finite number, bounded string, or choice values. Each has a label and default. Optional descriptions, numeric minimum/maximum, string maximum length, and choice lists are validated by the host.
 - `actions`: up to 16 named actions with labels and optional descriptions.
+- `sensitiveRequestFields`: API 1.7 `{ headers: string[], query: string[] }` names hidden from incoming listener metadata before event delivery. Declare credential fields here (or in the reviewed listener policy) before using request credential capture.
 
 Unknown top-level metadata is retained for additive evolution. Identity, versions, permissions, typed definitions, duplicate JSON fields, and required capabilities are validated. Unknown permissions never grant access. A future required behavior must use capability negotiation or a schema/API version change rather than relying on an unknown optional field.
 
@@ -37,7 +38,7 @@ While processing it, the guest may issue broker requests and wait for their repl
 
 The SDK handles `host.ping` internally. User handlers receive `start`, `stop`, `action` with `{ id }`, `settings.changed`, requested `timer` events, and explicit developer replay events. Additive event-data fields must be ignored unless used. Callback failures stop that worker. A host heartbeat every five seconds detects a guest that stops servicing messages after an event.
 
-API 1.2 adds a binary tail for successful `frames.read` responses; API 1.3 adds one for `network.result`, and API 1.6 uses the frame format for `playerFrames.read`. The JSON declares `byteLength`; exactly that many bytes follow the newline. Other messages remain JSON-only. See [FRAMES.md](FRAMES.md), [PLAYER-FRAMES.md](PLAYER-FRAMES.md) and [NETWORK.md](NETWORK.md).
+API 1.2 adds a binary tail for successful `frames.read` responses; API 1.3 adds one for `network.result`, and API 1.6 uses the frame format for `playerFrames.read`. API 1.7 adds bounded chunks for `httpServer.bodyChunk`, `httpProxy.read`, `mediaProbe.result` and `subtitles.read`. The JSON declares `byteLength`; exactly that many bytes follow the newline. These new chunks are at most 32 KiB and include offset/total/eof metadata. Other messages remain JSON-only. See [FRAMES.md](FRAMES.md), [PLAYER-FRAMES.md](PLAYER-FRAMES.md), [NETWORK.md](NETWORK.md) and [STREAMING.md](STREAMING.md).
 
 Errors use standard integer JSON-RPC error codes and an AJN-specific string at `error.data.code`, such as `permission_denied`, `storage_quota`, `capacity_exceeded`, or `feature_unavailable`. Invalid transport/protocol messages stop the worker; valid broker requests that are denied receive a structured error and may be handled by the addon. The JavaScript SDK exposes the string as `error.code`.
 
@@ -92,6 +93,54 @@ API 1.6 adds [normal-player observations](PLAYER-FRAMES.md) through optional
 require separate observation consent. Multiple addons share one bounded sample
 producer per player while keeping independent subscriptions. Owned-session
 methods and previously compiled addons retain their behavior.
+
+### API 1.7 broker additions
+
+The methods below use the permissions and lifecycle in [STREAMING.md](STREAMING.md).
+SDK calls are positional JavaScript methods; these are their underlying wire
+parameter objects. All `.formats` methods take `{}`. Long operations return owned
+handles promptly; poll them from later callbacks. No encoded media bytes cross
+this transport.
+
+| Method | Parameters | Result |
+| --- | --- | --- |
+| `httpServer.selections` | `{}` | Approved listeners |
+| `httpServer.open` | `{ listenerId }` | `{ serverId }` |
+| `httpServer.status`, `httpServer.requestClose` | `{ serverId }` | Status / `null` |
+| `httpServer.requestStatus`, `httpServer.readBody`, `httpServer.cancelRequest` | `{ requestId }` | Status / `null` |
+| `httpServer.extend` | `{ requestId, seconds }` | `null` |
+| `httpServer.bodyChunk` | `{ requestId, offset, count }` | Chunk metadata plus bytes |
+| `httpServer.respond` | `{ requestId, status, headers, bodyBase64 }` | `null`; claims request |
+| `httpServer.beginResponse` | `{ requestId, status, headers }` | `null`; claims buffered response |
+| `httpServer.appendResponse` | `{ requestId, bodyBase64 }` | `null`; appends bounded chunk |
+| `httpServer.finishResponse` | `{ requestId }` | `null`; completes response |
+| `httpProxy.forward` | `{ requestId, destinationId, options }` | `{ operationId }` |
+| `httpProxy.buffer` | `{ destinationId, options }` | `{ operationId }`; options use `bodyBase64` on wire |
+| `httpProxy.status`, `httpProxy.cancel`, `httpProxy.close` | `{ operationId }` | Status / `null` |
+| `httpProxy.read` | `{ operationId, offset, count }` | Chunk metadata plus bytes |
+| `requestCredentials.capture` | `{ requestId, destinationId, mappings, seconds? }` | `{ credentialId }` |
+| `requestCredentials.status`, `requestCredentials.release` | `{ credentialId }` | Presence/expiry / `null` |
+| `mediaProbe.open` | `{ source }` | `{ probeId }` |
+| `mediaProbe.status`, `mediaProbe.cancel`, `mediaProbe.close` | `{ probeId }` | Status / `null` |
+| `mediaProbe.result` | `{ probeId, offset, count }` | Chunk metadata plus JSON bytes |
+| `mediaStreams.open` | `{ source, profileId?, options }` | `{ sessionId, streamId, generationId }` |
+| `mediaStreams.status`, `mediaStreams.requestClose` | `{ streamId }` | Status / `null` |
+| `mediaStreams.segments` | `{ streamId, cursor?, limit? }` | Segment page |
+| `mediaStreams.setDemand` | `{ streamId, seconds }` | `null`; absolute source position |
+| `mediaStreams.pause` | `{ streamId, paused }` | `null` |
+| `mediaStreams.serve` | `{ requestId, streamId, generationId, resourceId }` | `null`; claims native response |
+| `subtitles.open` | `{ source, options }` | `{ subtitleId }` |
+| `subtitles.status`, `subtitles.cancel`, `subtitles.close` | `{ subtitleId }` | Status / `null` |
+| `subtitles.read` | `{ subtitleId, offset, count }` | Chunk metadata plus WebVTT bytes |
+| `subtitles.serve` | `{ requestId, subtitleId }` | `null`; claims native response |
+
+Each capability (`httpServer`, `httpProxy`, `requestCredentials`, `mediaProbe`,
+`mediaStreams`, `outputPlayback`, `subtitles`) is independently versioned 1.0.
+`outputs.open/openRemote` additionally accept `playback` and `servedStream`
+destinations. Local served output requires `media.input` and does not require
+`network.connect` unless a remote source/subtitle is selected. Existing upload
+signatures/defaults are preserved. Stream session IDs support status, pause and
+close through `sessions`; encoded seek returns `operation_unavailable`.
 
 Private storage is separated by addon ID: maximum 256 keys, 32 KiB per value, 1 MiB total. A stored null and a missing key both read as null in this preview. Saving one key is atomic; a read-modify-write sequence is not a transaction across distinct worker instances. The embedding host should create one activation controller per addon ID.
 

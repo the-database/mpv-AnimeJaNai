@@ -115,8 +115,9 @@ changing the request path cannot broaden that authority. Redirects, arbitrary
 cookies and OS credentials are not provided.
 
 UDP send success means the datagram was sent, not acknowledged by a device.
-There is no general inbound listener, TCP/TLS socket or WebSocket API in this
-preview. See the precise bounds in [Networking](NETWORK.md).
+API 1.7 provides approved HTTP(S) listeners and native WebSocket proxy tunnels,
+with separate permissions and ownership. There is no unrestricted TCP/TLS socket
+API. See [Networking](NETWORK.md) and [HTTP/media streaming](STREAMING.md).
 
 ## Media input and output
 

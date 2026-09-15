@@ -154,7 +154,7 @@ internal static class NativeEncodingChecks
             ["audioStart"] = tracks["audio"].Start, ["audioEnd"] = tracks["audio"].End, ["videoStart"] = tracks["video"].Start, ["videoEnd"] = tracks["video"].End,
             ["metadata"] = metadata.Last() });
     }
-    private static async Task<string> RunAsync(string root, string output, string name, string[] args)
+    internal static async Task<string> RunAsync(string root, string output, string name, string[] args)
     {
         var info = new ProcessStartInfo(Path.Combine(root, "mpv.exe")) { UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = output };

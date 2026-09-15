@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.http-bridge-example",
+  "name": "HTTP bridge developer example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 7 },
+  "permissions": ["network.listen", "network.connect", "network.proxy", "credentials.use", "credentials.delegate"],
+  "sensitiveRequestFields": { "headers": ["X-Client-Key"], "query": [] },
+  "requiredCapabilities": {
+    "httpServer": { "major": 1, "minMinor": 0 },
+    "httpProxy": { "major": 1, "minMinor": 0 },
+    "requestCredentials": { "major": 1, "minMinor": 0 }
+  },
+  "activation": ["manual"],
+  "actions": {
+    "open": { "label": "Open approved loopback bridge" },
+    "status": { "label": "Show bridge status" },
+    "close": { "label": "Close bridge" }
+  }
+}

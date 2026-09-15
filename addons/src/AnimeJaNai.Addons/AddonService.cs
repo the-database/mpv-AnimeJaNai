@@ -18,6 +18,7 @@ public sealed class AddonService : IAsyncDisposable
         public IAddonInstance? Worker;
         public string? Failure;
         public (string Id, string Hash, NetworkDestination Destination, DateTime Expires)? DestinationReview;
+        public (string Id, string Hash, ListenerBinding Binding, DateTime Expires)? ListenerReview;
         public readonly Queue<string> Logs = new();
         // 32 x 512 UTF-16 units fit the management response even when every
         // character needs a six-byte JSON escape.
@@ -27,6 +28,7 @@ public sealed class AddonService : IAsyncDisposable
     private readonly AddonRegistry registry;
     private readonly MediaSelections? media;
     private readonly NetworkSelections network;
+    private readonly ListenerSelections listeners;
     private readonly HostSettings? hostSettings;
     private readonly LoginSettings? loginSettings;
     private readonly Func<AddonPackage, PermissionGrant, Action<string>, CancellationToken, Task<IAddonInstance>> start;
@@ -42,6 +44,7 @@ public sealed class AddonService : IAsyncDisposable
         this.start = start;
         this.media = media;
         network = networkSelections ?? new(root);
+        listeners = new(root);
         this.hostSettings = hostSettings;
         this.loginSettings = loginSettings;
     }
@@ -69,8 +72,9 @@ public sealed class AddonService : IAsyncDisposable
                     catch (Exception error) when (error is AddonException or IOException or UnauthorizedAccessException) { }
                 }
             if (kind != "on_manager") return new JsonObject { ["major"] = 1, ["minor"] = 5, ["kind"] = kind };
-            return new JsonObject { ["major"] = 1, ["minor"] = 5, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
-                ["credentialsAvailable"] = OperatingSystem.IsWindows(), ["hostSettingsAvailable"] = hostSettings is not null, ["loginSettingsAvailable"] = loginSettings is not null };
+            return new JsonObject { ["major"] = 1, ["minor"] = 6, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
+                ["credentialsAvailable"] = OperatingSystem.IsWindows(), ["httpServerAvailable"] = true, ["listenerTlsAvailable"] = OperatingSystem.IsWindows(),
+                ["listenerNetworkAvailable"] = true, ["hostSettingsAvailable"] = hostSettings is not null, ["loginSettingsAvailable"] = loginSettings is not null };
         }
         Contract.Require(clients.TryGetValue(client, out var role), "handshake_required", "Complete a trusted connection handshake first.");
         if (role != "on_manager")
@@ -143,7 +147,7 @@ public sealed class AddonService : IAsyncDisposable
             case "addons.stop":
                 return await WithAsync(Id(parameters), async entry => { await entry.Activation!.StopAsync(); return Summary(entry); }, token);
             case "addons.remove":
-                return await WithAsync(Id(parameters), async entry => { await ResetAsync(entry); new MediaSelections(root).Clear(Id(parameters)); network.Clear(Id(parameters)); registry.Disable(Id(parameters)); return null; }, token, load: false);
+                return await WithAsync(Id(parameters), async entry => { await ResetAsync(entry); new MediaSelections(root).Clear(Id(parameters)); network.Clear(Id(parameters)); listeners.Clear(Id(parameters)); listeners.Certificates.Clear(Id(parameters)); registry.Disable(Id(parameters)); return null; }, token, load: false);
             case "addons.rollback":
                 return await WithAsync(Id(parameters), async entry =>
                 {
@@ -177,6 +181,82 @@ public sealed class AddonService : IAsyncDisposable
                 }, token, load: false);
             case "network.selections":
                 return await WithAsync(Id(parameters), entry => Task.FromResult<JsonNode?>(network.List(entry.Package!, entry.Grant!)), token);
+            case "listeners.selections":
+                return await WithAsync(Id(parameters), entry => Task.FromResult<JsonNode?>(new JsonObject { ["listeners"] = JsonSerializer.SerializeToNode(listeners.List(entry.Package!, entry.Grant!), Contract.Json) }), token);
+            case "listeners.certificates":
+                return await WithAsync(Id(parameters), entry => Task.FromResult<JsonNode?>(new JsonObject { ["certificates"] = listeners.Certificates.List(entry.Package!, entry.Grant!) }), token);
+            case "listeners.importCertificate":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters); entry.Grant!.Demand("network.listen");
+                    string? replace = parameters["replaceId"] is null ? null : Contract.Text(parameters, "replaceId", 64);
+                    if (replace is not null) await entry.Activation!.StopAsync();
+                    Contract.Require(parameters["password"] is JsonValue v && v.TryGetValue<string>(out _), "invalid_certificate", "Expected a certificate password or an empty string.");
+                    string certificateId = listeners.Certificates.Import(entry.Package!, entry.Grant!, Contract.Text(parameters, "path", 32768),
+                        parameters["password"]!.GetValue<string>(), Contract.Text(parameters, "name", 100), replace,
+                        replace is null ? [] : listeners.List(entry.Package!, entry.Grant!).Where(l => l.Binding.CertificateId == replace).Select(l => l.Binding.CertificateHost!).ToArray());
+                    return new JsonObject { ["certificateId"] = certificateId, ["restartRequired"] = replace is not null };
+                }, token);
+            case "listeners.removeCertificate":
+                return await WithAsync(Id(parameters), entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    string certificateId = Contract.Text(parameters, "certificateId", 64);
+                    Contract.Require(!listeners.List(entry.Package!, entry.Grant!).Any(l => l.Binding.CertificateId == certificateId),
+                        "certificate_in_use", "Remove listener access using this certificate before removing it.");
+                    listeners.Certificates.Remove(entry.Package!, entry.Grant!, certificateId);
+                    return Task.FromResult<JsonNode?>(null);
+                }, token);
+            case "listeners.inspect":
+                return await WithAsync(Id(parameters), entry =>
+                {
+                    DemandReviewed(entry, parameters); entry.Grant!.Demand("network.listen");
+                    long port = Contract.Number(parameters, "port");
+                    Contract.Require(port is >= 1 and <= 65535, "invalid_listener", "Port must be from 1 to 65535.");
+                    string[] Names(string key)
+                    {
+                        Contract.Require(parameters[key] is JsonArray { Count: <= 32 }, "invalid_listener", "Expected sensitive field names.");
+                        return ((JsonArray)parameters[key]!).Select(n =>
+                        {
+                            Contract.Require(n is JsonValue v && v.TryGetValue<string>(out _), "invalid_listener", "Expected a field name.");
+                            return n!.GetValue<string>();
+                        }).ToArray();
+                    }
+                    var binding = new ListenerBinding(Contract.Text(parameters, "address", 64), (int)port, Names("sensitiveHeaders"), Names("sensitiveQuery"),
+                        parameters["scheme"] is null ? "http" : Contract.Text(parameters, "scheme", 8),
+                        parameters["scope"] is null ? "loopback" : Contract.Text(parameters, "scope", 16),
+                        parameters["certificateId"] is null ? null : Contract.Text(parameters, "certificateId", 64),
+                        parameters["certificateHost"] is null ? null : Contract.Text(parameters, "certificateHost", 253),
+                        parameters["publicBaseUrl"] is null ? null : Contract.Text(parameters, "publicBaseUrl", 512),
+                        parameters["allowedHosts"]?.Deserialize<string[]>(Contract.Json), parameters["cors"]?.Deserialize<ListenerCors>(Contract.Json));
+                    binding.Validate();
+                    var certificate = listeners.Certificates.InspectBinding(entry.Package!, entry.Grant!, binding);
+                    string reviewId = Guid.NewGuid().ToString("N");
+                    entry.ListenerReview = (reviewId, entry.Package!.Hash, binding, DateTime.UtcNow.AddMinutes(3));
+                    return Task.FromResult<JsonNode?>(new JsonObject { ["reviewId"] = reviewId, ["binding"] = JsonSerializer.SerializeToNode(binding, Contract.Json),
+                        ["scope"] = binding.Scope, ["protocol"] = binding.Scheme, ["certificate"] = certificate, ["reachability"] = "unverified" });
+                }, token);
+            case "listeners.approve":
+                return await WithAsync(Id(parameters), entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    var review = entry.ListenerReview;
+                    Contract.Require(review is not null && review.Value.Id == Contract.Text(parameters, "reviewId", 64) &&
+                        review.Value.Hash == entry.Package!.Hash && review.Value.Expires > DateTime.UtcNow,
+                        "review_expired", "Review the listener again before approving it.");
+                    _ = listeners.Certificates.InspectBinding(entry.Package!, entry.Grant!, review.Value.Binding);
+                    string selected = listeners.Approve(entry.Package!, entry.Grant!, Contract.Text(parameters, "name", 100), review.Value.Binding);
+                    entry.ListenerReview = null;
+                    return Task.FromResult<JsonNode?>(new JsonObject { ["listenerId"] = selected });
+                }, token);
+            case "listeners.revoke":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    string selected = Contract.Text(parameters, "listenerId", 64);
+                    await entry.Activation!.StopAsync(); listeners.Revoke(entry.Package!, entry.Grant!, selected);
+                    return null;
+                }, token);
             case "network.inspectDestination":
                 return await WithAsync(Id(parameters), async entry =>
                 {
@@ -305,6 +385,7 @@ public sealed class AddonService : IAsyncDisposable
         ["manual"] = (entry.Package.Manifest.Activation ?? ["manual"]).Contains("manual", StringComparer.Ordinal),
         ["mediaPermission"] = entry.Grant!.Allowed.Contains("sessions.manage", StringComparer.Ordinal),
         ["networkPermission"] = entry.Grant!.Allowed.Contains("network.connect", StringComparer.Ordinal),
+        ["listenerPermission"] = entry.Grant!.Allowed.Contains("network.listen", StringComparer.Ordinal),
         ["credentialPermission"] = entry.Grant!.Allowed.Contains("credentials.use", StringComparer.Ordinal),
         ["outputPermission"] = entry.Grant!.Allowed.Contains("media.output", StringComparer.Ordinal),
         ["inputPermission"] = entry.Grant!.Allowed.Contains("media.input", StringComparer.Ordinal),
@@ -333,7 +414,7 @@ public sealed class AddonService : IAsyncDisposable
     private static async Task ResetAsync(Entry entry)
     {
         if (entry.Activation is not null) await entry.Activation.DisposeAsync();
-        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Grant = null; entry.Failure = null; entry.DestinationReview = null;
+        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Grant = null; entry.Failure = null; entry.DestinationReview = null; entry.ListenerReview = null;
     }
 
     public async ValueTask DisposeAsync()

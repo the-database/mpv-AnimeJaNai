@@ -1,4 +1,4 @@
-// AJN API 1.6 transport, compatible with the 1.0 JSON-only methods. The host independently
+// AJN API 1.7 development transport, compatible with the 1.0 JSON-only methods. The host independently
 // validates every message and permission even when an addon replaces this code.
 const __ajnSdk = (() => {
     const maximum = 128 * 1024;
@@ -65,6 +65,10 @@ const __ajnSdk = (() => {
                 (result.state !== "completed" && result.byteLength !== 0)) throw new Error("Invalid AJN network result");
             return Object.assign({}, result, { body: readBytes(result.byteLength) });
         }
+        if (frameResponse === "chunk") {
+            if (result.byteLength > 32768) throw new Error("Invalid AJN chunk size");
+            return Object.assign({}, result, { body: readBytes(result.byteLength) });
+        }
         if (result.frame === null && result.byteLength === 0) return null;
         const frame = result.frame;
         if (!frame || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || frame.width < 1 || frame.width > 320 ||
@@ -87,22 +91,110 @@ const __ajnSdk = (() => {
     }
     const api = Object.freeze({
         info: () => request("host.info"),
+        httpServer: Object.freeze({
+            selections: () => request("httpServer.selections"),
+            formats: () => request("httpServer.formats"),
+            open: listenerId => request("httpServer.open", { listenerId }),
+            status: serverId => request("httpServer.status", { serverId }),
+            requestClose: serverId => request("httpServer.requestClose", { serverId }),
+            requestStatus: requestId => request("httpServer.requestStatus", { requestId }),
+            cancelRequest: requestId => request("httpServer.cancelRequest", { requestId }),
+            extend: (requestId, seconds) => request("httpServer.extend", { requestId, seconds }),
+            readBody: requestId => request("httpServer.readBody", { requestId }),
+            bodyChunk: (requestId, offset, count = 32768) => request("httpServer.bodyChunk", { requestId, offset, count }, "chunk"),
+            beginResponse: (requestId, response) => request("httpServer.beginResponse", { requestId, status: response.status, headers: response.headers || [] }),
+            appendResponse: (requestId, body) => request("httpServer.appendResponse", { requestId, bodyBase64: base64(body) }),
+            finishResponse: requestId => request("httpServer.finishResponse", { requestId }),
+            respond: (requestId, response) => request("httpServer.respond", {
+                requestId, status: response.status, headers: response.headers || [],
+                bodyBase64: base64(response.body || new Uint8Array(0)),
+            }),
+        }),
         log: message => request("log.write", { message: String(message) }),
+        httpProxy: Object.freeze({
+            formats: () => request("httpProxy.formats"),
+            forward: (requestId, destinationId, options = {}) => request("httpProxy.forward", { requestId, destinationId, options: Object.assign({ path: "/" }, options) }),
+            buffer: (destinationId, options = {}) => {
+                const wire = Object.assign({ path: "/" }, options, { bodyBase64: base64(options.body || new Uint8Array(0)) });
+                delete wire.body;
+                return request("httpProxy.buffer", { destinationId, options: wire });
+            },
+            status: operationId => request("httpProxy.status", { operationId }),
+            read: (operationId, offset, count = 32768) => request("httpProxy.read", { operationId, offset, count }, "chunk"),
+            cancel: operationId => request("httpProxy.cancel", { operationId }),
+            close: operationId => request("httpProxy.close", { operationId }),
+        }),
+        requestCredentials: Object.freeze({
+            formats: () => request("requestCredentials.formats"),
+            capture: (requestId, destinationId, mappings, seconds = 86400) => request("requestCredentials.capture", { requestId, destinationId, mappings, seconds }),
+            status: credentialId => request("requestCredentials.status", { credentialId }),
+            release: credentialId => request("requestCredentials.release", { credentialId }),
+        }),
         settings: Object.freeze({ get: () => request("settings.get") }),
         remoteSources: Object.freeze({ formats: () => request("remoteSources.formats") }),
+        mediaProbe: Object.freeze({
+            formats: () => request("mediaProbe.formats"),
+            open: source => request("mediaProbe.open", { source: source.type === "local" ? source : Object.assign({ type: "http", path: "/", useCredential: false }, source) }),
+            status: probeId => request("mediaProbe.status", { probeId }),
+            read: (probeId, offset, count = 32768) => request("mediaProbe.result", { probeId, offset, count }, "chunk"),
+            result: probeId => {
+                const first = request("mediaProbe.result", { probeId, offset: 0, count: 32768 }, "chunk");
+                if (!Number.isInteger(first.totalBytes) || first.totalBytes < 1 || first.totalBytes > 262144) throw new Error("Invalid probe result length");
+                const bytes = new Uint8Array(first.totalBytes);
+                let chunk = first, offset = 0;
+                for (;;) {
+                    if (chunk.offset !== offset || chunk.totalBytes !== bytes.length || chunk.byteLength < 1 || offset + chunk.byteLength > bytes.length)
+                        throw new Error("Invalid probe chunk sequence");
+                    bytes.set(chunk.body, offset); offset += chunk.byteLength;
+                    if (offset === bytes.length) break;
+                    chunk = request("mediaProbe.result", { probeId, offset, count: 32768 }, "chunk");
+                }
+                return JSON.parse(decoder.decode(bytes));
+            },
+            cancel: probeId => request("mediaProbe.cancel", { probeId }),
+            close: probeId => request("mediaProbe.close", { probeId }),
+        }),
+        subtitles: Object.freeze({
+            formats: () => request("subtitles.formats"),
+            open: (source, options = {}) => request("subtitles.open", {
+                source: source.type === "local" ? source : Object.assign({ type: "http", path: "/", useCredential: false }, source), options,
+            }),
+            status: subtitleId => request("subtitles.status", { subtitleId }),
+            read: (subtitleId, offset, count = 32768) => request("subtitles.read", { subtitleId, offset, count }, "chunk"),
+            serve: (requestId, subtitleId) => request("subtitles.serve", { requestId, subtitleId }),
+            cancel: subtitleId => request("subtitles.cancel", { subtitleId }),
+            close: subtitleId => request("subtitles.close", { subtitleId }),
+        }),
+        mediaStreams: Object.freeze({
+            formats: () => request("mediaStreams.formats"),
+            open: (source, profileId, options) => request("mediaStreams.open", {
+                source: source.type === "local" ? source : Object.assign({ type: "http", path: "/", useCredential: false }, source),
+                profileId: profileId || null,
+                options: Object.assign({}, options, { encoding: Object.assign({ audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0 }, options.encoding) }),
+            }),
+            status: streamId => request("mediaStreams.status", { streamId }),
+            segments: (streamId, cursor = null, limit = 32) => request("mediaStreams.segments", { streamId, cursor, limit }),
+            setDemand: (streamId, seconds) => request("mediaStreams.setDemand", { streamId, seconds }),
+            pause: (streamId, paused) => request("mediaStreams.pause", { streamId, paused }),
+            serve: (requestId, streamId, generationId, resourceId) => request("mediaStreams.serve", { requestId, streamId, generationId, resourceId }),
+            requestClose: streamId => request("mediaStreams.requestClose", { streamId }),
+        }),
         outputs: Object.freeze({
             formats: () => request("outputs.formats"),
             openRemote: (source, profileId, options) => request("outputs.openRemote", {
                 source: Object.assign({type: "http", path: "/", useCredential: false}, source), profileId: profileId || null,
                 encoding: Object.assign({audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0}, options.encoding),
                 destination: Object.assign({type: "httpUpload", method: "POST", path: "/", useCredential: false}, options.destination),
+                playback: options.playback,
             }),
             open: (sourceId, profileId, options) => request("outputs.open", {
                 sourceId, profileId: profileId || null,
                 encoding: Object.assign({audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0}, options.encoding),
                 destination: Object.assign({type: "httpUpload", method: "POST", path: "/", useCredential: false}, options.destination),
+                playback: options.playback,
             }),
         }),
+        outputPlayback: Object.freeze({ formats: () => request("outputPlayback.formats") }),
         network: Object.freeze({
             selections: () => request("network.selections"),
             request: (destinationId, options = {}) => request("network.request", {

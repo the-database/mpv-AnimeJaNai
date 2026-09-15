@@ -16,10 +16,10 @@ public sealed class AddonException(string code, string message) : Exception(mess
 public static class Contract
 {
     public const int Major = 1;
-    public const int Minor = 6;
+    public const int Minor = 7;
     public const int MaxMessageBytes = 128 * 1024;
     public static readonly FrozenSet<string> PermissionNames = new[] {
-        "log.write", "storage.read", "storage.write", "sessions.manage", "frames.read", "network.connect", "credentials.use", "media.output", "media.input", "player.observe"
+        "log.write", "storage.read", "storage.write", "sessions.manage", "frames.read", "network.connect", "credentials.use", "credentials.delegate", "media.output", "media.input", "player.observe", "network.listen", "network.proxy"
     }.ToFrozenSet(StringComparer.Ordinal);
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     public static readonly JsonSerializerOptions Json = new()
@@ -104,6 +104,7 @@ public sealed record AddonManifest
     public string[]? Activation { get; init; }
     public Dictionary<string, SettingDefinition>? Settings { get; init; }
     public Dictionary<string, ActionDefinition>? Actions { get; init; }
+    public RequestRedaction? SensitiveRequestFields { get; init; }
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Metadata { get; init; }
 
@@ -133,7 +134,20 @@ public sealed record AddonManifest
         Contract.Require(Actions is null || (Actions.Count <= 16 && Actions.All(p => Contract.ValidKey(p.Key) && p.Value is not null)),
             "invalid_manifest", "Invalid action definitions.");
         foreach (var (_, action) in Actions ?? []) action.Validate();
+        if (SensitiveRequestFields is { } sensitive)
+        {
+            Contract.Require(Api.MinMinor >= 7, "invalid_manifest", "Request field redaction requires API 1.7 or later.");
+            sensitive.Validate();
+        }
     }
+}
+
+public sealed record RequestRedaction(string[] Headers, string[] Query)
+{
+    public void Validate() => Contract.Require(Valid(Headers) && Valid(Query), "invalid_manifest", "Use up to 32 distinct sensitive header and query names.");
+    private static bool Valid(string[] names) => names is { Length: <= 32 } && names.All(n => n is { Length: > 0 and <= 64 } &&
+        n.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')) && names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Length;
+    public RequestRedaction Copy() => this with { Headers = [.. Headers], Query = [.. Query] };
 }
 
 public sealed class PermissionGrant

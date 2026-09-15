@@ -10,6 +10,7 @@ internal sealed class SelectedFileStream : IDisposable
     public const string Protocol = "ajnselected";
     public const string Uri = Protocol + "://media";
     private readonly Stream file;
+    private readonly string selectedUri;
     private readonly object gate = new();
     private readonly byte[] buffer = new byte[65536];
     private bool open;
@@ -26,15 +27,16 @@ internal sealed class SelectedFileStream : IDisposable
         return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.RandomAccess);
     }
     public SelectedFileStream(string path) : this(OpenFile(path)) { }
-    internal SelectedFileStream(Stream stream, Action? cancelSource = null)
+    internal SelectedFileStream(Stream stream, Action? cancelSource = null, string selectedUri = Uri)
     {
         file = stream;
+        this.selectedUri = selectedUri;
         openCallback = Open; read = Read; seek = Seek; size = Size; close = Close;
         cancel = _ => { cancelled = true; cancelSource?.Invoke(); };
     }
 
     public int Register(IntPtr library, IntPtr player) => Marshal.GetDelegateForFunctionPointer<RegisterCallback>(
-        NativeLibrary.GetExport(library, "mpv_stream_cb_add_ro"))(player, Protocol, IntPtr.Zero, openCallback);
+        NativeLibrary.GetExport(library, "mpv_stream_cb_add_ro"))(player, selectedUri[..selectedUri.IndexOf(':')], IntPtr.Zero, openCallback);
 
     private int Open(IntPtr user, IntPtr uri, IntPtr info)
     {
@@ -42,7 +44,7 @@ internal sealed class SelectedFileStream : IDisposable
         {
             lock (gate)
             {
-                if (open || !file.CanRead || Marshal.PtrToStringUTF8(uri) != Uri) return -13; // MPV_ERROR_LOADING_FAILED
+                if (open || !file.CanRead || Marshal.PtrToStringUTF8(uri) != selectedUri) return -13; // MPV_ERROR_LOADING_FAILED
                 if (file.CanSeek) file.Position = 0;
                 cancelled = false;
                 Marshal.StructureToPtr(new StreamInfo

@@ -24,6 +24,9 @@ internal sealed class RemoteMediaStream : Stream
     private string? entityTag;
     private DateTimeOffset? modified;
     private string? failure;
+    private readonly string representationNonce = Guid.NewGuid().ToString("N");
+    internal string RepresentationId => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+        plan.IdentityKey + "\n" + length + "\n" + (entityTag ?? modified?.ToString("O") ?? representationNonce))));
     private Task? cancellation;
 
     private RemoteMediaStream(RemoteInputPlan plan, TimeSpan lifetimeLimit)
@@ -84,6 +87,7 @@ internal sealed class RemoteMediaStream : Stream
                 : new RangeConditionHeaderValue(modified!.Value);
         }
         if (plan.Header is not null) request.Headers.TryAddWithoutValidation(plan.Header, plan.Credential);
+        foreach (var header in plan.DelegatedHeaders) request.Headers.TryAddWithoutValidation(header.Key, header.Value);
         response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
         Contract.Require(response.Content.Headers.ContentEncoding.All(v => v.Equals("identity", StringComparison.OrdinalIgnoreCase)),
             "input_encoding", "Remote media must use identity content encoding.");

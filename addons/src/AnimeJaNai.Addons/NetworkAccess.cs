@@ -184,9 +184,9 @@ public sealed class NetworkAccess(AddonPackage package, PermissionGrant grant, N
     private static BrokerResponse Failure(string code, string message) => new(new JsonObject
         { ["state"] = "failed", ["error"] = new JsonObject { ["code"] = code, ["message"] = message }, ["byteLength"] = 0 });
 
-    internal static Uri RequestTarget(NetworkDestination destination, string path)
+    internal static Uri RequestTarget(NetworkDestination destination, string path, int maximumLength = 2048)
     {
-        Contract.Require(path.Length is > 0 and <= 2048 && path.StartsWith('/') && !path.StartsWith("//", StringComparison.Ordinal) && !path.Contains('\\') &&
+        Contract.Require(path.Length > 0 && path.Length <= maximumLength && path.StartsWith('/') && !path.StartsWith("//", StringComparison.Ordinal) && !path.Contains('\\') &&
             !path.Contains('#') && !path.Any(char.IsControl), "invalid_request", "Use a service-relative path beginning with a single slash.");
         Contract.Require(Uri.TryCreate(destination.Origin + path, UriKind.Absolute, out var target) &&
             target.Scheme == destination.Scheme && target.IdnHost.Trim('[', ']').Equals(destination.Host, StringComparison.OrdinalIgnoreCase) &&

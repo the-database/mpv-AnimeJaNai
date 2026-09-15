@@ -5,6 +5,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <InternalsVisibleTo Include="AnimeJaNai.Addons.NativeTests" />
     <InternalsVisibleTo Include="AnimeJaNai.Addons.Tests" />
     <InternalsVisibleTo Include="ajn-addon-launcher" />

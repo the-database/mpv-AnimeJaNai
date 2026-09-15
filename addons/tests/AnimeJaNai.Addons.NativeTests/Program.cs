@@ -22,6 +22,13 @@ bool installerOnly = args.Length == 5 && args[^1] == "--installer-only";
 bool frameBenchmark = args.Length == 4 && args[^1] == "--frames-benchmark";
 bool nullBenchmark = args.Length == 4 && args[^1] == "--null-benchmark";
 bool encodingOnly = args.Length == 4 && args[^1] == "--encoding-only";
+bool streamsOnly = args.Length == 4 && args[^1] == "--streams-only";
+bool streamTimingOnly = args.Length == 5 && args[^1] == "--stream-timing-only";
+bool streamEnduranceOnly = args.Length == 5 && args[^1] == "--stream-endurance-only";
+bool streamRuntimeOnly = args.Length == 6 && args[^1] == "--stream-runtime-only";
+bool streamEpisodeOnly = args.Length == 7 && args[^1] == "--stream-episode-only";
+bool subtitlesOnly = args.Length == 5 && args[^1] == "--subtitles-only";
+bool subtitleFixturesOnly = args.Length == 5 && args[^1] == "--subtitle-fixtures-only";
 bool outputsOnly = args.Length == 6 && args[^1] == "--outputs-only";
 bool remoteOnly = args.Length == 6 && args[^1] == "--remote-only";
 bool playerOnly = args.Length == 6 && args[^1] == "--player-frames-only";
@@ -34,19 +41,66 @@ if (installerOnly) args = args[..4];
 if (frameBenchmark) args = args[..3];
 if (nullBenchmark) args = args[..3];
 if (encodingOnly) args = args[..3];
+if (streamsOnly) args = args[..3];
+if (streamTimingOnly) args = args[..4];
+if (streamEnduranceOnly) args = args[..4];
+if (streamRuntimeOnly) args = args[..5];
+if (streamEpisodeOnly) args = args[..6];
+if (subtitlesOnly || subtitleFixturesOnly) args = args[..4];
 if (outputsOnly) args = args[..5];
 if (remoteOnly) args = args[..5];
 if (playerOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
 if (lifecycleNetOnly) args = args[..3];
-if (args.Length is not (3 or 5) && !installerOnly) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
+if (args.Length is not (3 or 5) && !installerOnly && !streamTimingOnly && !streamEnduranceOnly && !streamEpisodeOnly && !subtitlesOnly && !subtitleFixturesOnly) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
 string root = Path.GetFullPath(args[0]), output = Path.GetFullPath(args[1]);
 if (Directory.Exists(output)) { Console.Error.WriteLine("Choose a new test output directory."); return 2; }
 Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (subtitleFixturesOnly)
+    {
+        Console.WriteLine(await NativeSubtitleChecks.FixtureAsync(output, args[3]));
+        return 0;
+    }
+    if (subtitlesOnly)
+    {
+        await NativeSubtitleChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
+    if (streamEpisodeOnly)
+    {
+        await NativeStreamRuntimeChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], args[4], evidence, args[5]);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
+    if (streamEnduranceOnly)
+    {
+        await NativeStreamTimingChecks.EnduranceAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
+    if (streamTimingOnly)
+    {
+        await NativeStreamTimingChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
+    if (streamRuntimeOnly)
+    {
+        await NativeStreamRuntimeChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], args[4], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
+    if (streamsOnly)
+    {
+        await NativeStreamingChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
     if (installerOnly)
     {
         await NativeInstallerChecks.RunAsync(root, output, args[3], evidence);

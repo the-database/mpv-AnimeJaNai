@@ -112,9 +112,11 @@ responses, cancellation/capacity/ownership, TLS rejection, DPAPI reload, real
 Wasm/timers and rendered Manager consent. Public messages are portable; enforced
 workers and credentials currently require Windows.
 
-Continuous media does not belong in these command buffers. TCP/TLS streams,
-WebSockets, listeners/discovery and native media I/O need additional capabilities,
-ownership, backpressure and consent work. No Plex or lighting addon is implemented.
+Continuous media does not belong in these command buffers. API 1.7 supplies
+separately approved HTTP(S) listeners, native HTTP/WebSocket forwarding, scoped
+client credentials and native media serving; see [STREAMING.md](STREAMING.md).
+The existing `network.request/result` size and ownership contract stays unchanged.
+No Plex or lighting addon is implemented.
 
 References: [custom HTTP connections](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.socketshttphandler.connectcallback?view=net-10.0),
 [redirect behavior](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.allowautoredirect?view=net-10.0),

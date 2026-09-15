@@ -7,7 +7,7 @@ namespace AnimeJaNai.Addons.Native;
 // Constructed only after the trusted host resolves approved source/profile ids.
 // Each instance owns its native process; a codec or driver failure does not run
 // in the Manager, the service, or another session's process.
-internal sealed class MediaProcess : IControllableProcessingSession, IFrameProcessingSession, IEncodedProcessingSession
+internal sealed class MediaProcess : IControllableProcessingSession, IFrameProcessingSession, IEncodedProcessingSession, IMediaStreamProducer
 {
     private readonly Process process;
     private readonly WindowsJob job;
@@ -23,16 +23,22 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
     private Task? cleanup;
     private bool closing;
     private bool nativeReleased;
+    private CancellationTokenRegistration sourceRevocation;
+    private CancellationTokenRegistration subtitleRevocation;
+    internal void CancelOn(CancellationToken token, CancellationToken subtitles = default)
+    { sourceRevocation = token.Register(() => job.Terminate()); subtitleRevocation = subtitles.Register(() => job.Terminate()); }
+    private readonly bool outputSession;
     private readonly NativeFrameBuffer? frames;
     private readonly NativeEncodedPipe? encoded;
     internal Stream EncodedOutput => encoded?.Reader ?? throw new AddonException("feature_unavailable", "This session has no encoded output.");
     Stream IEncodedProcessingSession.EncodedOutput => EncodedOutput;
 
-    private MediaProcess(Process process, WindowsJob job, string directory, string workRoot, NativeFrameBuffer? frames, NativeEncodedPipe? encoded)
+    private MediaProcess(Process process, WindowsJob job, string directory, string workRoot, NativeFrameBuffer? frames, NativeEncodedPipe? encoded, bool outputSession)
     {
         this.process = process; this.job = job; this.directory = directory; this.workRoot = workRoot;
         this.frames = frames;
         this.encoded = encoded;
+        this.outputSession = outputSession;
         channel = new(process.StandardOutput.BaseStream, process.StandardInput.BaseStream);
         diagnostics = DrainAsync();
         monitoring = MonitorAsync();
@@ -40,10 +46,15 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
 
     public static async Task<MediaProcess> StartAsync(string root, string? source, string configuration, int slot, string backend,
         string workRoot, WorkerCommand command, CancellationToken token, bool enableFrameSamples = false, NativeEncoding? encoding = null,
-        RemoteInputPlan? remoteSource = null)
+        RemoteInputPlan? remoteSource = null, OutputPlayback? playback = null, string? subtitleSource = null, ServedOutputPlan? servedOutput = null,
+        RemoteInputPlan? remoteSubtitles = null)
     {
         token.ThrowIfCancellationRequested();
         encoding?.Validate();
+        playback?.Validate();
+        servedOutput?.Validate();
+        Contract.Require(servedOutput is null || encoding is not null && playback is not null, "invalid_stream", "Served output requires encoding and playback settings.");
+        Contract.Require(playback is null || encoding is not null, "invalid_output", "Playback options require encoded output.");
         Contract.Require((source is null) != (remoteSource is null), "invalid_source", "Choose one approved media source.");
         remoteSource?.Validate();
         workRoot = Path.GetFullPath(workRoot);
@@ -72,14 +83,15 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             job.Attach(process);
             if (enableFrameSamples && backend == "DirectML") frames = new NativeFrameBuffer();
             long sampleMapping = frames?.DuplicateTo(process) ?? 0;
-            if (encoding is not null) encoded = new();
+            if (encoding is not null && servedOutput is null) encoded = new();
             long outputHandle = encoded?.DuplicateTo(process) ?? 0;
-            result = new(process, job, directory, workRoot, frames, encoded);
+            result = new(process, job, directory, workRoot, frames, encoded, encoding is not null);
             await process.StandardInput.BaseStream.WriteAsync(new byte[] { 1 }, token);
             await result.channel.WriteAsync(new JsonObject { ["version"] = 1, ["root"] = Path.GetFullPath(root),
                 ["source"] = source is null ? null : Path.GetFullPath(source), ["remoteSource"] = remoteSource?.ToPrivateJson(),
                 ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend,
-                ["sampleMapping"] = sampleMapping, ["encoding"] = encoding?.ToJson(), ["outputHandle"] = outputHandle }, token);
+                ["sampleMapping"] = sampleMapping, ["encoding"] = encoding?.ToJson(), ["playback"] = playback?.ToJson(),
+                ["subtitleSource"] = subtitleSource, ["remoteSubtitles"] = remoteSubtitles?.ToPrivateJson(), ["servedOutput"] = servedOutput?.ToJson(), ["outputHandle"] = outputHandle }, token);
             return result; // Native initialization progresses behind the handle.
         }
         catch (Exception error)
@@ -107,6 +119,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
         lock (sync) return Task.FromResult((JsonObject)status.DeepClone());
     }
     public Task PauseAsync(bool paused, CancellationToken token) => ControlAsync(new() { ["operation"] = "pause", ["paused"] = paused }, token);
+    public Task SetDemandAsync(double position, CancellationToken token) => ControlAsync(new() { ["operation"] = "stream-demand", ["seconds"] = position }, token);
     public IFrameSubscription SubscribeFrames(FrameRequest request)
     {
         lock (sync)
@@ -118,7 +131,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
     }
     public Task SeekAsync(double seconds, CancellationToken token)
     {
-        Contract.Require(encoded is null, "operation_unavailable", "Encoded streams require a new output session to change their timeline.");
+        Contract.Require(!outputSession, "operation_unavailable", "Encoded streams require a new output session to change their timeline.");
         Contract.Require(double.IsFinite(seconds) && seconds >= 0 && seconds <= 315576000, "invalid_request", "Invalid seek position.");
         return ControlAsync(new() { ["operation"] = "seek", ["seconds"] = seconds }, token);
     }
@@ -199,12 +212,12 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             lifetime.Cancel(); job.Terminate();
             await job.WaitForEmptyAsync();
             await Task.WhenAll(monitoring, diagnostics);
-            job.Dispose(); process.Dispose(); frames?.Dispose(); encoded?.Dispose(); nativeReleased = true;
+            sourceRevocation.Dispose(); subtitleRevocation.Dispose(); job.Dispose(); process.Dispose(); frames?.Dispose(); encoded?.Dispose(); nativeReleased = true;
         }
         await RemoveFilesAsync(workRoot, directory);
         lock (sync) status = new() { ["state"] = "closed" };
     }
-    private static async Task RemoveFilesAsync(string workRoot, string directory)
+    internal static async Task RemoveFilesAsync(string workRoot, string directory)
     {
         string resolved = Path.GetFullPath(directory);
         string name = Path.GetFileName(resolved);

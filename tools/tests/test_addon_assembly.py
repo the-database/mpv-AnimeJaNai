@@ -15,7 +15,8 @@ class NativeAssemblyTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.record = dict(schemaVersion=1, platform="win-x64", cRuntime="ucrt", ffmpegLinkage="static",
-                           privateSampleAbi=1, privatePlayerSampleAbi=1, privateOutputAbi=1, nullHardwareFramesOptIn=1, files={})
+                           privateSampleAbi=1, privatePlayerSampleAbi=1, privateOutputAbi=1, nullHardwareFramesOptIn=1,
+                           privateProbeAbi=1, privateMuxAbi=1, privateSubtitlesAbi=1, files={})
         for name in ("mpv.exe", "libmpv-2.dll"):
             (self.root / name).write_bytes(name.encode())
             self.record["files"][name] = assembly.sha(self.root / name)
@@ -50,6 +51,14 @@ class NativeAssemblyTests(unittest.TestCase):
     def test_missing_capability(self):
         del self.record["nullHardwareFramesOptIn"]
         with self.assertRaises(ValueError): assembly.verify_native(self.root, self.record)
+    def test_streaming_release_rejects_older_or_partial_native_runtime(self):
+        for capability in ("privateProbeAbi", "privateMuxAbi", "privateSubtitlesAbi"):
+            for value in (None, 0, 2):
+                record = dict(self.record)
+                if value is None: del record[capability]
+                else: record[capability] = value
+                with self.subTest(capability=capability, value=value), self.assertRaises(ValueError):
+                    assembly.verify_native(self.root, record)
     def test_unknown_record(self):
         self.record["schemaVersion"] = 2
         with self.assertRaises(ValueError): assembly.verify_native(self.root, self.record)

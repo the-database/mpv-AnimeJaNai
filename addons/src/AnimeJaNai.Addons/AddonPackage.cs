@@ -18,6 +18,7 @@ public sealed class AddonPackage
         Activation = manifest.Activation?.ToArray(),
         Settings = manifest.Settings?.ToDictionary(p => p.Key, p => p.Value.Copy(), StringComparer.Ordinal),
         Actions = manifest.Actions is null ? null : new(manifest.Actions, StringComparer.Ordinal),
+        SensitiveRequestFields = manifest.SensitiveRequestFields?.Copy(),
         Metadata = manifest.Metadata is null ? null : new(manifest.Metadata, StringComparer.Ordinal),
     };
     public string Hash { get; }

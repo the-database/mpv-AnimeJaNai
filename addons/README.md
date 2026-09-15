@@ -2,8 +2,16 @@
 
 ## Start here
 
+The current working tree also contains an **API 1.7 development**
+[HTTP, proxy and credential APIs](HTTP-SERVER.md), including reviewed HTTPS and network listeners. These are groundwork for the
+streaming requirements, with the full [streaming API contract](STREAMING.md).
+The sealed integration.1 release and its standalone
+developer guide remain the API 1.6 baseline; the new streaming feature set is
+not complete or released.
+
 | Your goal | Guide |
 | --- | --- |
+| Develop an addon using one self-contained release document | [Complete addon developer guide](DEVELOPER-GUIDE.md) — setup, tutorial, contracts, SDK declarations and complete examples |
 | Install, use or troubleshoot an addon | [User guide](USER-GUIDE.md) |
 | Make your first addon | [Creator tutorial](CREATOR-GUIDE.md) — build, permissions, saved data, settings, update and rollback |
 | Add video, image samples, service access or output | [Recipes and complete examples](CREATOR-RECIPES.md) |
@@ -35,7 +43,7 @@ This working preview combines lifecycle, declarative settings/actions, JSON-RPC 
 
 **Normal-player samples now work:** separately approved observers can read small processed SDR images from ordinary mpv and mpv.net playback. Multiple addons share one producer per player, with independent sample sizes and rates. Tests cover actual Wasm, two players, seeking, independent unsubscribe and host termination while playback continues. See [PLAYER-FRAMES.md](PLAYER-FRAMES.md) and the generic player inspector.
 
-**Remaining integration:** more source/output transports, TCP/TLS/WebSockets, listeners/discovery, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+**Remaining integration:** API 1.7 native qualification and release packaging, discovery, unrestricted transport APIs, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
 
 API 1.6 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.5 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 

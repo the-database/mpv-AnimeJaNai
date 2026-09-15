@@ -14,6 +14,12 @@ The null-output hardware-frame shortcut requires `--vo-null-accept-hwframes=yes`
 
 ## Managed builds and assembly
 
+The API 1.7 assembler requires producer evidence for `privateProbeAbi`,
+`privateMuxAbi` and `privateSubtitlesAbi`, in addition to the prior sample/output
+ABIs. It rejects an older or partial native runtime instead of creating a full
+streaming preview with missing capabilities. See `STREAMING-TESTS.md` for the
+separate native and packaged-Wasm qualification gates.
+
 Use PowerShell 7, .NET SDK 10 and the pinned tools from `addons/tools/bootstrap.ps1`. Run `addons/tools/test.ps1`, then `addons/tools/package.ps1 -OutputDirectory <new-host-bundle>`. Publish the updater normally with `dotnet publish AnimeJaNaiUpdater -c Release -r win-x64 -o <output>`. In the matching Manager checkout, run `tools/check-addon-client.ps1` before publishing `AnimeJaNaiConfEditor` for win-x64 with self-contained and single-file options. Tests can pass `-p:UsedAvaloniaProducts=` to suppress the dependency's telemetry task.
 
 Host packaging requires a clean Git checkout; `-Git <git-executable>` selects Git when it is not on PATH. It copies tracked source files and emits `host-build.json` with the source commit, source tree identities, SDK version and all bundle file hashes. Full/support assembly checks those trees against the supplied main checkout and verifies the bundle inventory. Later changes outside the host source trees do not require recompiling an identical host. This producer record establishes build coherence, not a publisher signature.
