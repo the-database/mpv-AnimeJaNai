@@ -416,7 +416,7 @@ a passing JavaScript build does not validate a media pipeline.
 
 The maintained tutorial check extracts this guide's manifest and JavaScript,
 compiles and runs them, checks denied permissions, saved state, settings, update
-and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/1d3bbba2e6affa2a4f26cf58b661bd6be7bf4fb1/addons/tools/test-tutorial.ps1). The host's
+and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/eddbe80ee6dd6ee980738401c346a2b6743020c9/addons/tools/test-tutorial.ps1). The host's
 separate suite also runs an unchanged older API 1.0 binary. Keep those old-client
 fixtures when adding a feature; do not silently change existing field meanings.
 
@@ -1655,6 +1655,14 @@ inspected; continuous output supplies it at EOF. It includes actual codecs,
 dimensions, pixel format, aspects and audio layout. The native status also gives
 live pipeline observations. `measurements` reports measured media/wall speed and
 effective bitrate with their intervals; unavailable values remain null.
+
+`transfer.bytesProduced` counts published media objects (or growing continuous
+bytes); `bytesServed` counts bytes actually read for responses, including repeat
+reads. `cachedBytes` counts retained published media plus growing continuous
+bytes. It excludes unfinished segments and metadata/index overhead, so it is not
+a measurement of the directory's total disk allocation. The native quota still
+covers all output files. `activeReaders` and `maximumCacheBytes` expose the current
+reader count and per-stream storage limit.
 
 ### Seek, resume and track replacement
 
@@ -3466,12 +3474,12 @@ for completing the tutorial or using the public API.
 
 | Component | Reviewed implementation revision |
 | --- | --- |
-| Host, SDK, CLI and examples | `1d3bbba2e6affa2a4f26cf58b661bd6be7bf4fb1` |
+| Host, SDK, CLI and examples | `eddbe80ee6dd6ee980738401c346a2b6743020c9` |
 | Manager | `601cedcf584a248fe3a46607fedb7e362cab3d79` |
 | Native player | `d59e80cfe4c9f784654b8d5f924f29a0065d7ff2` |
-| Windows build integration | `d806d2193b4a1987076ad2522d47f5c0f3dea162` |
+| Windows build integration | `5784cece2a46aab0f963d1ee487d777d531fc075` |
 
-[Host and SDK source](https://github.com/422415/mpv-AnimeJaNai/tree/1d3bbba2e6affa2a4f26cf58b661bd6be7bf4fb1/addons)
+[Host and SDK source](https://github.com/422415/mpv-AnimeJaNai/tree/eddbe80ee6dd6ee980738401c346a2b6743020c9/addons)
 contains the implementation used for this edition. A documentation-only revision
 may package this guide without changing those runtime/API revisions. This guide
 does not assert that any particular upstream release has been published.
