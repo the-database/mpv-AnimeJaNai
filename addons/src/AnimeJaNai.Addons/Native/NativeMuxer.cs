@@ -17,18 +17,20 @@ internal sealed class NativeMuxer : IDisposable
     private readonly long maximumBytes;
     private readonly TimeSpan pressureTimeout;
     private readonly Dictionary<long, FileStream> files = [];
-    private readonly byte[] readBuffer = new byte[32768], writeBuffer = new byte[32768];
+    private readonly byte[] writeBuffer = new byte[32768];
+    private readonly NativeReadBuffer reader;
     private long nextHandle, accountedBytes, lastMeasured;
     private string? failure;
     private string? runtimeRoot;
     internal MuxDemandGate? Demand { get; init; }
-    internal NativeMuxer(string directory, Stream source, CancellationToken token, long maximumBytes = MaximumBytes, int pressureTimeoutMs = 15000)
+    internal NativeMuxer(string directory, Stream source, CancellationToken token, long maximumBytes = MaximumBytes, int pressureTimeoutMs = 15000, NativeReadMetrics? readMetrics = null)
     {
         Contract.Require(maximumBytes is > 0 and <= MaximumBytes, "invalid_stream_cache", "Invalid native cache quota.");
         this.maximumBytes = maximumBytes;
         Contract.Require(pressureTimeoutMs is >= 1 and <= 15000, "invalid_stream_cache", "Invalid storage pressure deadline.");
         pressureTimeout = TimeSpan.FromMilliseconds(pressureTimeoutMs);
         this.directory = Path.GetFullPath(directory); this.source = source; this.token = token;
+        reader = new NativeReadBuffer(source, token, metrics: readMetrics);
         SafeFiles.CheckParents(this.directory);
         Contract.Require(Directory.Exists(this.directory) && Directory.EnumerateFileSystemEntries(this.directory).All(p => Path.GetFileName(p) == ".owner"),
             "invalid_stream_cache", "Native muxing requires an empty owned cache directory.");
@@ -72,15 +74,13 @@ internal sealed class NativeMuxer : IDisposable
         accountedBytes = total; lastMeasured = Stopwatch.GetTimestamp();
         Contract.Require(total <= maximumBytes, "buffer_limit_reached", "Stream cache exceeds its storage limit.");
     }
-    private int Read(IntPtr _, IntPtr target, int count)
+    internal int Read(IntPtr _, IntPtr target, int count)
     {
         try
         {
             token.ThrowIfCancellationRequested();
-            if (count is <= 0 or > 32768) return -22;
-            int read = source.Read(readBuffer, 0, count);
-            if (read == 0) return -541478725;
-            Marshal.Copy(readBuffer, 0, target, read); return read;
+            if (count <= 0) return -22;
+            return reader.Read(target, count);
         }
         catch (Exception error) { Fail(error); return -5; }
     }

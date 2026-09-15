@@ -80,6 +80,7 @@ internal static partial class Checks
         await MediaProbeChecks();
         await OutputPlaybackChecks();
         await MuxQuotaChecks();
+        await NativeReadChecks();
         await SegmentIndexChecks();
         await StreamCacheChecks();
         await MuxDemandChecks();

@@ -72,22 +72,20 @@ internal static class NativeProbeWorker
         }
         source.Position = position; return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
-    internal static JsonObject Probe(string root, Stream source, string identity, CancellationToken token)
+    internal static JsonObject Probe(string root, Stream source, string identity, CancellationToken token, NativeReadMetrics? metrics = null)
     {
         IntPtr library = NativeRuntime.Load(root);
         Contract.Require(NativeLibrary.TryGetExport(library, "mpv_ajn_probe_v1", out var address) &&
             NativeLibrary.TryGetExport(library, "mpv_ajn_probe_free_v1", out _), "feature_unavailable", "The native probe ABI is unavailable.");
         var probe = Marshal.GetDelegateForFunctionPointer<ProbeFunction>(address);
         var free = Marshal.GetDelegateForFunctionPointer<FreeFunction>(NativeLibrary.GetExport(library, "mpv_ajn_probe_free_v1"));
-        byte[] buffer = new byte[32768]; long readBytes = 0;
+        const long maximumReadBytes = 64L * 1024 * 1024;
+        var reader = new NativeReadBuffer(source, token, maximumReadBytes, metrics: metrics);
         ReadFunction read = (_, destination, length) =>
         {
             try
             {
-                if (token.IsCancellationRequested || length is <= 0 or > 32768 || readBytes >= 64 * 1024 * 1024) return -5;
-                int count = source.Read(buffer, 0, length); readBytes += count;
-                if (count == 0) return -541478725; // AVERROR_EOF
-                Marshal.Copy(buffer, 0, destination, count); return count;
+                return reader.Read(destination, length);
             }
             catch { return -5; }
         };
@@ -103,7 +101,7 @@ internal static class NativeProbeWorker
             }
             catch { return -5; }
         };
-        CancelFunction cancel = _ => token.IsCancellationRequested || readBytes >= 64 * 1024 * 1024 ? 1 : 0;
+        CancelFunction cancel = _ => token.IsCancellationRequested || reader.BytesRead >= maximumReadBytes ? 1 : 0;
         IntPtr json = IntPtr.Zero;
         try
         {

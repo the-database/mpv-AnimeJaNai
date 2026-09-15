@@ -5,21 +5,21 @@ namespace AnimeJaNai.Addons.Native;
 internal static class NativeSubtitles
 {
     internal const int MaximumBytes = 16 * 1024 * 1024;
-    internal static byte[] Extract(string root, Stream source, int streamIndex, SubtitleRequest options, CancellationToken token)
+    internal static byte[] Extract(string root, Stream source, int streamIndex, SubtitleRequest options, CancellationToken token, NativeReadMetrics? metrics = null)
     {
         IntPtr library = NativeRuntime.Load(root);
         Contract.Require(NativeLibrary.TryGetExport(library, "mpv_ajn_subtitles_v1", out var address), "feature_unavailable", "The native subtitle runtime is unavailable.");
         var extract = Marshal.GetDelegateForFunctionPointer<ExtractFunction>(address);
-        using var output = new MemoryStream(); byte[] buffer = new byte[32768]; long readBytes = 0; string? failure = null;
+        using var output = new MemoryStream(); byte[] buffer = new byte[32768]; string? failure = null;
+        var reader = new NativeReadBuffer(source, token, 64L << 30, "subtitle_read_limit", metrics);
         ReadFunction read = (_, destination, count) =>
         {
             try
             {
+                // Preserve this callback's existing invalid-request error code.
                 token.ThrowIfCancellationRequested();
-                Contract.Require(count is > 0 and <= 32768 && readBytes + count <= 64L << 30, "subtitle_read_limit", "Subtitle extraction exceeded its read budget.");
-                int length = source.Read(buffer, 0, count); readBytes += length;
-                if (length == 0) return -541478725;
-                Marshal.Copy(buffer, 0, destination, length); return length;
+                Contract.Require(count > 0, "subtitle_read_limit", "Invalid subtitle read request.");
+                return reader.Read(destination, count);
             }
             catch (Exception error) { failure ??= error is AddonException addon ? addon.Code : "subtitle_read_failed"; return -5; }
         };

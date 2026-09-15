@@ -30,6 +30,7 @@ bool streamRuntimeOnly = args.Length == 6 && args[^1] == "--stream-runtime-only"
 bool streamEpisodeOnly = args.Length == 7 && args[^1] == "--stream-episode-only";
 bool streamControlsOnly = args.Length == 7 && args[^1] == "--stream-controls-only";
 bool subtitlesOnly = args.Length == 5 && args[^1] == "--subtitles-only";
+bool largeReadOnly = args.Length == 7 && args[^1] == "--large-read-only";
 bool subtitleFixturesOnly = args.Length == 5 && args[^1] == "--subtitle-fixtures-only";
 bool outputsOnly = args.Length == 6 && args[^1] == "--outputs-only";
 bool remoteOnly = args.Length == 6 && args[^1] == "--remote-only";
@@ -38,6 +39,7 @@ bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
 bool lifecycleNetOnly = args.Length == 4 && args[^1] == "--lifecycle-mpvnet-only";
 if (framesOnly) args = args[..5];
+if (largeReadOnly) args = args[..6];
 if (updatesOnly) args = args[..3];
 if (archiveRoundTripOnly) args = args[..5];
 if (installerOnly) args = args[..4];
@@ -56,13 +58,19 @@ if (playerOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
 if (lifecycleNetOnly) args = args[..3];
-if (args.Length is not (3 or 5) && !installerOnly && !streamTimingOnly && !streamEnduranceOnly && !streamEpisodeOnly && !streamControlsOnly && !subtitlesOnly && !subtitleFixturesOnly) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
+if (args.Length is not (3 or 5) && !largeReadOnly && !installerOnly && !streamTimingOnly && !streamEnduranceOnly && !streamEpisodeOnly && !streamControlsOnly && !subtitlesOnly && !subtitleFixturesOnly) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
 string root = Path.GetFullPath(args[0]), output = Path.GetFullPath(args[1]);
 if (Directory.Exists(output)) { Console.Error.WriteLine("Choose a new test output directory."); return 2; }
 Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (largeReadOnly)
+    {
+        await NativeLargeReadChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], args[4], args[5], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
     if (archiveRoundTripOnly)
     {
         await NativeArchiveUpdateChecks.RunAsync(output, args[3], args[4], evidence);
