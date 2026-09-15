@@ -27,8 +27,11 @@ internal sealed class MuxDemandGate(double sourceStart)
             for (;;)
             {
                 token.ThrowIfCancellationRequested();
-                if (end > demand + 15) bufferPaused = true;
-                if (bufferPaused && produced - demand < 5 && end <= demand + 15) bufferPaused = false;
+                // Resume as soon as the pending packet fits the bounded window.
+                // A fixed five-second low watermark can deadlock six-second
+                // segments: the client has consumed every published segment,
+                // but the unfinished segment still exceeds that watermark.
+                bufferPaused = end > demand + 15;
                 if (!userPaused && !bufferPaused) { produced = Math.Max(produced, end); return; }
                 Monitor.Wait(sync, 250);
             }

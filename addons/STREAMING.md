@@ -277,7 +277,8 @@ byte position. Use a replacement stream to begin at a new time.
 
 Call `setDemand(streamId, absoluteSourceSeconds)` from actual client playback
 progress. Downloading a segment is not proof that the client viewed it. Production
-pauses at roughly 15 seconds ahead and resumes below five seconds. `pause(id,
+pauses when the next packet would exceed 15 seconds ahead and resumes when
+updated demand lets that packet fit within the window. `pause(id,
 true)` is a separate user pause; `pause(id, false)` resumes the same generation.
 Periodic demand/pause ownership updates are needed during a long intentional pause.
 

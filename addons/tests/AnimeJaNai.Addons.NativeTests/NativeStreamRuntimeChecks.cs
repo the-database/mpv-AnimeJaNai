@@ -17,7 +17,11 @@ internal static class NativeStreamRuntimeChecks
         if (episodeFfmpeg is not null && !playbackControls)
         {
             string episode = Path.Combine(output, "episode-22-minutes.mkv");
-            await NativeStreamTimingChecks.Ffmpeg(episodeFfmpeg, output, "episode-fixture", ["-stream_loop", "164", "-i", mediaPath, "-t", "1320", "-c", "copy", episode]);
+            // The short fixture's audio extends past its last video frame.
+            // Stream-copy looping preserves those gaps and is not 22 minutes
+            // of continuous 24fps video. Normalize the test source explicitly.
+            await NativeStreamTimingChecks.Ffmpeg(episodeFfmpeg, output, "episode-fixture", ["-stream_loop", "164", "-i", mediaPath, "-t", "1320",
+                "-vf", "fps=24", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le", episode]);
             mediaPath = episode;
         }
         long mediaLength = new FileInfo(mediaPath).Length;

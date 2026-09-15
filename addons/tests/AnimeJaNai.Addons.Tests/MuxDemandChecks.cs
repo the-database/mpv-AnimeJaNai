@@ -4,7 +4,7 @@ internal static partial class Checks
 {
     private static async Task MuxDemandChecks()
     {
-        await Test("Native stream demand gates packets at 15 seconds ahead and resumes below five", async () =>
+        await Test("Native stream demand resumes after consuming a six-second segment", async () =>
         {
             var gate = new MuxDemandGate(100);
             gate.Admit(0, 15, default);
@@ -12,8 +12,7 @@ internal static partial class Checks
             Task next = Task.Run(() => gate.Admit(15, 16, stop.Token));
             await Until(() => gate.Status()["bufferPaused"]!.GetValue<bool>());
             True(!next.IsCompleted && gate.Status()["producedEndSeconds"]!.GetValue<double>() == 115);
-            gate.SetDemand(105); await Task.Delay(30); True(!next.IsCompleted);
-            gate.SetDemand(111); await next.WaitAsync(TimeSpan.FromSeconds(2));
+            gate.SetDemand(106); await next.WaitAsync(TimeSpan.FromSeconds(2));
             True(gate.Status()["producedEndSeconds"]!.GetValue<double>() == 116 && !gate.Status()["bufferPaused"]!.GetValue<bool>());
         });
         await Test("Native stream user pause and cancellation remain independent of buffering", async () =>
