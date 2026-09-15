@@ -37,6 +37,7 @@ not substitute software encoding if the hardware path fails.
 | `$root ./results/timing $dotnet $ffmpeg --stream-timing-only` | CFR 23.976/24/25/29.97/30/50/60, VFR, actual numbered image content at nonzero offsets, segment boundaries and A/V timing |
 | `$root ./results/subtitles $dotnet $ffmpeg --subtitles-only` | Embedded text, ASS styling/position/font, PGS bitmap, local and separately credentialed remote external text, none, cue timing and a selected second audio track |
 | `$root ./results/runtime $dotnet $wasmtime $javy --stream-runtime-only` | Installed public Wasm example, approved remote input, HTTPS delivery, independent decoding, Manager disconnect, capacity-one replacement and resource revocation |
+| `$root ./results/controls $dotnet $wasmtime $javy $ffmpeg --stream-controls-only` | Public Wasm audio/ASS/PGS/none changes with capacity one, decoded HTTPS pixels/audio, forward/backward retained-window demand and replacement back to source zero |
 | `$root ./results/endurance $dotnet $ffmpeg --stream-endurance-only` | Five-minute pause/resume and 22-minute processing, independently decoded segments, counts, A/V timing and measured speed |
 | `$root ./results/episode $dotnet $wasmtime $javy $ffmpeg --stream-episode-only` | Full 22-minute public Wasm remote-input-to-HTTPS delivery, received-byte decoding, startup/speed/throughput/cache evidence |
 

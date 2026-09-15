@@ -11,10 +11,10 @@ using AnimeJaNai.Addons.TestSupport;
 
 internal static class NativeStreamRuntimeChecks
 {
-    internal static async Task RunAsync(string root, string output, WorkerCommand command, string runtime, string compiler, List<JsonObject> evidence, string? episodeFfmpeg = null)
+    internal static async Task RunAsync(string root, string output, WorkerCommand command, string runtime, string compiler, List<JsonObject> evidence, string? episodeFfmpeg = null, bool playbackControls = false)
     {
-        string mediaPath = await NativeEncodingChecks.FixtureAsync(root, output);
-        if (episodeFfmpeg is not null)
+        string mediaPath = playbackControls ? await NativeSubtitleChecks.FixtureAsync(output, episodeFfmpeg!) : await NativeEncodingChecks.FixtureAsync(root, output);
+        if (episodeFfmpeg is not null && !playbackControls)
         {
             string episode = Path.Combine(output, "episode-22-minutes.mkv");
             await NativeStreamTimingChecks.Ffmpeg(episodeFfmpeg, output, "episode-fixture", ["-stream_loop", "164", "-i", mediaPath, "-t", "1320", "-c", "copy", episode]);
@@ -67,6 +67,7 @@ internal static class NativeStreamRuntimeChecks
         await Configure(new() { ["remote"] = true, ["useCredential"] = true, ["container"] = "fragmentedMp4", ["startSeconds"] = 1, ["lengthSeconds"] = 2 });
         await Action("open"); await Until(s => s["listener"]?["state"]?.GetValue<string>() == "listening");
         await Action("probe");
+        JsonNode? sourceProbe = null;
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(40)))
         {
             while (true)
@@ -74,13 +75,15 @@ internal static class NativeStreamRuntimeChecks
                 var probed = await Action("probeStatus");
                 Require(probed?["error"] is null, "Public probe failed: " + probed);
                 if (probed?["tracks"] is JsonArray tracks)
-                { Require(tracks.Any(t => t?["type"]?.GetValue<string>() == "audio"), "Public probe lost audio."); evidence.Add(new() { ["publicProbe"] = probed.DeepClone() }); break; }
+                { Require(tracks.Any(t => t?["type"]?.GetValue<string>() == "audio"), "Public probe lost audio."); sourceProbe = probed.DeepClone(); evidence.Add(new() { ["publicProbe"] = probed.DeepClone() }); break; }
                 await Task.Delay(50, timeout.Token);
             }
         }
-        if (episodeFfmpeg is not null) await Configure(new() { ["startSeconds"] = 0, ["lengthSeconds"] = 1320, ["segmentSeconds"] = 6 });
+        if (playbackControls) Require(sourceProbe?["chapters"]?.AsArray().Count == 2 &&
+            sourceProbe["chapters"]![1]!["startSeconds"]!.GetValue<double>() == 3, "Public remote probe lost source chapters.");
+        if (episodeFfmpeg is not null && !playbackControls) await Configure(new() { ["startSeconds"] = 0, ["lengthSeconds"] = 1320, ["segmentSeconds"] = 6 });
         await Action("play");
-        if (episodeFfmpeg is not null)
+        if (episodeFfmpeg is not null && !playbackControls)
         {
             await ReceiveEpisode(output, certificate, port, episodeFfmpeg, evidence);
             await Call("network.revoke", new() { ["id"] = package.Manifest.Id, ["expectedHash"] = package.Hash, ["destinationId"] = source });
@@ -116,6 +119,45 @@ internal static class NativeStreamRuntimeChecks
         using var stale = await client.GetAsync(origin + "/media/" + generation + "/" + page["segments"]![0]!["resourceId"]!.GetValue<string>());
         Require(stale.StatusCode == HttpStatusCode.Conflict, "Old-generation request was not rejected.");
         evidence.Add(new() { ["capacityOneReplacement"] = replacement, ["sourceRequests"] = requests.Count });
+        if (playbackControls)
+        {
+            string previous = replacement["stream"]!["generationId"]!.GetValue<string>();
+            var tracks = sourceProbe!["tracks"]!.AsArray();
+            string secondAudio = tracks.Where(t => t?["type"]?.GetValue<string>() == "audio").Skip(1).First()!["trackId"]!.GetValue<string>();
+            foreach (string kind in new[] { "ass", "hdmv_pgs_subtitle", "none" })
+            {
+                string selected = kind == "none" ? "" : tracks.Single(t => t?["codec"]?.GetValue<string>() == kind)!["trackId"]!.GetValue<string>();
+                double start = kind == "none" ? 0 : 1;
+                await Configure(new() { ["startSeconds"] = start, ["audioTrackId"] = secondAudio, ["subtitleTrackId"] = selected });
+                await Action("replace");
+                var changed = await Until(s => s["stream"]?["generationId"]?.GetValue<string>() is string next && next != previous && s["stream"]?["state"]?.GetValue<string>() == "producerCompleted");
+                var changedPage = JsonNode.Parse(await client.GetStringAsync(origin + "/segments"))!;
+                string current = changedPage["generationId"]!.GetValue<string>();
+                byte[] changedInit = await client.GetByteArrayAsync(origin + "/media/" + current + "/" + changedPage["initializationId"]!.GetValue<string>());
+                var pictures = new List<byte[]>(); string? first = null;
+                foreach (var segment in changedPage["segments"]!.AsArray())
+                {
+                    byte[] bytes = await client.GetByteArrayAsync(origin + "/media/" + current + "/" + segment!["resourceId"]!.GetValue<string>());
+                    string file = Path.Combine(output, "changed-" + kind + "-" + segment["sequence"] + ".mp4"); first ??= file;
+                    await File.WriteAllBytesAsync(file, [.. changedInit, .. bytes]);
+                    pictures.AddRange(await NativeSubtitleChecks.Pictures(episodeFfmpeg!, file));
+                }
+                NativeSubtitleChecks.VerifyPictures(kind, pictures);
+                await NativeSubtitleChecks.VerifyTone(episodeFfmpeg!, first!, 880);
+                // Forward/backward demand within retained data keeps the same
+                // generation; replacing outside the old interval changed it.
+                foreach (double position in new[] { start + 1.5, start + .5 })
+                {
+                    using var demand = await client.PostAsync(origin + "/demand?generation=" + current + "&seconds=" + position.ToString("R", CultureInfo.InvariantCulture), null);
+                    Require(demand.IsSuccessStatusCode, "Retained-window seek was rejected.");
+                }
+                var afterDemand = await Action("status");
+                Require(afterDemand?["stream"]?["generationId"]?.GetValue<string>() == current, "Retained-window demand replaced its generation.");
+                evidence.Add(new() { ["publicTrackReplacement"] = kind, ["receivedFrames"] = pictures.Count, ["selectedAudioHz"] = 880,
+                    ["sourceStartSeconds"] = start, ["sameGenerationRetainedSeek"] = true, ["status"] = changed });
+                previous = current;
+            }
+        }
         await Call("network.revoke", new() { ["id"] = package.Manifest.Id, ["expectedHash"] = package.Hash, ["destinationId"] = source });
         Require(!service.HasRunningWorkers, "Revocation left the addon active.");
         string cacheRoot = Path.Combine(area, "stream-cache");

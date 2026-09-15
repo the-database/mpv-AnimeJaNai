@@ -23,12 +23,15 @@ internal static class NativeSubtitleChecks
             Dialogue: 0,0:00:00.50,0:00:02.50,Default,,0,0,0,,{\an7\pos(120,100)}
             """ + "\uE000\nDialogue: 1,0:00:00.50,0:00:02.50,Default,,0,0,0,,{\\an7\\pos(20,30)\\c&H00FF00&\\p1}m 0 0 l 50 0 50 30 0 30\n", new UTF8Encoding(false));
         string fixture = Path.Combine(output, "subtitle-fixture.mkv"), fixtures = Path.Combine(AppContext.BaseDirectory, "fixtures");
+        string chapters = Path.Combine(output, "chapters.ffmetadata");
+        File.WriteAllText(chapters, ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=3000\ntitle=First half\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=3000\nEND=6000\ntitle=Second half\n");
         await NativeStreamTimingChecks.Ffmpeg(ffmpeg, output, "subtitle-fixture", [
             "-copyts",
             "-f", "lavfi", "-i", "color=black:size=480x360:rate=24:duration=6",
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=6",
             "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000:duration=6",
             "-i", srt, "-i", ass, "-i", Path.Combine(fixtures, "rectangle.sup"),
+            "-f", "ffmetadata", "-i", chapters, "-map_metadata", "6", "-map_chapters", "6",
             "-map", "0:v", "-map", "1:a", "-map", "2:a", "-map", "3:s", "-map", "4:s", "-map", "5:s",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "16", "-c:a", "pcm_s16le", "-c:s", "copy",
             "-attach", Path.Combine(fixtures, "rectangle.ttf"), "-metadata:s:t", "mimetype=application/x-truetype-font",
@@ -43,6 +46,16 @@ internal static class NativeSubtitleChecks
         var subtitles = probe["tracks"]!.AsArray().OfType<JsonObject>().Where(t => t["type"]!.GetValue<string>() == "subtitle").ToArray();
         var audio = probe["tracks"]!.AsArray().OfType<JsonObject>().Where(t => t["type"]!.GetValue<string>() == "audio").ToArray();
         Require(subtitles.Length == 3 && audio.Length == 2 && probe["attachments"]!.AsArray().Count == 1, "Fixture probe lost tracks or its embedded font.");
+        Require(probe["chapters"]!.AsArray().Count == 2 && probe["chapters"]![1]!["startSeconds"]!.GetValue<double>() == 3 &&
+            probe["chapters"]![1]!["title"]!.GetValue<string>() == "Second half", "Probe changed chapter titles or source times.");
+        // Mixed track/attachment output previously retained a child pointer
+        // across a root-node reallocation, producing intermittent native faults.
+        for (int attempt = 0; attempt < 16; attempt++)
+        {
+            var repeated = await NativeProbeProcess.RunAsync(root, fixture, null, Path.Combine(output, "probe-workers"), command, default);
+            Require(JsonNode.DeepEquals(probe, repeated), "Repeated native probe changed track or attachment metadata.");
+        }
+        evidence.Add(new() { ["repeatedMixedTrackProbes"] = 17, ["stableMetadata"] = true });
         string Track(string codec) => subtitles.Single(t => t["codec"]!.GetValue<string>() == codec)["trackId"]!.GetValue<string>();
         string secondAudio = audio[1]["trackId"]!.GetValue<string>();
         foreach (string kind in new[] { "none", "subrip", "ass", "hdmv_pgs_subtitle", "external" })
@@ -80,7 +93,7 @@ internal static class NativeSubtitleChecks
         evidence.Add(new() { ["remoteExternalSubtitleBurn"] = true, ["separateCredential"] = true });
     }
 
-    private static void VerifyPictures(string kind, List<byte[]> pictures)
+    internal static void VerifyPictures(string kind, List<byte[]> pictures)
     {
         Require(pictures.Count == 48, "Subtitle output must contain two seconds at 24fps.");
         static int Lit(byte[] rgb) => Enumerable.Range(0, rgb.Length / 3).Count(i => rgb[i * 3] > 60 || rgb[i * 3 + 1] > 60 || rgb[i * 3 + 2] > 60);
@@ -106,7 +119,7 @@ internal static class NativeSubtitleChecks
     }
     private static (int X, int Y)[] Pixels(byte[] rgb, Func<byte, byte, byte, bool> predicate) =>
         Enumerable.Range(0, rgb.Length / 3).Where(i => predicate(rgb[3 * i], rgb[3 * i + 1], rgb[3 * i + 2])).Select(i => (i % 240, i / 240)).ToArray();
-    private static async Task<byte[][]> Pictures(string ffmpeg, string path)
+    internal static async Task<byte[][]> Pictures(string ffmpeg, string path)
     {
         string raw = Path.ChangeExtension(path, ".rgb");
         await NativeStreamTimingChecks.Ffmpeg(ffmpeg, Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + "-pictures",
@@ -115,7 +128,7 @@ internal static class NativeSubtitleChecks
         Require(bytes.Length % size == 0, "Invalid decoded pictures.");
         return Enumerable.Range(0, bytes.Length / size).Select(i => bytes[(i * size)..((i + 1) * size)]).ToArray();
     }
-    private static async Task VerifyTone(string ffmpeg, string path, double expected)
+    internal static async Task VerifyTone(string ffmpeg, string path, double expected)
     {
         string raw = Path.ChangeExtension(path, ".pcm");
         await NativeStreamTimingChecks.Ffmpeg(ffmpeg, Path.GetDirectoryName(path)!, "selected-audio",
