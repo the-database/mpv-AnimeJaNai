@@ -307,6 +307,14 @@ dimensions, pixel format, aspects and audio layout. The native status also gives
 live pipeline observations. `measurements` reports measured media/wall speed and
 effective bitrate with their intervals; unavailable values remain null.
 
+`transfer.bytesProduced` counts published media objects (or growing continuous
+bytes); `bytesServed` counts bytes actually read for responses, including repeat
+reads. `cachedBytes` counts retained published media plus growing continuous
+bytes. It excludes unfinished segments and metadata/index overhead, so it is not
+a measurement of the directory's total disk allocation. The native quota still
+covers all output files. `activeReaders` and `maximumCacheBytes` expose the current
+reader count and per-stream storage limit.
+
 ## Seek, resume and track replacement
 
 Retain your own logical playback ID. Cancel its pending old response requests,

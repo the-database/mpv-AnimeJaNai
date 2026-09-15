@@ -38,13 +38,18 @@ not substitute software encoding if the hardware path fails.
 | `$root ./results/subtitles $dotnet $ffmpeg --subtitles-only` | Embedded text, ASS styling/position/font, PGS bitmap, local and separately credentialed remote external text, none, cue timing and a selected second audio track |
 | `$root ./results/runtime $dotnet $wasmtime $javy --stream-runtime-only` | Installed public Wasm example, approved remote input, HTTPS delivery, independent decoding, Manager disconnect, capacity-one replacement and resource revocation |
 | `$root ./results/controls $dotnet $wasmtime $javy $ffmpeg --stream-controls-only` | Public Wasm audio/ASS/PGS/none changes with capacity one, decoded HTTPS pixels/audio, forward/backward retained-window demand and replacement back to source zero |
-| `$root ./results/endurance $dotnet $ffmpeg --stream-endurance-only` | Five-minute pause/resume and 22-minute processing, independently decoded segments, counts, A/V timing and measured speed |
+| `$root ./results/endurance $dotnet $ffmpeg --stream-endurance-only` | Independent buffer-induced pause, five-minute user pause/resume and 22-minute processing, decoded segments, counts, A/V timing and measured speed |
 | `$root ./results/episode $dotnet $wasmtime $javy $ffmpeg --stream-episode-only` | Full 22-minute public Wasm remote-input-to-HTTPS delivery, received-byte decoding, startup/speed/throughput/cache evidence |
 
 Results are JSON, with supporting media and logs in the output directory. A
 failed test returns nonzero; inspect its error before retrying. Preserve both
 failures and subsequent results so a passing retry cannot hide an unresolved
 intermittent fault.
+
+The runtime, controls and episode modes launch the distributed `addon-host/ajn-addon.exe`
+and its bundled Wasmtime, communicate through the real Manager connection, and
+wait for that owned host to drain and exit. They do not substitute an in-process
+service or the test executable's managed runtime for the packaged host.
 
 ## What the fixtures prove
 

@@ -18,6 +18,7 @@ if (args.Length == 4 && args[0] == "--interrupt-update-helper")
 
 bool framesOnly = args.Length == 6 && args[^1] == "--frames-only";
 bool updatesOnly = args.Length == 4 && args[^1] == "--updates-only";
+bool archiveRoundTripOnly = args.Length == 6 && args[^1] == "--archive-roundtrip-only";
 bool installerOnly = args.Length == 5 && args[^1] == "--installer-only";
 bool frameBenchmark = args.Length == 4 && args[^1] == "--frames-benchmark";
 bool nullBenchmark = args.Length == 4 && args[^1] == "--null-benchmark";
@@ -38,6 +39,7 @@ bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
 bool lifecycleNetOnly = args.Length == 4 && args[^1] == "--lifecycle-mpvnet-only";
 if (framesOnly) args = args[..5];
 if (updatesOnly) args = args[..3];
+if (archiveRoundTripOnly) args = args[..5];
 if (installerOnly) args = args[..4];
 if (frameBenchmark) args = args[..3];
 if (nullBenchmark) args = args[..3];
@@ -61,6 +63,12 @@ Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (archiveRoundTripOnly)
+    {
+        await NativeArchiveUpdateChecks.RunAsync(output, args[3], args[4], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
     if (subtitleFixturesOnly)
     {
         Console.WriteLine(await NativeSubtitleChecks.FixtureAsync(output, args[3]));

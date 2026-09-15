@@ -58,6 +58,24 @@ internal static class NativeSubtitleChecks
         evidence.Add(new() { ["repeatedMixedTrackProbes"] = 17, ["stableMetadata"] = true });
         string Track(string codec) => subtitles.Single(t => t["codec"]!.GetValue<string>() == codec)["trackId"]!.GetValue<string>();
         string secondAudio = audio[1]["trackId"]!.GetValue<string>();
+        try
+        {
+            await NativeProbeProcess.RunPayloadAsync(root, fixture, null, Path.Combine(output, "probe-workers"), command, default, new(Track("ass"), 1, 1.5));
+            throw new Exception("ASS extraction silently discarded styling.");
+        }
+        catch (AddonException error) when (error.Code == "subtitle_styling_loss") { }
+        byte[] converted = await NativeProbeProcess.RunPayloadAsync(root, fixture, null, Path.Combine(output, "probe-workers"), command, default,
+            new(Track("ass"), 1, 1.5, AllowStylingLoss: true));
+        string convertedText = Encoding.UTF8.GetString(converted);
+        Require(convertedText.Contains("00:00:01.000 --> 00:00:01.500") && convertedText.Contains('\uE000'), "Selected ASS extraction lost source times or text.");
+        File.WriteAllBytes(Path.Combine(output, "selected-ass.vtt"), converted);
+        try
+        {
+            await NativeProbeProcess.RunPayloadAsync(root, fixture, null, Path.Combine(output, "probe-workers"), command, default, new(Track("hdmv_pgs_subtitle"), 1, 1.5));
+            throw new Exception("Bitmap extraction claimed unsupported OCR.");
+        }
+        catch (AddonException error) when (error.Code == "subtitle_format_unavailable") { }
+        evidence.Add(new() { ["assTextExtraction"] = true, ["explicitStylingLossRequired"] = true, ["bitmapTextRejected"] = true });
         foreach (string kind in new[] { "none", "subrip", "ass", "hdmv_pgs_subtitle", "external" })
         {
             var playback = kind switch {

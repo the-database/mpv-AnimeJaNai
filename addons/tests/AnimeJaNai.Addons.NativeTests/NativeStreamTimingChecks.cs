@@ -17,6 +17,10 @@ internal static class NativeStreamTimingChecks
     {
         string pattern = await NativeEncodingChecks.FixtureAsync(root, output), episode = Path.Combine(output, "episode-22-minutes.mkv");
         await Ffmpeg(ffmpeg, output, "episode-fixture", ["-stream_loop", "164", "-i", pattern, "-t", "1320", "-c", "copy", episode]);
+        var buffered = await Produce(root, output, "buffer-window", episode, command, 0, 30, evidence, bufferPauseSeconds: 2);
+        int bufferedFrames = 0;
+        foreach (string path in buffered) bufferedFrames += (await Decode(ffmpeg, Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path), path)).Count(f => f.Type == "video");
+        Require(bufferedFrames == 720, "Buffer-induced pause lost or duplicated frames.");
         // More than the production window keeps the encoder active throughout the pause.
         var pausePaths = await Produce(root, output, "five-minute-pause", episode, command, 0, 30, evidence, pauseSeconds: 300);
         int pauseFrames = 0;
@@ -98,11 +102,12 @@ internal static class NativeStreamTimingChecks
 
     internal static async Task<List<string>> Produce(string root, string output, string name, string source, WorkerCommand command,
         double start, double duration, List<JsonObject> evidence, OutputPlayback? playback = null, int pauseSeconds = 0,
-        string? subtitleSource = null, RemoteInputPlan? remoteSubtitles = null, int slot = 1002)
+        string? subtitleSource = null, RemoteInputPlan? remoteSubtitles = null, int slot = 1002, int bufferPauseSeconds = 0)
     {
         string area = Path.Combine(output, name); Directory.CreateDirectory(area);
         await using var cache = StreamCache.Create(area, start); var index = new SegmentIndex("matroska");
         var stopwatch = Stopwatch.StartNew(); bool paused = false;
+        bool bufferReleased = bufferPauseSeconds == 0;
         var paths = new List<string>(); long copied = -1;
         double? firstSource = null, lastSource = null;
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(90, duration * 3 + pauseSeconds)));
@@ -135,6 +140,17 @@ internal static class NativeStreamTimingChecks
                     evidence.Add(new() { ["stream"] = name, ["profileSlot"] = slot, ["elapsedSeconds"] = stopwatch.Elapsed.TotalSeconds, ["native"] = state, ["encodedMedia"] = cache.EncodedMetadata() }); break;
                 }
                 double produced = state["buffer"]?["producedEndSeconds"]?.GetValue<double>() ?? start;
+                if (!bufferReleased && state["buffer"]?["bufferPaused"]?.GetValue<bool>() == true)
+                {
+                    Require(produced <= start + 15.001, "Producer exceeded the default ahead window.");
+                    await Task.Delay(TimeSpan.FromSeconds(bufferPauseSeconds), deadline.Token);
+                    var held = await process.GetStatusAsync(deadline.Token);
+                    Require(held["buffer"]?["bufferPaused"]?.GetValue<bool>() == true && held["buffer"]?["userPaused"]?.GetValue<bool>() == false &&
+                        held["buffer"]?["producedEndSeconds"]?.GetValue<double>() <= start + 15.001,
+                        "Buffer pause did not retain a bounded independent producer window.");
+                    bufferReleased = true;
+                    evidence.Add(new() { ["bufferPauseSeconds"] = bufferPauseSeconds, ["boundedAheadSeconds"] = 15, ["sameGeneration"] = cache.Generation });
+                }
                 if (!paused && pauseSeconds > 0 && produced > start + 2)
                 {
                     await process.PauseAsync(true, deadline.Token); paused = true;
@@ -148,11 +164,12 @@ internal static class NativeStreamTimingChecks
                     await process.PauseAsync(false, deadline.Token);
                     evidence.Add(new() { ["pauseSeconds"] = pause.Elapsed.TotalSeconds, ["sameGeneration"] = cache.Generation });
                 }
-                if (produced > start) { await process.SetDemandAsync(Math.Max(start, produced - 2), deadline.Token); cache.Expire(produced - 2); }
+                if (bufferReleased && produced > start) { await process.SetDemandAsync(Math.Max(start, produced - 2), deadline.Token); cache.Expire(produced - 2); }
                 await Task.Delay(50, deadline.Token);
             }
         }
         await ReceiveCompleted(); cache.Complete(index.Read(cache.Directory));
+        Require(bufferReleased && (pauseSeconds == 0 || paused), "The requested pause scenario did not occur.");
         Require(paths.Count > 0, "No completed segments received.");
         Require(Math.Abs(firstSource!.Value - start) <= .05 && Math.Abs(lastSource!.Value - start - duration) <= .05,
             "Segment source interval disagrees with the requested playback range: " + firstSource + ".." + lastSource);

@@ -46,10 +46,8 @@ internal static class NativeStreamRuntimeChecks
         string certId = listeners.Certificates.Import(package, grant, pfx, "fixture", "Test-only localhost certificate");
         var portProbe = new TcpListener(IPAddress.Loopback, 0); portProbe.Start(); int port = ((IPEndPoint)portProbe.LocalEndpoint).Port; portProbe.Stop();
         listeners.Approve(package, grant, "HTTPS fixture", new("127.0.0.1", port, [], [], Scheme: "https", CertificateId: certId, CertificateHost: "localhost", AllowedHosts: ["127.0.0.1", "localhost"]));
-        var sessions = new SessionRegistry(new NativeSessionProvider(root, area, media, command, maximumSessions: 1, networkSelections: network), totalLimit: 1, perOwnerLimit: 1);
-        await using var service = new AddonService(area, async (p, g, log, token) => await AddonWorker.StartAsync(p, g, runtime,
-            Path.Combine(area, "workers"), area, command, log, sessions, cancellationToken: token, networkSelections: network), media, network);
-        Task<JsonNode?> Call(string method, JsonObject? parameters = null) => service.InvokeAsync("stream-test", method, parameters ?? new() { ["id"] = package.Manifest.Id }, default);
+        await using var service = await PackagedStreamHost.StartAsync(root, area, output);
+        Task<JsonNode?> Call(string method, JsonObject? parameters = null) => service.CallAsync(method, parameters ?? new() { ["id"] = package.Manifest.Id });
         Task<JsonNode?> Action(string action) => Call("addons.action", new() { ["id"] = package.Manifest.Id, ["action"] = action });
         Task<JsonNode?> Configure(JsonObject changes) => Call("addons.configure", new() { ["id"] = package.Manifest.Id, ["changes"] = changes });
         async Task<JsonObject> Until(Func<JsonObject, bool> done)
@@ -63,7 +61,7 @@ internal static class NativeStreamRuntimeChecks
                 await Task.Delay(50, timeout.Token);
             }
         }
-        await Call("manager.hello", new() { ["major"] = 1L }); await Call("addons.start");
+        await Call("host.configure", new() { ["maximumConcurrentSessions"] = 1L }); await Call("addons.start");
         await Configure(new() { ["remote"] = true, ["useCredential"] = true, ["container"] = "fragmentedMp4", ["startSeconds"] = 1, ["lengthSeconds"] = 2 });
         await Action("open"); await Until(s => s["listener"]?["state"]?.GetValue<string>() == "listening");
         await Action("probe");
@@ -87,13 +85,12 @@ internal static class NativeStreamRuntimeChecks
         {
             await ReceiveEpisode(output, certificate, port, episodeFfmpeg, evidence);
             await Call("network.revoke", new() { ["id"] = package.Manifest.Id, ["expectedHash"] = package.Hash, ["destinationId"] = source });
-            Require(!service.HasRunningWorkers, "Episode revocation retained its worker.");
+            Require(!await service.AnyRunningAsync(), "Episode revocation retained its worker.");
             return;
         }
         var ready = await Until(s => s["stream"]?["state"]?.GetValue<string>() == "producerCompleted");
         Require(ready["stream"]?["encodedMedia"]?["tracks"]?.AsArray().Any(t => t?["width"]?.GetValue<int>() == 960) == true, "Encoded stream is not 2x.");
-        await service.DisconnectAsync("stream-test"); // Manual activation must survive Manager closing.
-        Require(service.HasRunningWorkers, "Manager closure stopped manually activated streaming.");
+        await service.DisconnectAsync(); // Manual activation must survive Manager closing; HTTPS reads below prove it.
         // Exact test-certificate pin only in this client. No system trust or host TLS policy changes.
         using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, cert, _, _) => cert?.Thumbprint == certificate.Thumbprint };
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
@@ -113,7 +110,7 @@ internal static class NativeStreamRuntimeChecks
         }
         Require(frames == 48, "HTTPS delivery lost or duplicated video frames.");
         evidence.Add(new() { ["httpsWasmStream"] = ready, ["segments"] = page, ["decodedFrames"] = frames, ["managerDisconnectSurvived"] = true });
-        await Call("manager.hello", new() { ["major"] = 1L });
+        await service.ConnectAsync();
         await Configure(new() { ["startSeconds"] = 4 }); await Action("replace");
         var replacement = await Until(s => s["stream"]?["generationId"]?.GetValue<string>() is string next && next != generation && s["stream"]?["state"]?.GetValue<string>() == "producerCompleted");
         using var stale = await client.GetAsync(origin + "/media/" + generation + "/" + page["segments"]![0]!["resourceId"]!.GetValue<string>());
@@ -159,7 +156,7 @@ internal static class NativeStreamRuntimeChecks
             }
         }
         await Call("network.revoke", new() { ["id"] = package.Manifest.Id, ["expectedHash"] = package.Hash, ["destinationId"] = source });
-        Require(!service.HasRunningWorkers, "Revocation left the addon active.");
+        Require(!await service.AnyRunningAsync(), "Revocation left the addon active.");
         string cacheRoot = Path.Combine(area, "stream-cache");
         Require(!Directory.Exists(cacheRoot) || !Directory.EnumerateDirectories(cacheRoot).Any(), "Revocation retained stream caches.");
         Require(!Directory.EnumerateDirectories(Path.Combine(area, "media-workers")).Any(), "Revocation retained native workers.");
