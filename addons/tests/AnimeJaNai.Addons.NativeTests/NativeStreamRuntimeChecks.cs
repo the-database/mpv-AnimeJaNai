@@ -20,14 +20,14 @@ internal static class NativeStreamRuntimeChecks
             await NativeStreamTimingChecks.Ffmpeg(episodeFfmpeg, output, "episode-fixture", ["-stream_loop", "164", "-i", mediaPath, "-t", "1320", "-c", "copy", episode]);
             mediaPath = episode;
         }
-        byte[] mediaBytes = await File.ReadAllBytesAsync(mediaPath);
+        long mediaLength = new FileInfo(mediaPath).Length;
         var requests = new ConcurrentQueue<HttpInput>();
         await using var upstream = new HttpFixture((request, _) =>
         {
             requests.Enqueue(request);
             Require(request.Headers.GetValueOrDefault("X-Source-Test") == "stream-source-fixture", "Wrong source credential.");
-            int start = int.Parse(request.Headers["Range"][6..^1], CultureInfo.InvariantCulture);
-            return Task.FromResult(new HttpReply(206, mediaBytes[start..], $"Content-Range: bytes {start}-{mediaBytes.Length - 1}/{mediaBytes.Length}\r\nETag: \"stream-fixture-1\"\r\n"));
+            long start = long.Parse(request.Headers["Range"][6..^1], CultureInfo.InvariantCulture);
+            return Task.FromResult(new HttpReply(206, [], $"Content-Range: bytes {start}-{mediaLength - 1}/{mediaLength}\r\nETag: \"stream-fixture-1\"\r\n", FileBody: mediaPath, FileOffset: start));
         });
         string area = Path.Combine(output, "managed"); Directory.CreateDirectory(area);
         var package = await DeveloperTools.BuildAsync(Path.Combine(AppContext.BaseDirectory, "media-stream"), compiler, Path.Combine(output, "media-stream.ajnaddon"));
@@ -84,8 +84,15 @@ internal static class NativeStreamRuntimeChecks
         if (episodeFfmpeg is not null && !playbackControls)
         {
             await ReceiveEpisode(output, certificate, port, episodeFfmpeg, evidence);
+            await Action("replace");
+            var active = await Until(s => s["stream"]?["nativeCapacityReleased"]?.GetValue<bool>() == false &&
+                s["stream"]?["retainedEndSeconds"]?.GetValue<double>() > 0);
             await Call("network.revoke", new() { ["id"] = package.Manifest.Id, ["expectedHash"] = package.Hash, ["destinationId"] = source });
             Require(!await service.AnyRunningAsync(), "Episode revocation retained its worker.");
+            string caches = Path.Combine(area, "stream-cache"), workers = Path.Combine(area, "media-workers");
+            Require(!Directory.Exists(caches) || !Directory.EnumerateDirectories(caches).Any(), "Active stream revocation retained a cache.");
+            Require(!Directory.Exists(workers) || !Directory.EnumerateDirectories(workers).Any(), "Active stream revocation retained a native worker.");
+            evidence.Add(new() { ["resourceRevokedDuringNativePlayback"] = true, ["beforeRevocation"] = active, ["cacheAndWorkerReleased"] = true });
             return;
         }
         var ready = await Until(s => s["stream"]?["state"]?.GetValue<string>() == "producerCompleted");

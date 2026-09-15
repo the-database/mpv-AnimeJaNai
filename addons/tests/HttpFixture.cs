@@ -6,7 +6,7 @@ namespace AnimeJaNai.Addons.TestSupport;
 
 internal sealed record HttpInput(string Path, Dictionary<string, string> Headers, byte[] Body, string Method);
 internal sealed record HttpReply(int Status, byte[] Body, string Headers = "", bool Chunked = false,
-    long? DeclaredLength = null, TimeSpan? BodyDelay = null);
+    long? DeclaredLength = null, TimeSpan? BodyDelay = null, string? FileBody = null, long FileOffset = 0);
 internal sealed class HttpFixture : IAsyncDisposable
 {
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
@@ -74,12 +74,19 @@ internal sealed class HttpFixture : IAsyncDisposable
             var input = new HttpInput(lines[0].Split(' ')[1], headers, body, lines[0].Split(' ')[0]);
             Last = input; Interlocked.Increment(ref Requests);
             var reply = await handler(input, stop.Token);
+            using var fileBody = reply.FileBody is null ? null : new FileStream(reply.FileBody, FileMode.Open, FileAccess.Read, FileShare.Read, 32768, FileOptions.Asynchronous);
+            if (fileBody is not null)
+            {
+                True(!reply.Chunked && reply.FileOffset >= 0 && reply.FileOffset <= fileBody.Length, "Invalid fixture file response.");
+                fileBody.Position = reply.FileOffset;
+            }
             string prefix = $"HTTP/1.1 {reply.Status} Test\r\nConnection: close\r\n" + reply.Headers +
-                (reply.Chunked ? "Transfer-Encoding: chunked\r\n" : $"Content-Length: {reply.DeclaredLength ?? reply.Body.Length}\r\n") + "\r\n";
+                (reply.Chunked ? "Transfer-Encoding: chunked\r\n" : $"Content-Length: {reply.DeclaredLength ?? (fileBody is null ? reply.Body.Length : fileBody.Length - reply.FileOffset)}\r\n") + "\r\n";
             await stream.WriteAsync(Encoding.ASCII.GetBytes(prefix), stop.Token);
             if (reply.BodyDelay is { } delay) await Task.Delay(delay, stop.Token);
             if (reply.Chunked) await stream.WriteAsync(Encoding.ASCII.GetBytes(reply.Body.Length.ToString("X") + "\r\n"), stop.Token);
-            await stream.WriteAsync(reply.Body, stop.Token);
+            if (fileBody is null) await stream.WriteAsync(reply.Body, stop.Token);
+            else if (input.Method != "HEAD") await fileBody.CopyToAsync(stream, 32768, stop.Token);
             if (reply.Chunked) await stream.WriteAsync("\r\n0\r\n\r\n"u8.ToArray(), stop.Token);
         }
         catch (Exception error) when (error is OperationCanceledException or IOException or SocketException) { }

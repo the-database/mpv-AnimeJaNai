@@ -23,6 +23,20 @@ internal static partial class Checks
 
     private static async Task RemoteInputChecks()
     {
+        await Test("File-backed remote fixture preserves range offsets and streamed bytes", async () =>
+        {
+            byte[] expected = Enumerable.Range(0, 300000).Select(i => (byte)(i % 251)).ToArray();
+            string path = Path.Combine(Area(), "source.bin"); await File.WriteAllBytesAsync(path, expected);
+            await using var server = new HttpFixture((request, _) =>
+            {
+                int start = RangeStart(request);
+                return Task.FromResult(new HttpReply(206, [], $"Content-Range: bytes {start}-{expected.Length - 1}/{expected.Length}\r\nETag: \"file-fixture\"\r\n", FileBody: path, FileOffset: start));
+            });
+            using var stream = await RemoteMediaStream.OpenAsync(InputPlan(server.Port), default);
+            byte[] prefix = new byte[1024]; stream.ReadExactly(prefix); True(prefix.SequenceEqual(expected[..1024]));
+            stream.Seek(150000, SeekOrigin.Begin);
+            True((await ReadAll(stream)).SequenceEqual(expected[150000..]));
+        });
         await Test("Remote input API requires its capability and independent grants before opening a session", async () =>
         {
             string area = Area(); var package = Package(permissions: [.. InputPermissions, "media.output"]);
