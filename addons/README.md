@@ -2,7 +2,7 @@
 
 ## Start here
 
-This branch implements **API 1.7 preview**, including
+This branch implements **API 1.8 preview**, including
 [HTTP, proxy and credential APIs](HTTP-SERVER.md), reviewed HTTPS listeners and
 the [streaming API](STREAMING.md). The native qualification and packaging checks
 in [STREAMING-TESTS.md](STREAMING-TESTS.md) must pass before a matching runtime is
@@ -15,6 +15,7 @@ not contain these additions.
 | Install, use or troubleshoot an addon | [User guide](USER-GUIDE.md) |
 | Make your first addon | [Creator tutorial](CREATOR-GUIDE.md) — build, permissions, saved data, settings, update and rollback |
 | Add video, image samples, service access or output | [Recipes and complete examples](CREATOR-RECIPES.md) |
+| Port a custom RIFE scene detector to WebAssembly | [Scene detection API and creator instructions](SCENE-DETECTION.md) |
 | Look up protocol, limits and compatibility | [API reference](API.md) and [SDK types](sdk/ajn.d.ts) |
 | Resolve a specific error | [Troubleshooting](TROUBLESHOOTING.md) |
 | Build, package, update or recover a preview | [Release integration](RELEASE-INTEGRATION.md) |
@@ -45,7 +46,7 @@ This working preview combines lifecycle, declarative settings/actions, JSON-RPC 
 
 **Remaining integration:** API 1.7 native qualification and release packaging, discovery, unrestricted transport APIs, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
 
-API 1.7 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.6 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+API 1.8 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.7 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 

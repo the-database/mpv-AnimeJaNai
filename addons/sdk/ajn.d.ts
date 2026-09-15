@@ -1,4 +1,14 @@
-/** AJN addon API 1.7 development. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.8 development. Plain JavaScript, with optional editor type checking. */
+interface AjnScenePair {
+    requestId: string; epoch: string;
+    previousPtsSeconds: number; currentPtsSeconds: number;
+    width: number; height: number; sourceWidth: number; sourceHeight: number;
+    format: "gray8"; stage: "beforeInterpolation"; range: "full";
+    /** Remaining native decision budget at the time the host copied the pair. */
+    remainingMs: number;
+    /** Two row-major width*height grayscale arrays. Encoded SDR, no OSD/subtitles. */
+    previous: Uint8Array; current: Uint8Array;
+}
 interface AjnRemoteSource {
     type?: "http"; destinationId: string; path?: string; useCredential?: boolean;
     /** API 1.7: temporary request-derived context. Mutually exclusive with useCredential. */
@@ -165,6 +175,24 @@ interface AjnListenerBinding {
     cors: { origins: string[]; methods: string[]; headers: string[]; exposeHeaders: string[]; allowCredentials: boolean } | null;
 }
 interface AjnApi {
+    /** API 1.8, sceneDetection 1.0. Requires player.sceneDetection and frames.read.
+     * One exclusive detector per player; callbacks remain inside the addon sandbox.
+     * The host delivers scene.request events containing {detectorId}. */
+    sceneDetection: {
+        list(): { playerId: string; inUse: boolean; format: "gray8"; stage: "beforeInterpolation" }[];
+        attach(playerId: string, options?: { width?: number; height?: number; deadlineMs?: number }): {
+            detectorId: string; width: number; height: number; deadlineMs: number; format: "gray8"; stage: "beforeInterpolation";
+        };
+        /** Latest pending pair once, or null if consumed, expired, reset or unavailable. */
+        read(detectorId: string): AjnScenePair | null;
+        /** false means late, duplicate or stale. It never applies to a later pair. */
+        submit(detectorId: string, requestId: string, decision: "cut" | "continuous" | "default"): { accepted: boolean };
+        status(detectorId: string): {
+            state: "waitingForPlayer" | "pending" | "active" | "fallback" | "sampleUnavailable" | "backendUnavailable" | "suspended" | "unavailable";
+            acceptedPairs: number; timedOutPairs: number;
+        };
+        detach(detectorId: string): void;
+    };
     info(): AjnHostInfo;
     /** API 1.7 development: explicitly approved HTTP(S) listeners. */
     httpServer: {

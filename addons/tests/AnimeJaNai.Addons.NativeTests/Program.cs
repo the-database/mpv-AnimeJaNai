@@ -35,6 +35,7 @@ bool subtitleFixturesOnly = args.Length == 5 && args[^1] == "--subtitle-fixtures
 bool outputsOnly = args.Length == 6 && args[^1] == "--outputs-only";
 bool remoteOnly = args.Length == 6 && args[^1] == "--remote-only";
 bool playerOnly = args.Length == 6 && args[^1] == "--player-frames-only";
+bool sceneOnly = args.Length == 6 && args[^1] == "--scene-only";
 bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
 bool lifecycleNetOnly = args.Length == 4 && args[^1] == "--lifecycle-mpvnet-only";
@@ -55,6 +56,7 @@ if (subtitlesOnly || subtitleFixturesOnly) args = args[..4];
 if (outputsOnly) args = args[..5];
 if (remoteOnly) args = args[..5];
 if (playerOnly) args = args[..5];
+if (sceneOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
 if (lifecycleNetOnly) args = args[..3];
@@ -65,6 +67,12 @@ Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (sceneOnly)
+    {
+        await NativeSceneChecks.RunAsync(root, output, args[4], evidence);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
     if (largeReadOnly)
     {
         await NativeLargeReadChecks.RunAsync(root, output, new WorkerCommand(Path.GetFullPath(args[2]), [typeof(AddonWorker).Assembly.Location]), args[3], args[4], args[5], evidence);

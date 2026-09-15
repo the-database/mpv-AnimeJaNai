@@ -217,6 +217,7 @@ local packages; catalog signing and automatic updates are future work.
 | Process independent videos | `sessions`; sessions 1.1 | `sessions.manage`, approved files/profiles |
 | Read small samples from an owned session | `frames`; frames 1.0 | `frames.read` + `sessions.manage` |
 | Observe normal AJN playback | `playerFrames`; playerFrames 1.0, API 1.6 | `player.observe` + `frames.read`; no playback controls |
+| Customize RIFE scene decisions | `sceneDetection`; 1.0, API 1.8 | `player.sceneDetection` + `frames.read`; see [SCENE-DETECTION.md](SCENE-DETECTION.md) |
 | Talk to a service/device | `network`; network 1.0 | `network.connect`, approved destination; optional `credentials.use` |
 | Process a remote video | `sessions.openRemote`; remoteSources 1.0, API 1.5 | `media.input` + `sessions.manage` + `network.connect`, approved service/profile |
 | Deliver encoded video/audio | `outputs`; outputs 1.0, API 1.4 | `media.output` + session/network grants, approved input/profile/receiver; remote input adds its own requirements |

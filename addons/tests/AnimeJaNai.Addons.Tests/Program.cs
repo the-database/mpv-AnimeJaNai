@@ -67,6 +67,7 @@ internal static partial class Checks
         await MediaSelectionChecks();
         await FrameAndTimerChecks();
         await PlayerFrameChecks();
+        await SceneDetectionChecks();
         if (OperatingSystem.IsWindows()) await PlayerMappingChecks();
         await NetworkChecks();
         await HttpServerChecks();
@@ -96,6 +97,7 @@ internal static partial class Checks
         if (args.Length == 4) await RuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await RuntimePathChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await FrameRuntimeChecks(args[1], args[2], args[3]);
+        if (args.Length == 4) await SceneRuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await NetworkRuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await ServiceInspectorChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await HttpServerRuntimeChecks(args[1], args[2], args[3]);

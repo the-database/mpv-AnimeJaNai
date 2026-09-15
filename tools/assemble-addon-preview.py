@@ -157,6 +157,25 @@ def assemble(args):
         if not (args.host_bundle / "host" / name).is_file():
             raise ValueError(f"Incomplete host bundle: {name}")
     sources = {}
+    inference_record = None
+    inference_paths = []
+    inference_args = (args.inference_directory, args.inference_metadata, args.inference_source)
+    if any(inference_args):
+        if not all(inference_args):
+            raise ValueError("Supply all three inference directory/metadata/source inputs")
+        if record.get("privateSceneAbi") != 1:
+            raise ValueError("Scene inference package requires a matching native player")
+        inference_record = json.loads(args.inference_metadata.read_text(encoding="utf-8"))
+        commit = subprocess.check_output([args.git, "-C", str(args.inference_source), "rev-parse", "HEAD"], text=True).strip()
+        dirty = subprocess.check_output([args.git, "-C", str(args.inference_source), "status", "--porcelain", "--untracked-files=no"], text=True).strip()
+        if dirty or inference_record.get("commit") != commit:
+            raise ValueError("Inference source differs from the recorded build revision")
+        sources["inference"] = commit
+        for name in ("aji.dll", "aji_dml.dll", "aji_trt.dll"):
+            path = args.inference_directory / name
+            if not path.is_file():
+                raise ValueError("Incomplete inference build: " + name)
+            inference_paths.append(path)
     for name in ("main", "manager", "mpv", "winbuild"):
         path = getattr(args, name + "_source")
         def git(*command):
@@ -192,6 +211,13 @@ def assemble(args):
                 item.rename(destination)
     for name in record["files"]:
         shutil.copy2(args.native_directory / name, output / name)
+    if inference_record is not None:
+        destination = output / "animejanai/inference"
+        destination.mkdir(parents=True, exist_ok=True)
+        for path in inference_paths:
+            shutil.copy2(path, destination / path.name)
+        write(output / "build-info/inference-build.json", {
+            **inference_record, "files": {p.name: sha(p) for p in inference_paths}})
     for path in args.manager_directory.iterdir():
         if path.is_file() and path.suffix.lower() in (".exe", ".dll"):
             shutil.copy2(path, output / path.name)
@@ -239,6 +265,7 @@ def assemble(args):
         provenance["tests"].append({"file": target.relative_to(output).as_posix(), "sha256": sha(evidence)})
     write(output / "build-info/addon-preview.json", provenance)
     inventory_paths = set(record["files"])
+    inventory_paths.update("animejanai/inference/" + p.name for p in inference_paths)
     inventory_paths.update(p.name for p in args.manager_directory.iterdir() if p.is_file() and p.suffix.lower() in (".exe", ".dll"))
     inventory_paths.update(p.relative_to(output).as_posix() for p in (output / "addon-host").rglob("*") if p.is_file())
     inventory_paths.add("portable_config/scripts/animejanai_addons.lua")
@@ -253,6 +280,8 @@ def assemble(args):
         manifest.setdefault("overlay_paths", []).extend(["addon-host", "addon-development", "addon-package.json", "build-info"])
         manifest.setdefault("deps", {})["addon_native"] = sha(output / "addon-host/native-capabilities.json")
         manifest["deps"]["mpvfork"] = "source:" + sources["mpv"]
+        if inference_record is not None:
+            manifest["deps"]["aji"] = "source:" + sources["inference"]
         write(output / "manifest.json", manifest)
         (output / "version.txt").write_text(args.version + "\n", encoding="utf-8")
         (output / "TEST-BUILD.txt").write_text(
@@ -282,5 +311,7 @@ if __name__ == "__main__":
     parser.add_argument("--sevenzip", default="7z")
     parser.add_argument("--core-archive", type=Path)
     parser.add_argument("--core-sha256")
+    for name in ("inference-directory", "inference-metadata", "inference-source"):
+        parser.add_argument("--" + name, type=Path)
     parser.add_argument("--evidence", type=Path, action="append", default=[])
     assemble(parser.parse_args())

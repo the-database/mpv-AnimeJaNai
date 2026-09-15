@@ -1,15 +1,15 @@
 # AnimeJaNai Addon Developer Guide
 
-**Qualification in progress:** This candidate guide documents the implementation; it is not evidence that the integration.2 runtime has passed its release tests.
+**Development preview:** API 1.8 scene detection has passed protocol tests and short DirectML/RIFE playback checks. TensorRT scene playback and broad performance qualification are still outstanding; use the matching build report for test scope.
 
-**Edition:** 2026-09-15 · **Addon API:** 1.7 preview · **Platform:** Windows x64
+**Edition:** 2026-09-15 · **Addon API:** 1.8 preview · **Platform:** Windows x64
 
 Create, build, install, test and distribute an AnimeJaNai (AJN) addon using this
 document and the matching release tools. No previous conversation, maintainer
 handoff or checkout of AJN's repositories is required. The complete JavaScript
-API declarations and nine feature examples are included in this file.
+API declarations and ten feature examples are included in this file.
 
-This guide targets the **3.6.1 addons integration.2 preview**. API 1.7 remains a
+This guide targets the **API 1.8 development preview**. API 1.8 remains a
 preview, so it is suitable for developing and testing addons but is not yet a
 frozen community compatibility promise. Use the guide shipped with your release.
 The addon API version, AJN application version and your addon's version are
@@ -52,6 +52,7 @@ AJN; obtain that product's documentation when implementing an integration.
 A. [Complete JavaScript editor declarations](#sdk)
 B. [Complete feature examples](#examples)
 C. [Release compatibility and documentation provenance](#provenance)
+D. [Custom RIFE scene detection and complete example](#scene-detection)
 
 
 <a id="overview"></a>
@@ -352,6 +353,7 @@ local packages; catalog signing and automatic updates are future work.
 | Process independent videos | `sessions`; sessions 1.1 | `sessions.manage`, approved files/profiles |
 | Read small samples from an owned session | `frames`; frames 1.0 | `frames.read` + `sessions.manage` |
 | Observe normal AJN playback | `playerFrames`; playerFrames 1.0, API 1.6 | `player.observe` + `frames.read`; no playback controls |
+| Customize RIFE scene decisions | `sceneDetection`; 1.0, API 1.8 | `player.sceneDetection` + `frames.read`; see Appendix D |
 | Talk to a service/device | `network`; network 1.0 | `network.connect`, approved destination; optional `credentials.use` |
 | Process a remote video | `sessions.openRemote`; remoteSources 1.0, API 1.5 | `media.input` + `sessions.manage` + `network.connect`, approved service/profile |
 | Deliver encoded video/audio | `outputs`; outputs 1.0, API 1.4 | `media.output` + session/network grants, approved input/profile/receiver; remote input adds its own requirements |
@@ -2169,7 +2171,17 @@ capability and limit described above still applies. `sessions.status` deliberate
 uses an open record; inspect its documented state and optional fields defensively.
 
 ```typescript
-/** AJN addon API 1.7 development. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.8 development. Plain JavaScript, with optional editor type checking. */
+interface AjnScenePair {
+    requestId: string; epoch: string;
+    previousPtsSeconds: number; currentPtsSeconds: number;
+    width: number; height: number; sourceWidth: number; sourceHeight: number;
+    format: "gray8"; stage: "beforeInterpolation"; range: "full";
+    /** Remaining native decision budget at the time the host copied the pair. */
+    remainingMs: number;
+    /** Two row-major width*height grayscale arrays. Encoded SDR, no OSD/subtitles. */
+    previous: Uint8Array; current: Uint8Array;
+}
 interface AjnRemoteSource {
     type?: "http"; destinationId: string; path?: string; useCredential?: boolean;
     /** API 1.7: temporary request-derived context. Mutually exclusive with useCredential. */
@@ -2336,6 +2348,24 @@ interface AjnListenerBinding {
     cors: { origins: string[]; methods: string[]; headers: string[]; exposeHeaders: string[]; allowCredentials: boolean } | null;
 }
 interface AjnApi {
+    /** API 1.8, sceneDetection 1.0. Requires player.sceneDetection and frames.read.
+     * One exclusive detector per player; callbacks remain inside the addon sandbox.
+     * The host delivers scene.request events containing {detectorId}. */
+    sceneDetection: {
+        list(): { playerId: string; inUse: boolean; format: "gray8"; stage: "beforeInterpolation" }[];
+        attach(playerId: string, options?: { width?: number; height?: number; deadlineMs?: number }): {
+            detectorId: string; width: number; height: number; deadlineMs: number; format: "gray8"; stage: "beforeInterpolation";
+        };
+        /** Latest pending pair once, or null if consumed, expired, reset or unavailable. */
+        read(detectorId: string): AjnScenePair | null;
+        /** false means late, duplicate or stale. It never applies to a later pair. */
+        submit(detectorId: string, requestId: string, decision: "cut" | "continuous" | "default"): { accepted: boolean };
+        status(detectorId: string): {
+            state: "waitingForPlayer" | "pending" | "active" | "fallback" | "sampleUnavailable" | "backendUnavailable" | "suspended" | "unavailable";
+            acceptedPairs: number; timedOutPairs: number;
+        };
+        detach(detectorId: string): void;
+    };
     info(): AjnHostInfo;
     /** API 1.7 development: explicitly approved HTTP(S) listeners. */
     httpServer: {
@@ -3468,25 +3498,246 @@ function onEvent(event, ajn) {
 
 ## Appendix C. Release compatibility and documentation provenance
 
-This edition describes the integration.2 release and its API 1.7 preview.
-It replaces the need for a separate maintainer handoff when authoring an addon.
-The source references below are optional audit references, not prerequisites
-for completing the tutorial or using the public API.
+This edition documents API 1.8 development. The packaged `build-info/addon-preview.json`,
+`build-info/host-build.json` and `build-info/inference-build.json` record the exact
+source revisions, input hashes and test reports for the supplied binaries.
+The standalone host bundle has `host-build.json` at its root. This document is
+self-contained for the public API and examples; those records establish binary
+provenance, not additional instructions required to implement an addon.
 
-| Component | Reviewed implementation revision |
+The updated implementation is maintained in the `integration/addons` branches
+of the maintainer forks, plus `integration/addon-scene-detection` in inference.
+This guide does not assert that an upstream release has adopted these changes.
+Use the guide supplied with the build and negotiate optional capabilities.
+
+<a id="scene-detection"></a>
+
+## Appendix D. Custom RIFE scene detection
+
+This optional API lets a WebAssembly addon decide whether RIFE should interpolate
+between a pair of frames. Creators can port motion-aware detectors to Wasm.
+The `scene-detector` example demonstrates the contract using average luma
+difference. It is **not an MVTools port** and does not reproduce `sc_mode=2`.
+
+## Requirements and installation
+
+Use a Windows x64 API 1.8 host, matching player with `privateSceneAbi: 1`, and
+inference dispatcher/backend implementing the optional scene ABI. Enable RIFE
+in the selected AJN profile first. This API does not enable RIFE or select/build
+its model. It currently targets ordinary AJN players, not independent headless
+addon sessions. Samples support progressive mono SDR; other inputs fall back.
+CUDA and D3D11 hardware downloads are implemented; consult the build's test
+results for which backend/hardware combinations have been qualified.
+
+Build the example with the ordinary AJN build command. Install its `.ajnaddon`
+in Manager's Addons page and approve `player.sceneDetection` and `frames.read`.
+Start RIFE playback and the addon, then use **Enable on available AJN players**.
+Use **Show detector status** to check progress. **Restore AJN scene detection**,
+disabling the addon or closing its worker releases its attachments. Installation
+alone does not change playback: the example uses manual activation. No remote
+host address is needed. A replacement player gets a new ID; attach again.
+
+The example's **Developer test mode** offers `cut`, `continuous` and `default`
+for connection tests; `analyze` runs its demonstration algorithm. Suspension
+requires detach/attach. A production addon may manage player discovery with
+bounded timers and reset its own history when playback changes.
+
+## Manifest and compatibility
+
+Declare `api: {"major":1,"minMinor":8}`, permissions
+`["player.sceneDetection","frames.read"]`, and
+`requiredCapabilities: {"sceneDetection":{"major":1,"minMinor":0}}`.
+The package remains `manifest.json` plus `module.wasm`. Ported C/C++ code must
+produce compatible core Wasm and implement the same RPC protocol. Native DLLs
+are not accepted package contents. `player.observe` does not grant this control.
+
+The host advertises this capability only with matching native player metadata.
+An older inference backend reports `backendUnavailable` and retains AJN's
+detector. Existing addon calls, inference struct layouts and `aji_infer_rife`
+callers keep their behavior; this is an additive optional API.
+
+## JavaScript contract
+
+| Call | Result and limits |
 | --- | --- |
-| Host, SDK, CLI and examples | `5b980a033cf50e663e5e51c046ed3c48da8ca9b5` |
-| Manager | `601cedcf584a248fe3a46607fedb7e362cab3d79` |
-| Native player | `d59e80cfe4c9f784654b8d5f924f29a0065d7ff2` |
-| Windows build integration | `6701fe294b69bcca825cfb3bf68c4fdaac6b7f34` |
+| `ajn.sceneDetection.list()` | `{playerId,inUse,format:"gray8",stage:"beforeInterpolation"}[]`. Same opaque player IDs as normal observations; no titles/paths. |
+| `attach(playerId,{width?,height?,deadlineMs?})` | `{detectorId,width,height,deadlineMs,format,stage}`. Defaults 160×90, 25 ms; width 1–320, height 1–180, deadline 5–100 ms. |
+| `read(detectorId)` | Latest pending pair once, or `null` when consumed, expired or unavailable. |
+| `submit(detectorId,requestId,decision)` | `{accepted:boolean}`; decision is `cut`, `continuous` or `default`. |
+| `status(detectorId)` | `{state,acceptedPairs,timedOutPairs}`. |
+| `detach(detectorId)` | Releases the caller's detector and restores built-in detection. |
 
-[Host and SDK source](https://github.com/422415/mpv-AnimeJaNai/tree/5b980a033cf50e663e5e51c046ed3c48da8ca9b5/addons)
-contains the implementation used for this edition. A documentation-only revision
-may package this guide without changing those runtime/API revisions. This guide
-does not assert that any particular upstream release has been published.
+There is one exclusive detector per player, at most four players per host.
+A conflicting attachment returns `scene_detector_in_use`. Detector handles
+belong to their addon worker; another worker cannot use them.
 
-The examples and API declarations are embedded so the file remains usable when
-downloaded alone. Additional source links are optional for maintainers. For a
-different AJN build, compare advertised capabilities and use that release's
-guide; do not infer unchanged hardware support or frozen limits from a shared
-API major number.
+The host delivers `onEvent({name:"scene.request",data:{detectorId},...},ajn)`.
+Read, analyze and submit inside that callback. Events run serially per worker.
+Cache settings on `start` and `settings.changed`; avoid network/storage work
+in this callback. Do not busy-poll or queue expired requests.
+
+```typescript
+interface ScenePair {
+  requestId: string; epoch: string;
+  previousPtsSeconds: number; currentPtsSeconds: number;
+  width: number; height: number;
+  sourceWidth: number; sourceHeight: number;
+  format: "gray8"; stage: "beforeInterpolation"; range: "full";
+  remainingMs: number;
+  previous: Uint8Array; current: Uint8Array;
+}
+```
+
+Each array has `width*height` row-major bytes without row padding: full-range,
+encoded SDR luma, bilinearly resized from RIFE's input pair. These are not
+linear-light or final-display pixels. `sourceWidth/sourceHeight` describe the
+processing stage, which may already be resized/upscaled. Later subtitles/OSD
+are absent. Analysis runs once per input pair, independent of interpolation
+factor. The preceding reduced sample is cached when its identity matches.
+
+`cut` invokes RIFE's existing left-frame substitution. `continuous` interpolates
+even when the built-in threshold would classify a cut. `default` delegates this
+pair to AJN. AJN retains control of output timestamps and frame cadence.
+
+Keep IDs as opaque strings. Reset cached history on epoch changes, seeks,
+geometry changes or timestamp discontinuities. `accepted:false` means a late,
+duplicate, revoked or stale submission; it never affects a later pair. An
+accepted submission acknowledges delivery, not proof the native thread consumed
+it before the deadline. `acceptedPairs` counts native consumption.
+
+## Deadlines, fallback and cost
+
+The native deadline begins **after sample production**. `remainingMs` is the
+budget left when the host copied the pair and may be stale by guest delivery.
+Missing/invalid decisions use AJN's detector. Three consecutive missed deadlines
+suspend the attachment until detach/attach. An independent three-second host
+lease expires if the player's lifecycle connection stops renewing it.
+
+Without a detector there is no scene sampling/wait. With one, the implementation
+downloads each new hardware frame, reduces it on the CPU, copies a pair to Wasm
+and waits for its answer. This is not zero-copy; the deadline does **not** bound
+GPU download/resize time. Benchmark the intended GPU, source FPS, resolution
+and RIFE order. Reduce sample size/work before increasing deadlines, which can
+cause stutter. Small samples may not preserve every cue a full-resolution
+MVTools algorithm uses; detector accuracy requires separate evaluation.
+
+Existing worker limits apply: 500 broker calls/second, 128/event, 16 MiB/second
+of binary frame transport, a two-second outer event deadline, and Wasm memory
+and CPU limits. A pair is at most 115,200 bytes. Multiple players share worker
+resources. A slow unrelated callback can cause scene deadlines to expire.
+
+| Status | Meaning/action |
+| --- | --- |
+| `waitingForPlayer` | No pair yet; check the active profile has RIFE enabled. |
+| `pending` | Player is waiting for a decision. |
+| `active` | A decision was consumed; this does not assess its quality. |
+| `fallback` | A deadline was missed; built-in detection was used. |
+| `suspended` | Three consecutive misses; fix workload, detach, reattach. |
+| `sampleUnavailable` | Unsupported/sample-failure path, including HDR/interlaced/stereo. |
+| `backendUnavailable` | Loaded inference DLLs lack the optional scene ABI. |
+| `unavailable` | Unknown native state. |
+
+Player closure releases its detectors; later calls return
+`scene_detector_not_found`. Enumerate again. Missing grants give
+`permission_denied`; missing support gives `feature_unavailable` or startup
+`missing_capability`. Invalid options give `invalid_request`.
+
+## Raw RPC for other Wasm languages
+
+Methods are `sceneDetection.list`, `.attach`, `.read`, `.submit`, `.status`,
+`.detach`, with parameters matching the SDK table. Raw `attach` must supply
+all three numeric options. A read response is `{pair,byteLength}` followed
+immediately after its JSON newline by exactly `byteLength` bytes, previous
+plane first. Metadata contains every field above except the arrays. No data is
+`{pair:null,byteLength:0}`. Other replies are JSON only. Consume the entire tail
+before the next JSON message; use the standard hello/event/error protocol.
+
+## Creator qualification
+
+Test increasing `acceptedPairs` and forced cut/continuous behavior on permitted
+SDR footage with working RIFE. Compare detector quality on cuts, pans, flashes
+and fades. Test seek, pause/resume, profile/RIFE-order changes, player restart,
+disable, competing detectors, deadline suspension/recovery and HDR fallback.
+Measure overhead and missed deadlines with the intended number of players.
+Protocol tests and compilation alone do not establish smooth playback or
+MVTools parity. The complete example source is supplied in `examples/scene-detector`.
+
+### Complete scene-detector manifest.json
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.scene-detector-example",
+  "name": "Scene detector developer example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 8 },
+  "permissions": ["player.sceneDetection", "frames.read"],
+  "requiredCapabilities": { "sceneDetection": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "threshold": { "type": "number", "label": "Mean luma difference threshold", "default": 0.15, "minimum": 0, "maximum": 1 },
+    "decision": { "type": "choice", "label": "Developer test mode", "default": "analyze", "choices": ["analyze", "cut", "continuous", "default"] }
+  },
+  "actions": {
+    "attach": { "label": "Enable on available AJN players" },
+    "status": { "label": "Show detector status" },
+    "detach": { "label": "Restore AJN scene detection" }
+  }
+}
+```
+
+### Complete scene-detector addon.js
+
+```javascript
+// A small transport/reference example, not an MVTools port or a quality claim.
+// Replace analyze() with a bounded motion-aware detector for production use.
+let detectors = [];
+let settings;
+function analyze(pair, threshold) {
+    let difference = 0;
+    for (let i = 0; i < pair.previous.length; i++)
+        difference += Math.abs(pair.previous[i] - pair.current[i]);
+    return difference / (255 * pair.previous.length) > threshold ? "cut" : "continuous";
+}
+function onEvent(event, ajn) {
+    if (event.name === "start" || event.name === "settings.changed") {
+        settings = ajn.settings.get();
+        return;
+    }
+    if (event.name === "scene.request") {
+        const id = event.data.detectorId;
+        const pair = ajn.sceneDetection.read(id);
+        if (!pair) return;
+        const decision = settings.decision === "analyze" ? analyze(pair, settings.threshold) : settings.decision;
+        const result = ajn.sceneDetection.submit(id, pair.requestId, decision);
+        const detector = detectors.find(d => d.id === id);
+        if (detector) detector.lastPair = { requestId: pair.requestId, epoch: pair.epoch,
+            previousPtsSeconds: pair.previousPtsSeconds, currentPtsSeconds: pair.currentPtsSeconds,
+            sourceWidth: pair.sourceWidth, sourceHeight: pair.sourceHeight,
+            decision, submitted: result.accepted };
+        return result;
+    }
+    if (event.name === "stop" || (event.name === "action" && event.data.id === "detach")) {
+        for (const d of detectors) {
+            try { ajn.sceneDetection.detach(d.id); } catch (e) { if (e.code !== "scene_detector_not_found") throw e; }
+        }
+        detectors = []; return { attached: 0 };
+    }
+    if (event.name === "action" && event.data.id === "attach") {
+        const players = ajn.sceneDetection.list();
+        detectors = detectors.filter(d => players.some(p => p.playerId === d.playerId));
+        for (const p of players) {
+            if (p.inUse) continue;
+            const d = ajn.sceneDetection.attach(p.playerId, { width: 160, height: 90, deadlineMs: 25 });
+            detectors.push({ id: d.detectorId, playerId: p.playerId });
+        }
+        return { attached: detectors.length, message: "RIFE must be enabled in the selected AJN profile." };
+    }
+    if (event.name === "action" && event.data.id === "status") {
+        return detectors.map(d => {
+            try { return { detectorId: d.id, ...ajn.sceneDetection.status(d.id), lastPair: d.lastPair || null }; }
+            catch (e) { return { detectorId: d.id, state: e.code }; }
+        });
+    }
+}
+```

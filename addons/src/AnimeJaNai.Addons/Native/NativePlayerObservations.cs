@@ -12,6 +12,7 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
     private readonly Dictionary<string, Attachment> attached = new(StringComparer.Ordinal);
     private readonly object sync = new();
     internal PlayerFrameRegistry Frames { get; } = new();
+    internal SceneDetectionRegistry? Scenes { get; } = NativeCapabilities.Has(installRoot, "privateSceneAbi") ? new() : null;
 
     internal static bool Available(string root)
     {
@@ -43,6 +44,7 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
             var process = Process.GetProcessById(processId);
             NativeSource? source = null;
             IDisposable? registration = null;
+            IDisposable? sceneRegistration = null;
             try
             {
                 _ = process.SafeHandle;
@@ -52,12 +54,13 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
                     "invalid_player", "Observation requires a player from this AJN installation.");
                 Contract.Require(!attached.Values.Any(a => a.Source.Process.Id == processId && !a.Source.Process.HasExited),
                     "player_attached", "This player already has an observation bridge.");
-                source = new(process);
-                registration = Frames.Register(source, out _);
-                attached.Add(client, new(source, registration));
+                source = new(process, Scenes is not null);
+                registration = Frames.Register(source, out string playerId);
+                if (source.Scene is not null) sceneRegistration = Scenes!.Register(playerId, source.Scene);
+                attached.Add(client, new(source, registration, sceneRegistration));
                 return Poll(client);
             }
-            catch { registration?.Dispose(); source?.Dispose(); if (source is null) process.Dispose(); throw; }
+            catch { sceneRegistration?.Dispose(); registration?.Dispose(); source?.Dispose(); if (source is null) process.Dispose(); throw; }
         }
     }
     internal JsonObject Poll(string client)
@@ -71,27 +74,30 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
                 throw new AddonException("player_closed", "The original player process has exited.");
             }
             attachment.Source.Buffer.RenewPlayerLease();
+            attachment.Source.Scene?.RenewLease();
             return new JsonObject { ["available"] = true, ["mapping"] = attachment.Source.Buffer.Name,
-                ["enabled"] = attachment.Source.Buffer.HasSubscription };
+                ["enabled"] = attachment.Source.Buffer.HasSubscription,
+                ["sceneMapping"] = attachment.Source.Scene?.Enabled == true ? attachment.Source.Scene.Name : "" };
         }
     }
     internal void Disconnect(string client)
     {
-        lock (sync) { if (attached.Remove(client, out var attachment)) attachment.Registration.Dispose(); }
+        lock (sync) { if (attached.Remove(client, out var attachment)) { attachment.SceneRegistration?.Dispose(); attachment.Registration.Dispose(); } }
     }
     public void Dispose()
     {
         lock (sync)
         {
-            Frames.Dispose(); attached.Clear();
+            Scenes?.Dispose(); Frames.Dispose(); attached.Clear();
         }
     }
-    private sealed record Attachment(NativeSource Source, IDisposable Registration);
-    private sealed class NativeSource(Process process) : IPlayerFrameSource
+    private sealed record Attachment(NativeSource Source, IDisposable Registration, IDisposable? SceneRegistration);
+    private sealed class NativeSource(Process process, bool scenes) : IPlayerFrameSource
     {
         internal Process Process { get; } = process;
         internal NativeFrameBuffer Buffer { get; } = new(player: true);
+        internal NativeSceneBuffer? Scene { get; } = scenes ? new() : null;
         public IFrameSubscription Subscribe(FrameRequest request) => Buffer.Subscribe(request, repeatLatest: true);
-        public void Dispose() { Buffer.Dispose(); Process.Dispose(); }
+        public void Dispose() { Scene?.Dispose(); Buffer.Dispose(); Process.Dispose(); }
     }
 }

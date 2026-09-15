@@ -1,4 +1,4 @@
-// AJN API 1.7 development transport, compatible with the 1.0 JSON-only methods. The host independently
+// AJN API 1.8 development transport, compatible with the 1.0 JSON-only methods. The host independently
 // validates every message and permission even when an addon replaces this code.
 const __ajnSdk = (() => {
     const maximum = 128 * 1024;
@@ -69,6 +69,16 @@ const __ajnSdk = (() => {
             if (result.byteLength > 32768) throw new Error("Invalid AJN chunk size");
             return Object.assign({}, result, { body: readBytes(result.byteLength) });
         }
+        if (frameResponse === "scene") {
+            if (result.pair === null && result.byteLength === 0) return null;
+            const pair = result.pair;
+            if (!pair || !Number.isInteger(pair.width) || !Number.isInteger(pair.height) || pair.width < 1 || pair.width > 320 ||
+                pair.height < 1 || pair.height > 180 || pair.format !== "gray8" || pair.stage !== "beforeInterpolation" ||
+                typeof pair.requestId !== "string" || typeof pair.epoch !== "string" || result.byteLength !== pair.width * pair.height * 2)
+                throw new Error("Invalid AJN scene pair");
+            const pixels = readBytes(result.byteLength), plane = pair.width * pair.height;
+            return Object.assign({}, pair, { previous: pixels.subarray(0, plane), current: pixels.subarray(plane) });
+        }
         if (result.frame === null && result.byteLength === 0) return null;
         const frame = result.frame;
         if (!frame || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || frame.width < 1 || frame.width > 320 ||
@@ -91,6 +101,15 @@ const __ajnSdk = (() => {
     }
     const api = Object.freeze({
         info: () => request("host.info"),
+        sceneDetection: Object.freeze({
+            list: () => request("sceneDetection.list"),
+            attach: (playerId, options = {}) => request("sceneDetection.attach", { playerId,
+                width: options.width ?? 160, height: options.height ?? 90, deadlineMs: options.deadlineMs ?? 25 }),
+            read: detectorId => request("sceneDetection.read", { detectorId }, "scene"),
+            submit: (detectorId, requestId, decision) => request("sceneDetection.submit", { detectorId, requestId, decision }),
+            status: detectorId => request("sceneDetection.status", { detectorId }),
+            detach: detectorId => request("sceneDetection.detach", { detectorId }),
+        }),
         httpServer: Object.freeze({
             selections: () => request("httpServer.selections"),
             formats: () => request("httpServer.formats"),

@@ -51,3 +51,15 @@ Network permissions use user-selected destinations, protocols and limits. HTTP/U
 - [JSON-RPC specification](https://www.jsonrpc.org/specification): standard request, result, and error envelopes.
 - [Windows job termination](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject) and [job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information): lifetime supervision and active-process accounting.
 - [AppContainer isolation](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation): possible later OS-level defense for the runtime process.
+
+
+## Optional scene decision bridge (API 1.8)
+
+The scene registry grants one addon exclusive control of RIFE scene decisions per
+normal player. Only trusted host/player processes map the owner-only Windows
+buffer and events; Wasm receives bounded copied gray8 pairs and opaque IDs.
+A per-pair deadline, three-timeout suspension, independent host lease and
+revocation prevent missing addons from holding playback indefinitely. Both
+cut and continuous decisions reach the optional inference ABI; older backends
+retain their default detector. No DLL-loading or raw player-command capability
+is exposed. See [SCENE-DETECTION.md](SCENE-DETECTION.md) for limits and sampling cost.

@@ -66,5 +66,6 @@ public sealed class AddonTimers(TimeProvider? timeProvider = null)
         return changed.WaitAsync(delay, token);
     }
     public void Close() { lock (sync) { closed = true; entries.Clear(); Signal(); } }
+    internal void Notify() { lock (sync) { if (!closed) Signal(); } }
     private void Signal() { if (changed.CurrentCount == 0) changed.Release(); }
 }

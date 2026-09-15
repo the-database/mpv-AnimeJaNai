@@ -29,7 +29,7 @@ try
             using var playerObservations = args.Length >= 4 && AnimeJaNai.Addons.Native.NativePlayerObservations.Available(args[3])
                 ? new AnimeJaNai.Addons.Native.NativePlayerObservations(args[3]) : null;
             var service = new AddonService(args[1], async (p, g, log, token) => await AddonWorker.StartAsync(p, g, args[2],
-                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections, playerFrames: playerObservations?.Frames),
+                Path.Combine(args[1], "workers"), args[1], WorkerCommand.Current(), log: log, sessions: nativeSessions, cancellationToken: token, networkSelections: networkSelections, playerFrames: playerObservations?.Frames, sceneDetection: playerObservations?.Scenes),
                 media, networkSelections, hostSettings, args.Length >= 4 ? new LoginSettings(args[3], args[1]) : null) { PlayerObservations = playerObservations };
             using (var shutdown = new CancellationTokenSource())
             {

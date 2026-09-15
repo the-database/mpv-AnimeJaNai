@@ -14,6 +14,8 @@ public sealed class Broker : IAsyncDisposable
     private readonly NetworkAccess network;
     private readonly PlayerFrameRegistry? playerFrames;
     private readonly PlayerFrameRegistry.Owner? observer;
+    private readonly SceneDetectionRegistry? sceneDetection;
+    private readonly SceneDetectionRegistry.Owner? sceneOwner;
     private volatile bool disposed;
     internal AddonTimers Timers { get; } = new();
     internal HttpServerAccess HttpServers { get; }
@@ -23,7 +25,7 @@ public sealed class Broker : IAsyncDisposable
     internal MediaStreamsAccess? MediaStreams { get; }
     internal SubtitlesAccess? Subtitles { get; }
 
-    public Broker(AddonPackage package, PermissionGrant grant, string dataRoot, Action<string>? log = null, SessionRegistry? sessions = null, NetworkSelections? networkSelections = null, PlayerFrameRegistry? playerFrames = null)
+    public Broker(AddonPackage package, PermissionGrant grant, string dataRoot, Action<string>? log = null, SessionRegistry? sessions = null, NetworkSelections? networkSelections = null, PlayerFrameRegistry? playerFrames = null, SceneDetectionRegistry? sceneDetection = null)
     {
         Contract.Require(package.Hash == grant.PackageHash, "invalid_grant", "Permissions belong to a different package.");
         this.package = package;
@@ -31,6 +33,7 @@ public sealed class Broker : IAsyncDisposable
         this.log = log ?? (_ => { });
         this.sessions = sessions;
         this.playerFrames = playerFrames;
+        this.sceneDetection = sceneDetection;
         network = new(package, grant, networkSelections ?? new(dataRoot));
         HttpServers = new(package, grant, new ListenerSelections(dataRoot));
         RequestCredentials = new(package, grant, networkSelections ?? new(dataRoot), HttpServers);
@@ -46,6 +49,7 @@ public sealed class Broker : IAsyncDisposable
         settings = new(dataRoot, package.Manifest);
         _ = settings.Get();
         observer = playerFrames?.CreateOwner();
+        sceneOwner = sceneDetection?.CreateOwner(Timers.Notify);
     }
 
     private string[] AvailableCapabilities() => ["host", "storage", "logging", "settings", "timers", "network", "httpServer", "httpProxy", "requestCredentials",
@@ -57,7 +61,8 @@ public sealed class Broker : IAsyncDisposable
         .. MediaProbes is null ? [] : new[] { "mediaProbe" },
         .. MediaStreams is null ? [] : new[] { "mediaStreams" },
         .. Subtitles is null ? [] : new[] { "subtitles" },
-        .. playerFrames is not null ? new[] { "playerFrames" } : []];
+        .. playerFrames is not null ? new[] { "playerFrames" } : [],
+        .. sceneDetection is not null ? new[] { "sceneDetection" } : []];
     private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
@@ -72,6 +77,11 @@ public sealed class Broker : IAsyncDisposable
 
     public async Task<BrokerResponse> InvokeTransportAsync(string method, JsonObject parameters, CancellationToken token)
     {
+        if (method == "sceneDetection.read")
+        {
+            token.ThrowIfCancellationRequested(); Contract.Require(!disposed, "owner_closed", "Addon instance has stopped.");
+            return Scenes().Read(sceneOwner!, Contract.Text(parameters, "detectorId", 64));
+        }
         if (method == "subtitles.read")
         {
             token.ThrowIfCancellationRequested(); Contract.Require(!disposed, "owner_closed", "Addon instance has stopped.");
@@ -132,6 +142,14 @@ public sealed class Broker : IAsyncDisposable
         switch (method)
         {
             case "host.info": return Info();
+            case "sceneDetection.list": return Scenes().List(sceneOwner!);
+            case "sceneDetection.attach":
+                return Scenes().Attach(sceneOwner!, Contract.Text(parameters, "playerId", 64), SceneRequest.Parse(parameters));
+            case "sceneDetection.status": return Scenes().Status(sceneOwner!, Contract.Text(parameters, "detectorId", 64));
+            case "sceneDetection.submit": return new JsonObject { ["accepted"] = Scenes().Submit(sceneOwner!,
+                Contract.Text(parameters, "detectorId", 64), Contract.Text(parameters, "requestId", 20), Contract.Text(parameters, "decision", 16)) };
+            case "sceneDetection.detach": Scenes().Detach(sceneOwner!, Contract.Text(parameters, "detectorId", 64)); return null;
+            case "sceneDetection.read": throw new AddonException("binary_transport_required", "Scene pairs require the binary response transport.");
             case "subtitles.formats": return TextSubtitles().Formats();
             case "subtitles.open":
                 Contract.Require(parameters["source"] is JsonObject && parameters["options"] is JsonObject, "invalid_subtitle", "Expected source and subtitle options.");
@@ -372,6 +390,12 @@ public sealed class Broker : IAsyncDisposable
         grant.Demand("player.observe"); grant.Demand("frames.read");
         return playerFrames ?? throw new AddonException("feature_unavailable", "This host does not include player observation.");
     }
+    private SceneDetectionRegistry Scenes()
+    {
+        grant.Demand("player.sceneDetection"); grant.Demand("frames.read");
+        return sceneDetection ?? throw new AddonException("feature_unavailable", "This runtime does not include scene detection.");
+    }
+    internal JsonObject? TakeSceneEvent() => sceneOwner is null ? null : sceneDetection!.TakeEvent(sceneOwner);
 
     public async ValueTask DisposeAsync()
     {
@@ -379,6 +403,7 @@ public sealed class Broker : IAsyncDisposable
         Timers.Close();
         RequestCredentials.Dispose();
         if (observer is not null) playerFrames!.ReleaseOwner(observer);
+        if (sceneOwner is not null) sceneDetection!.ReleaseOwner(sceneOwner);
         await Task.WhenAll(HttpServers.DisposeAsync().AsTask(), HttpProxy.DisposeAsync().AsTask(), network.DisposeAsync().AsTask(),
             MediaProbes?.DisposeAsync().AsTask() ?? Task.CompletedTask, MediaStreams?.DisposeAsync().AsTask() ?? Task.CompletedTask,
             Subtitles?.DisposeAsync().AsTask() ?? Task.CompletedTask,

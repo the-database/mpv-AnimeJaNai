@@ -1,4 +1,4 @@
-# Addon API 1.7 preview
+# Addon API 1.8 preview
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 
@@ -44,9 +44,19 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 
 ## Broker methods
 
+API 1.8 adds the optional `sceneDetection` 1.0 capability, `scene.request`
+events and `player.sceneDetection` permission. Its bounded two-plane binary
+response and decision deadlines are specified in [SCENE-DETECTION.md](SCENE-DETECTION.md).
+
 | Method | Parameters | Permission | Result |
 | --- | --- | --- | --- |
 | `host.info` | `{}` | None | Bound identity, API, permissions, capabilities |
+| `sceneDetection.list` | `{}` | `player.sceneDetection` + `frames.read` | Attached player IDs and detector availability |
+| `sceneDetection.attach` | `{playerId,width,height,deadlineMs}` | Both scene grants | Exclusive detector ID and accepted options |
+| `sceneDetection.read` | `{detectorId}` | Both scene grants | `{pair,byteLength}` plus previous/current gray8 planes, or no pending pair |
+| `sceneDetection.submit` | `{detectorId,requestId,decision}` | Both scene grants | `{accepted}`; cut, continuous or default |
+| `sceneDetection.status` | `{detectorId}` | Both scene grants | State, acceptedPairs, timedOutPairs |
+| `sceneDetection.detach` | `{detectorId}` | Both scene grants | Releases the owned detector |
 | `settings.get` | `{}` | None | Only this addon's declared effective settings |
 | `log.write` | `{ message }` | `log.write` | `null`; control characters stripped |
 | `storage.get` | `{ key }` | `storage.read` | JSON value, or `null` for missing key |

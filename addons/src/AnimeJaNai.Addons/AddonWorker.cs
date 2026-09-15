@@ -38,7 +38,7 @@ public sealed class AddonWorker : IAddonInstance
 
     public static async Task<AddonWorker> StartAsync(AddonPackage package, PermissionGrant grant, string runtime,
         string workRoot, string dataRoot, WorkerCommand command, Action<string>? log = null,
-        SessionRegistry? sessions = null, TimeSpan? eventTimeout = null, CancellationToken cancellationToken = default, NetworkSelections? networkSelections = null, PlayerFrameRegistry? playerFrames = null)
+        SessionRegistry? sessions = null, TimeSpan? eventTimeout = null, CancellationToken cancellationToken = default, NetworkSelections? networkSelections = null, PlayerFrameRegistry? playerFrames = null, SceneDetectionRegistry? sceneDetection = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("This host currently enforces worker resource limits on Windows only.");
         WorkerBridge.VerifyRuntime(runtime);
@@ -51,7 +51,7 @@ public sealed class AddonWorker : IAddonInstance
         AddonWorker? worker = null;
         try
         {
-            broker = new Broker(package, grant, dataRoot, log, sessions, networkSelections, playerFrames);
+            broker = new Broker(package, grant, dataRoot, log, sessions, networkSelections, playerFrames, sceneDetection);
             job = new WindowsJob();
             directory = WorkerBridge.CreateWorkDirectory(workRoot, "worker");
             string module = Path.Combine(directory, "module.wasm");
@@ -183,6 +183,13 @@ public sealed class AddonWorker : IAddonInstance
                 {
                     await SendEventAsync("host.ping", cancellationToken: lifetime.Token);
                     lastPing = Stopwatch.GetTimestamp();
+                }
+                if (broker.TakeSceneEvent() is { } scene)
+                {
+                    // Native producers signal only real pending frame pairs.
+                    // The same event gate still serializes all guest callbacks.
+                    await SendEventAsync("scene.request", scene, lifetime.Token);
+                    continue;
                 }
                 if (broker.HttpServers.TakeEvent() is { } http)
                 {

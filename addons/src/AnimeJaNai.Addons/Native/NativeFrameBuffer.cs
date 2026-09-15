@@ -197,7 +197,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
         public void Dispose() => owner.Unsubscribe(this);
     }
 
-    private static MemoryMappedFile CreatePlayerMapping(string name)
+    internal static MemoryMappedFile CreatePlayerMapping(string name, int size = Size)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         using var identity = WindowsIdentity.GetCurrent();
@@ -210,7 +210,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
         try
         {
             var attributes = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = security };
-            using var handle = CreateFileMappingW(new IntPtr(-1), ref attributes, 4, 0, Size, name);
+            using var handle = CreateFileMappingW(new IntPtr(-1), ref attributes, 4, 0, checked((uint)size), name);
             int error = Marshal.GetLastPInvokeError();
             if (handle.IsInvalid || error == 183) throw new IOException("Could not create a unique player sample buffer.");
             return MemoryMappedFile.OpenExisting(name, MemoryMappedFileRights.ReadWrite);
