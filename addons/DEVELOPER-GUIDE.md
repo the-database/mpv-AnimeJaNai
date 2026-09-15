@@ -416,7 +416,7 @@ a passing JavaScript build does not validate a media pipeline.
 
 The maintained tutorial check extracts this guide's manifest and JavaScript,
 compiles and runs them, checks denied permissions, saved state, settings, update
-and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/d48bb184419ae9312d91d33587041327e0f8d467/addons/tools/test-tutorial.ps1). The host's
+and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/1d3bbba2e6affa2a4f26cf58b661bd6be7bf4fb1/addons/tools/test-tutorial.ps1). The host's
 separate suite also runs an unchanged older API 1.0 binary. Keep those old-client
 fixtures when adding a feature; do not silently change existing field meanings.
 
@@ -3466,12 +3466,12 @@ for completing the tutorial or using the public API.
 
 | Component | Reviewed implementation revision |
 | --- | --- |
-| Host, SDK, CLI and examples | `d48bb184419ae9312d91d33587041327e0f8d467` |
-| Manager | `d5ed42332396f7456de25a6738fe69f3d9487509` |
-| Native player | `5b1cec7adc4dc024946aa33d3fb1aad3f6d4c92b` |
-| Windows build integration | `6fc55f73d77f2bb945b9a9e3d7a5c6060da75b7f` |
+| Host, SDK, CLI and examples | `1d3bbba2e6affa2a4f26cf58b661bd6be7bf4fb1` |
+| Manager | `601cedcf584a248fe3a46607fedb7e362cab3d79` |
+| Native player | `d59e80cfe4c9f784654b8d5f924f29a0065d7ff2` |
+| Windows build integration | `d806d2193b4a1987076ad2522d47f5c0f3dea162` |
 
-[Host and SDK source](https://github.com/422415/mpv-AnimeJaNai/tree/d48bb184419ae9312d91d33587041327e0f8d467/addons)
+[Host and SDK source](https://github.com/422415/mpv-AnimeJaNai/tree/1d3bbba2e6affa2a4f26cf58b661bd6be7bf4fb1/addons)
 contains the implementation used for this edition. A documentation-only revision
 may package this guide without changing those runtime/API revisions. This guide
 does not assert that any particular upstream release has been published.
