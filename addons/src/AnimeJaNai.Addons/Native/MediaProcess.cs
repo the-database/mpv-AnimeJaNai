@@ -78,6 +78,11 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             info.Environment["USERPROFILE"] = SafeFiles.DirectoryPath(directory, "profile");
             info.Environment["LOCALAPPDATA"] = SafeFiles.DirectoryPath(directory, "local");
             info.Environment["APPDATA"] = SafeFiles.DirectoryPath(directory, "roaming");
+            // NVIDIA's user-mode driver also consults the common application
+            // data location. Without it, driver logs can fall back to the mux
+            // working directory and prevent strict stream-cache cleanup.
+            info.Environment["ProgramData"] = SafeFiles.DirectoryPath(directory, "common");
+            info.Environment["ALLUSERSPROFILE"] = info.Environment["ProgramData"];
             foreach (string arg in command.PrefixArguments.Append("media-worker")) info.ArgumentList.Add(arg);
             process = Process.Start(info) ?? throw new AddonException("native_start", "Could not start native media worker.");
             job.Attach(process);
