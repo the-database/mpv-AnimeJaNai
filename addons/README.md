@@ -2,9 +2,9 @@
 
 ## Start here
 
-This branch implements **API 1.8 preview**, including
+This branch implements **API 1.9 preview**, including
 [HTTP, proxy and credential APIs](HTTP-SERVER.md), reviewed HTTPS listeners and
-the [streaming API](STREAMING.md). The native qualification and packaging checks
+the [streaming API](STREAMING.md) and [readiness/preparation](STREAMING-READINESS.md). The native qualification and packaging checks
 in [STREAMING-TESTS.md](STREAMING-TESTS.md) must pass before a matching runtime is
 released. The sealed integration.1 release remains the API 1.6 baseline and does
 not contain these additions.

@@ -8,7 +8,7 @@ pipe handles. Each output belongs to one addon session and an approved receiver.
 ## Implemented path
 
 The supervised media worker can decode an approved local source, apply an AJN
-profile, encode the processed video with NVENC, optionally encode audio, and
+profile, encode the processed video with the selected NVENC or AMF encoder, optionally encode audio, and
 mux an output stream. A private unnamed pipe carries only encoded bytes to a
 trusted consumer in the host. Full video frames stay out of Wasm and its RPC
 channel. The normal sample subscription remains a separate small-image path.
@@ -25,27 +25,14 @@ The private option bounds are 256–50,000 kbit/s video, 32–512 kbit/s audio,
 uses its low-latency tuning, with B frames and lookahead disabled. This has not
 yet been certified for an end-to-end streaming latency target. The public API
 distinguishes adapter options from actual hardware support and host
-resource admission. DirectML processing and NVIDIA encoding are separate
-hardware requirements; a DirectML-capable AMD or Intel GPU does not imply NVENC.
+resource admission. Inference and encoding are independent selections; see [supported combinations](STREAMING-READINESS.md).
 
 ## GPU and color handling
 
-The native player now has an opt-in `ovc-hwframes` path. It registers the
-encoder's supported hardware/surface pairs and retains the upstream
-`AVHWFramesContext` before opening the codec. This avoids mpv's display-interop
-probe and full-frame CPU download for supported inputs. Normal CLI encoding
-keeps its existing software subtitle path unless explicitly opted in.
-
-The hardware stream excludes software subtitle/OSD composition. The adapter
-disables subtitles. It forwards color primaries, transfer, matrix, range and
-chroma location to the encoder; this does not perform HDR tone mapping or
-certify Dolby Vision metadata, interlacing, rotation, CUDA/TensorRT, RIFE or
-every surface format. Those need their own supported-format checks and tests
-before expanding the validated output matrix.
-
-The handoff follows the upstream [FFmpeg NVENC implementation](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/nvenc.c),
-which requires an associated hardware frame context for GPU input, and
-[libplacebo's color conversion helpers](https://github.com/haasn/libplacebo/blob/master/src/include/libplacebo/utils/libav.h).
+The API 1.9 host converts processed frames to NV12 (8-bit) or P010 (explicit
+10-bit HEVC) in the native worker. Software subtitles are composed after AI
+processing. Full frames stay outside Wasm. CPU staging must be included in
+performance measurements. Served sources currently require progressive SDR.
 
 ## Ownership and backpressure
 

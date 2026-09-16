@@ -47,7 +47,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
     public static async Task<MediaProcess> StartAsync(string root, string? source, string configuration, int slot, string backend,
         string workRoot, WorkerCommand command, CancellationToken token, bool enableFrameSamples = false, NativeEncoding? encoding = null,
         RemoteInputPlan? remoteSource = null, OutputPlayback? playback = null, string? subtitleSource = null, ServedOutputPlan? servedOutput = null,
-        RemoteInputPlan? remoteSubtitles = null)
+        RemoteInputPlan? remoteSubtitles = null, NativeResourceBudget? budget = null, string streamMode = "normal")
     {
         token.ThrowIfCancellationRequested();
         encoding?.Validate();
@@ -67,7 +67,8 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
         {
             // Native decoders/model loading need a different budget from guest
             // logic. This does not change the Wasm worker's stricter defaults.
-            job = new WindowsJob(new UIntPtr(2UL << 30), new UIntPtr(4UL << 30), cpuRate: 0);
+            budget ??= new(4UL << 30, 6UL << 30);
+            job = new WindowsJob(new UIntPtr(budget.ProcessBytes), new UIntPtr(budget.JobBytes), cpuRate: 0);
             string snapshot = Path.Combine(directory, "animejanai.conf");
             SafeFiles.AtomicWrite(snapshot, Encoding.UTF8.GetBytes(configuration));
             var info = WorkerBridge.ProcessInfo(command.Executable, directory);
@@ -95,6 +96,7 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             await result.channel.WriteAsync(new JsonObject { ["version"] = 1, ["root"] = Path.GetFullPath(root),
                 ["source"] = source is null ? null : Path.GetFullPath(source), ["remoteSource"] = remoteSource?.ToPrivateJson(),
                 ["configuration"] = snapshot, ["work"] = directory, ["slot"] = slot, ["backend"] = backend,
+                ["streamMode"] = streamMode, ["resourceBudget"] = budget.ToJson(),
                 ["sampleMapping"] = sampleMapping, ["encoding"] = encoding?.ToJson(), ["playback"] = playback?.ToJson(),
                 ["subtitleSource"] = subtitleSource, ["remoteSubtitles"] = remoteSubtitles?.ToPrivateJson(), ["servedOutput"] = servedOutput?.ToJson(), ["outputHandle"] = outputHandle }, token);
             return result; // Native initialization progresses behind the handle.
@@ -187,12 +189,38 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
     }
     private async Task DrainAsync()
     {
+        StreamWriter? log = null;
+        string? logs = null;
         try
         {
             char[] buffer = new char[1024];
-            while (await process.StandardError.ReadAsync(buffer, lifetime.Token) != 0) { }
+            try
+            {
+                logs = SafeFiles.DirectoryPath(workRoot, "diagnostics");
+                log = new StreamWriter(Path.Combine(logs, Path.GetFileName(directory) + ".log"), false, Encoding.UTF8);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            int retained = 0, count;
+            while ((count = await process.StandardError.ReadAsync(buffer, lifetime.Token)) != 0)
+            {
+                int keep = Math.Min(count, 16384 - retained);
+                if (log is not null && keep > 0)
+                {
+                    try { await log.WriteAsync(buffer.AsMemory(0, keep), lifetime.Token); retained += keep; await log.FlushAsync(lifetime.Token); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                    {
+                        // Keep draining even when diagnostic storage fails.
+                        try { log.Dispose(); } catch (IOException) { }
+                        log = null;
+                    }
+                }
+            }
+            if (logs is not null)
+                foreach (var old in new DirectoryInfo(logs).GetFiles("media-*.log").OrderByDescending(f => f.LastWriteTimeUtc).Skip(16))
+                    try { old.Delete(); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
         }
-        catch (Exception error) when (error is IOException or OperationCanceledException or ObjectDisposedException) { }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or OperationCanceledException or ObjectDisposedException) { }
+        finally { try { log?.Dispose(); } catch (IOException) { } }
     }
 
     public ValueTask DisposeAsync()

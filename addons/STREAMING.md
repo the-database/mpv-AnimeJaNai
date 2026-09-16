@@ -1,5 +1,7 @@
 # HTTP serving and media streaming — API 1.7 preview
 
+API 1.9 extends this contract with [readiness, engine preparation and encoder selection](STREAMING-READINESS.md).
+
 This extension lets one installed `.ajnaddon` accept approved HTTP(S) requests,
 forward traffic to approved services, probe media, and serve processed audio/video.
 The addon supplies service protocol and client authorization logic. AJN supplies
@@ -228,7 +230,7 @@ const output = ajn.mediaStreams.open(source, profileId, {
 `{ type: "servedStream", mode: "segments", segmentSeconds: 1 }` and return the
 same handle. The legacy `httpUpload` destination remains supported.
 
-All served output requires an approved DirectML profile and matching native
+Served output accepts approved DirectML or TensorRT profiles. TensorRT engines must be prepared before opening. All output requires the matching native
 runtime. The initial baseline is progressive SDR with a supported NVIDIA encoder.
 Known HDR/interlaced input is rejected rather than silently misrepresented.
 `audioChannels: 2` explicitly requests stereo downmix. Audio codec omission still

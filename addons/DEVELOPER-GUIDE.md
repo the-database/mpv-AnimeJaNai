@@ -1,15 +1,15 @@
 # AnimeJaNai Addon Developer Guide
 
-**Development preview:** API 1.8 scene detection has passed protocol tests and short DirectML/RIFE playback checks. TensorRT scene playback and broad performance qualification are still outstanding; use the matching build report for test scope.
+**Development preview:** API 1.9 adds native streaming readiness, engine preparation, required AI processing and encoder selection. Use the matching build report for hardware qualification. Scene detection remains available from API 1.8.
 
-**Edition:** 2026-09-15 · **Addon API:** 1.8 preview · **Platform:** Windows x64
+**Edition:** 2026-09-15 · **Addon API:** 1.9 preview · **Platform:** Windows x64
 
 Create, build, install, test and distribute an AnimeJaNai (AJN) addon using this
 document and the matching release tools. No previous conversation, maintainer
 handoff or checkout of AJN's repositories is required. The complete JavaScript
 API declarations and ten feature examples are included in this file.
 
-This guide targets the **API 1.8 development preview**. API 1.8 remains a
+This guide targets the **API 1.9 development preview**. API 1.9 remains a
 preview, so it is suitable for developing and testing addons but is not yet a
 frozen community compatibility promise. Use the guide shipped with your release.
 The addon API version, AJN application version and your addon's version are
@@ -85,7 +85,7 @@ not the addon installation mechanism.
 | HTTP/HTTPS control requests and outgoing UDP | Explicit approved destinations and bounded payloads |
 | Saved request-header credentials | User stores them in Manager; addon requests scoped use |
 | HTTP/HTTPS remote video input | Approved source service and profile; single supported media resource |
-| Encoded video/audio upload to HTTP/HTTPS | Approved receiver, matching native adapter and supported NVIDIA NVENC hardware |
+| Encoded video/audio upload to HTTP/HTTPS | Approved receiver, matching native adapter and supported NVENC or AMF hardware (see Appendix E) |
 | HTTP(S) listeners, proxying and WebSocket tunnels | Separately reviewed listener/upstream access and short asynchronous callbacks |
 | Client credential delegation | Opaque per-client/upstream contexts; addon validates authorization |
 | Probe, selected tracks/offsets, subtitles and served video/audio | Matching API 1.7 runtime and explicit source/profile/listener approvals |
@@ -760,8 +760,8 @@ Input and output services have independent approvals and credentials.
 
 An accepted open is not successful playback or delivery. Poll loading/running/
 completed/failed status, communicate failures, and close terminal sessions to
-release capacity. The current native output adapter needs NVIDIA NVENC; the
-supported combination matrix and resource budgets are in [Outputs](#media-io).
+release capacity. The native adapter selects NVENC or AMF separately from inference; see
+Appendix E for readiness, supported combinations and resource budgets.
 
 ### Build and share responsibly
 
@@ -1265,9 +1265,9 @@ a normal file-serving HTTP server does not provide an upload endpoint.
 
 `outputs.formats` requires `media.output` and `sessions.manage`; it describes
 this adapter's options, bounds and host session limit. It is not a GPU/driver or
-remote-client compatibility probe. This preview uses NVIDIA NVENC even when AJN
-inference uses DirectML. Unsupported hardware or input formats produce a failed
-session. Other encoders/transports can be added through capability negotiation.
+remote-client compatibility probe. API 1.9 supports NVENC and AMF independently of AJN
+inference. Unsupported hardware or input formats produce a failed session.
+Use mediaStreams.check for an actual device/driver check; see Appendix E.
 
 | Choice | Current adapter |
 | --- | --- |
@@ -1579,8 +1579,9 @@ const output = ajn.mediaStreams.open(source, profileId, {
 `{ type: "servedStream", mode: "segments", segmentSeconds: 1 }` and return the
 same handle. The legacy `httpUpload` destination remains supported.
 
-All served output requires an approved DirectML profile and matching native
-runtime. The initial baseline is progressive SDR with a supported NVIDIA encoder.
+All served output requires an approved profile and matching native runtime.
+API 1.9 supports DirectML or prepared TensorRT with a supported NVENC or AMF
+encoder. AMD hardware qualification remains pending; see Appendix E.
 Known HDR/interlaced input is rejected rather than silently misrepresented.
 `audioChannels: 2` explicitly requests stereo downmix. Audio codec omission still
 means no encoded audio; `audioTrack: "none"` disables it even if a codec is chosen.
@@ -2056,7 +2057,7 @@ an asynchronous media/network operation succeeded; check its terminal status.
 | HTTP request remains pending | Poll it from later timer events within the documented deadlines. Do not loop inside one callback. Consume the terminal result even after cancellation. |
 | HTTP returns a non-success status | The service responded but rejected/failed the operation. Inspect status and a bounded response body; avoid logging private response contents. |
 | Remote media cannot seek | The source may lack stable validators/range support. Check the input status; forward-only input is valid. |
-| Output open is accepted but produces no stream | Check session status, approved receiver, profile and the supported NVENC codec/container/audio combination. Acceptance is not delivery completion. |
+| Output open is accepted but produces no stream | Check session status, approved receiver, profile and the selected encoder’s supported codec/container/audio combination. Acceptance is not delivery completion. |
 | Model initialization takes time | Let the native session progress outside the callback. Engine preparation is not a reason to extend a guest callback beyond its time budget. |
 
 ### Creator build/runtime mistakes
@@ -2171,7 +2172,7 @@ capability and limit described above still applies. `sessions.status` deliberate
 uses an open record; inspect its documented state and optional fields defensively.
 
 ```typescript
-/** AJN addon API 1.8 development. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.9 development. Plain JavaScript, with optional editor type checking. */
 interface AjnScenePair {
     requestId: string; epoch: string;
     previousPtsSeconds: number; currentPtsSeconds: number;
@@ -2201,6 +2202,8 @@ interface AjnProbeTrack {
     language: string | null; title: string | null; default: boolean; forced: boolean; startSeconds: number | null;
     width?: number | null; height?: number | null;
     pixelFormat?: string | null;
+    /** API 1.9: observed codec profile and pixel component depth. */
+    profile?: string | null; bitDepth?: number | null;
     pixelAspectRatio?: AjnRatio | null; displayAspectRatio?: AjnRatio | null;
     averageFrameRate?: AjnRatio | null; nominalFrameRate?: AjnRatio | null;
     /** null means the bounded probe cannot establish CFR or VFR. */
@@ -2221,6 +2224,8 @@ interface AjnOutputOptions {
         videoCodec: "h264" | "hevc" | "av1"; container: "matroska" | "mpegts" | "fragmentedMp4";
         videoKbps: number; audioCodec?: "none" | "aac" | "opus"; audioKbps?: number;
         keyframeFrames?: number; lengthSeconds?: number; audioChannels?: 2;
+        /** API 1.9. Encoder selection never changes the approved inference backend. */
+        encoder?: "auto" | "nvenc" | "amf"; bitDepth?: 8 | 10;
     };
     destination: {
         type?: "httpUpload"; destinationId: string; path?: string; method?: "POST" | "PUT";
@@ -2250,7 +2255,8 @@ interface AjnStreamPage {
     initializationId: string | null; continuousResourceId: string | null;
 }
 interface AjnStreamStatus extends AjnStreamHandle {
-    state: "opening" | "starting" | "probing" | "loadingSubtitles" | "loading" | "running" | "finishing" | "paused" | "bufferPaused" | "producerCompleted" | "closing" | "closed" | "failed" | "cleanupFailed";
+    state: "ready" | "building" | "opening" | "starting" | "probing" | "loadingSubtitles" | "loading" | "running" | "finishing" | "paused" | "bufferPaused" | "producerCompleted" | "closing" | "closed" | "failed" | "cleanupFailed";
+    operation: "required" | "check" | "prepare"; ready: boolean;
     nativeCapacityReleased: boolean; requestedStartSeconds: number; demandPositionSeconds: number; userPaused: boolean;
     retainedStartSeconds: number | null; retainedEndSeconds: number | null;
     native: Record<string, unknown>; transfer: Record<string, number>;
@@ -2441,6 +2447,10 @@ interface AjnApi {
     };
     mediaStreams: {
         formats(): Record<string, unknown>;
+        /** API 1.9 / mediaStreams 1.1. Readiness handles produce no media; inspect status and close them. */
+        check(source: AjnProbeSource, profileId: string | null, options: AjnStreamOptions): AjnStreamHandle;
+        /** Same handle lifecycle. Builds missing/incompatible engines for the selected profile and source dimensions. */
+        prepare(source: AjnProbeSource, profileId: string | null, options: AjnStreamOptions): AjnStreamHandle;
         open(source: AjnProbeSource, profileId: string | null, options: AjnStreamOptions): AjnStreamHandle;
         status(streamId: string): AjnStreamStatus;
         segments(streamId: string, cursor?: string | null, limit?: number): AjnStreamPage;
@@ -3741,3 +3751,305 @@ function onEvent(event, ajn) {
     }
 }
 ```
+
+
+## Appendix E - Native streaming readiness and preparation
+
+
+Use this contract with the matching API 1.9 host, player and inference DLLs.
+Require `mediaStreams` **1.1**, not just the presence of `mediaStreams`.
+See [validation and remaining work](STREAMING-VALIDATION.md) for tested versus
+implemented behavior, especially TensorRT preparation and AMD hardware.
+This extends the existing Wasm system; it grants no native DLL loading, process
+execution, filesystem paths or additional guest permissions.
+
+## What to call
+
+The following calls accept the same `(source, profileId, options)` as
+`ajn.mediaStreams.open` and return the same `AjnStreamHandle`:
+
+- `ajn.mediaStreams.check(...)` validates the approved source and profile,
+  loads cached engines without building or deleting them, and opens/closes the
+  selected hardware encoder at the processing output dimensions and frame rate.
+- `ajn.mediaStreams.prepare(...)` uses AJN's existing TensorRT builder to build
+  missing engines or rebuild incompatible ones, then checks the encoder.
+- `ajn.mediaStreams.status(handle.streamId)` reports progress, readiness and
+  errors for either operation.
+- `ajn.mediaStreams.requestClose(handle.streamId)` cancels preparation or releases
+  a finished check. Keep polling until `nativeCapacityReleased` is true and the
+  state is `closed` or `failed`. Closing is asynchronous.
+
+Check and preparation handles produce **no playable output**. Close them before
+opening the actual stream, including a failed check. A finished check is a
+snapshot, not a reservation of an indefinitely usable engine or GPU. Stream open
+revalidates the pipeline and uses cached engines only. It does not silently build,
+replace the selected backend or continue without a failed AI filter.
+
+`state: "ready"` / `ready: true` means the selected processing configuration and
+encoder initialized for that source. It does not promise sustained real-time
+speed, successful decoding by a particular TV, or that a later resource allocation
+cannot fail. Verify the actual output metadata before offering it to a client.
+
+## Permissions and source selection
+
+Require `sessions.manage`, `media.input` and `media.output`. Remote input also
+needs `network.connect` and an approved network destination; saved credentials
+need `credentials.use`. Request-derived credential contexts retain the existing
+API 1.7 rules and expire/revoke normally. The host obtains paths, models and
+configuration only from the approved profile/source records.
+
+For the manifest:
+
+```json
+"api": { "major": 1, "minMinor": 9 },
+"requiredCapabilities": { "mediaStreams": { "major": 1, "minMinor": 1 } }
+```
+
+Select an approved profile through `ajn.sessions.selections()`. Retain its ID and
+backend. Never respond to `runtime_missing`, `engine_missing`, or
+`encoder_unavailable` by choosing a different inference backend automatically.
+The user may explicitly select another approved profile.
+
+## Encoding options
+
+```javascript
+const options = {
+    mode: "segments", segmentSeconds: 1,
+    encoding: {
+        videoCodec: "h264", container: "mpegts", videoKbps: 10000,
+        encoder: "nvenc", bitDepth: 8,
+        audioCodec: "aac", audioKbps: 128, audioChannels: 2,
+        lengthSeconds: 0
+    },
+    playback: { startSeconds: 0, audioTrack: "default", subtitles: { mode: "none" } }
+};
+```
+
+`encoder` is `auto` (default), `nvenc`, or `amf`. Auto prefers a detected NVIDIA
+adapter, then AMD. This selects an **encoder family**; it never changes DirectML
+or TensorRT inference. This preview uses each encoder's default device; it does
+not expose selection among multiple GPUs of the same vendor. No software fallback
+is automatic. A missing adapter, missing compiled encoder, incompatible driver or
+unsupported encoding combination produces an actionable failure.
+
+| Encoder | Codec | Bit depth | Containers |
+| --- | --- | --- | --- |
+| NVENC | H.264 | 8 | MPEG-TS, Matroska, fragmented MP4 |
+| NVENC | HEVC | 8 or 10 | MPEG-TS, Matroska, fragmented MP4 |
+| NVENC | AV1 | 8 | Matroska, fragmented MP4 |
+| AMF | H.264 | 8 | MPEG-TS, Matroska, fragmented MP4 |
+| AMF | HEVC | 8 or 10 | MPEG-TS, Matroska, fragmented MP4 |
+
+These are implemented choices, subject to the actual device/driver check.
+**AMD hardware qualification is still required.** A DirectML test on NVIDIA is
+not evidence about AMD. H.264 now defaults to an explicit 8-bit NV12 encoding
+input. Ten-bit output must be explicitly selected with HEVC. The native host
+converts frames after AI processing and uses software subtitle composition; full
+frames never enter Wasm or JSON RPC. This transfer has a performance cost that
+must be included in stream measurements.
+
+For burn-in, probe the source, select the subtitle track ID, and use
+`subtitles: { mode: "burn", trackId }`. Existing approved external subtitle sources
+are also supported. Readiness validates that selection with the same source probe.
+This preview admits progressive SDR sources with at most 3840×2160 total pixels
+and at most 8192 pixels on either axis. HDR and
+interlaced streaming remain unavailable.
+
+## Handle lifecycle example
+
+Perform one operation per callback; never wait in a Wasm callback for an engine
+build or a stream. For example, keep the returned handle in addon memory and poll
+it using `ajn.timers.set("readiness", 500)`:
+
+```javascript
+// plan contains an approved source, profileId and the options above.
+let preparation = null;
+function startCheck(ajn, plan) {
+    preparation = ajn.mediaStreams.check(plan.source, plan.profileId, plan.options);
+    ajn.timers.set("readiness", 500);
+}
+function pollCheck(ajn) {
+    const s = ajn.mediaStreams.status(preparation.streamId);
+    if (s.ready || s.error) {
+        ajn.timers.clear("readiness");
+        // Save s for your UI, then release the handle. Poll cleanup separately.
+        ajn.mediaStreams.requestClose(preparation.streamId);
+    }
+    return s;
+}
+// If s.error.code is engine_missing or engine_incompatible, offer the user
+// preparation. After cleanup, call prepare with the same plan, poll, close,
+// and then open the stream. The same requestClose cancels a running build.
+```
+
+Check/preparation handles count toward the existing four retained handles. They
+release native admission on completion but must still be closed. Preparation is
+bounded to 20 minutes. Only one TensorRT preparation can own the host's engine
+cache at a time; TensorRT sessions and preparation cannot overlap in that host.
+Native process teardown cancels its builder and keeps capacity reserved until
+the process tree is gone. Incompatible cache checks do not delete the old engine;
+an explicit prepare uses AJN's existing compatibility check and rebuild path.
+Cache keys retain AJN's model/settings/shapes/precision, runtime and GPU identity.
+Engines generated on the development PC are not distributed as portable engines.
+
+## Evidence and errors
+
+`status.native.processing` contains `state`, `actualBackend`, `slot`,
+`inputWidth`, `inputHeight`, `outputWidth`, `outputHeight`, `outputFrameRate`,
+`rifeActive`, and `activeModels` (bounded model identifiers). `selectedBackend`
+records the request independently. Processing states include `active`, `bypass`,
+`building`, `engineMissing`, `engineIncompatible`, `preparationFailed`, and `failed`.
+An approved profile intentionally selecting no chain reports `bypass`; this is
+not evidence of upscaling. A failed required filter terminates output rather than
+substituting unprocessed video.
+
+`native.encoder` identifies the selected family, concrete codec, input pixel
+format and default-device policy. On a successful check, its `validation` is
+`openedForOutputFormat`. `encodedMedia.tracks` describes an independently probed
+completed encoded object, including actual dimensions, codec, profile, bit depth,
+pixel format and audio format. Treat that as the evidence for client negotiation.
+No raw native logs, private paths, source URLs or credentials are included in the
+processing evidence.
+
+| Error code | Action |
+| --- | --- |
+| `native_update_required` | Install the matching host, player and inference build. |
+| `runtime_missing` | Install the selected TensorRT runtime through AJN Manager. |
+| `engine_missing`, `engine_incompatible` | Close the check; offer preparation of the same profile. |
+| `preparation_busy` | Wait for or close the existing preparation/TensorRT session. |
+| `preparation_failed`, `preparation_timeout` | Show the failure; do not switch backend or claim readiness. |
+| `encoder_unavailable`, `encoder_failed` | Choose a supported explicit encoder/format or fix its driver/runtime. |
+| `unsupported_format`, `invalid_encoding` | Correct the requested codec/container/bit-depth combination. |
+| `unsupported_media`, `stream_format_unavailable` | Select a source within the supported input envelope. |
+| `resource_exhausted`, `capacity_exceeded` | Release other processing work or explicitly select a lighter profile. |
+| `ai_filter_failed`, `native_processing_failed` | Stop playback; processing did not succeed. |
+
+## Resource and performance semantics
+
+Native jobs have separate finite RAM limits; Wasm limits are unchanged. The host
+reserves a budget before starting native processing and releases it only after
+cleanup. HD built-in lightweight/balanced DirectML profiles reserve 4 GiB per
+process. Known single HD V3.1 Performance/Balanced custom chains without RIFE
+also use 4 GiB; UHD inputs, Quality, unknown custom chains, stacking and RIFE use
+an 8 GiB envelope.
+TensorRT profiles reserve at least 6 GiB except built-in Performance (4 GiB).
+Preparation additionally reserves 2 GiB for the Performance builder or 4 GiB for
+other TensorRT builders. During preparation, that combined reservation is also
+the per-process ceiling so the builder can use it; the whole job still shares
+one finite limit. Cached-only streaming has no builder reservation.
+Aggregate reservation is capped at the smaller of 32 GiB and 75% of physical RAM,
+and also by a shared available-commit snapshot with 512 MiB headroom. Runtime
+allocation can still fail; these limits do not reserve or cap GPU VRAM.
+
+`processingMediaSecondsPerWallSecond` measures produced media time divided by
+monotonic wall time over `speedMeasurementWallSeconds`. It excludes deliberately
+paused/buffer-limited intervals. Completion retains the last measured running
+interval; retaining completed files does not turn that value into an artificial
+zero. Null means no usable interval was observed. Do not substitute bitrate,
+requested FPS, or source download speed. Measure startup separately, and qualify
+longer playback, seeks, stalls, client decoding and sustained speed on the target
+hardware before advertising a finished Plex integration.
+
+
+## Appendix F - Streaming preview validation
+
+
+This preview patches the framework for continued Plex addon development. It is
+not a completed Plex integration or a hardware compatibility certification.
+Read [the API contract](STREAMING-READINESS.md) before using it.
+
+## Implemented
+
+- Profile/resolution-aware finite native process and job memory budgets, with
+  aggregate admission and release only after the worker tree exits.
+- Required AI filters fail the stream instead of silently sending original video.
+- Safe backend, model and processing-dimension evidence; independently probed
+  encoded dimensions, profile, bit depth and audio metadata.
+- `mediaStreams.check` and `prepare`, asynchronous status and cancellation;
+  cached-only TensorRT streaming, with no automatic inference-backend switch.
+- Hardware encoder initialization checks at the configured output size/FPS;
+  separate NVENC and AMF options; explicit 8-bit H.264 default.
+- Completed streams retain the last measured processing-speed interval.
+- Headless TensorRT uses NVDEC, rather than the older CUDA decoder wrapper.
+- Bounded operator-only native error logs under managed data's
+  `media-workers/diagnostics` (16 files, at most 16,384 retained characters each).
+  These are never returned to addons. Inspect/redact them before sharing.
+
+## Actually tested on Windows / NVIDIA RTX 5090
+
+A compiled Wasm addon opened a credentialed local HTTP Range source containing
+1920x1080, 24 fps video, audio and an ASS subtitle track. The DirectML Balanced
+profile (slot 1002) produced eight one-second MPEG-TS segments:
+
+- Every segment independently decoded with FFmpeg's error-on-failure option.
+- Actual video: 3840x2160, H.264 High, 8-bit yuv420p, 24 fps.
+- Actual audio: AAC stereo, 48 kHz.
+- Subtitle text was visibly present in the decoded frame.
+- Readiness opened the NVENC encoder at the processing output dimensions.
+- Reported model was HD V3.1 Balanced SPANF3; inference stayed DirectML.
+- A deliberately invalid model failed with `ai_filter_failed`, no encoded-media
+  result, and confirmed capacity cleanup. The isolated test model was restored.
+- The final measured interval was approximately 1.80 media seconds per wall
+  second over 1.09 seconds. This short interval is not a sustained-speed result.
+
+The managed suite passed 189/189 before the final decoder/error-handling and
+budget refinements. The four targeted streaming-policy tests passed again after
+those refinements; the final DirectML GPU regression also passed. Native CI
+passed 39/39, including the repeated libmpv load/unload lifetime regression.
+
+Native source: mpv `4502d289069a1678c05931bb7c9f15d6922f0a08`;
+inference `42194a8ae2d03df6605644394ae18ee1cae1ab28`.
+Matching inference runtime: TensorRT 11.1.0.106 / CUDA 13.3.0,
+ONNX Runtime 1.24.4 / DirectML 1.15.4.
+
+## TensorRT: partial validation, not a passing output test
+
+The real addon reached NVDEC input and returned `engine_missing` with the
+requested TensorRT backend preserved. Starting preparation, observing `building`,
+cancelling it, and releasing native capacity were exercised. A failed build
+returned `preparation_failed` and did not publish output.
+
+The initial builder process ceiling was too small and its compiler reported
+allocation failure. Preparation now raises the per-process ceiling to the
+combined job reservation (6 GiB for the HD Performance test). The final test PC
+could not admit that reservation with the required available-commit headroom;
+it returned `resource_exhausted` cleanly. No system memory settings were changed.
+
+Successful preparation, cached-engine reuse, incompatible-engine replacement,
+and TensorRT 4K output remain **unverified end to end**. Do not advertise them as
+tested. Rerun the included regression on a machine with sufficient available
+Windows commit memory. Models alone are included in the normal AJN package;
+engines built for one GPU are not portable release assets.
+
+## Other remaining qualification
+
+- AMD AMF initialization and actual output on AMD hardware. Vendor selection,
+  option mapping and unsupported-combination rejection have managed tests only.
+- The user's actual remote shared Plex server, real episode, and official
+  Android TV client; this test used a synthetic local HTTP source.
+- Long playback, sustained speed, startup latency, A/V drift, forward/backward
+  seeks, resume, audio selection, episode changes and network stalls.
+- Multiple simultaneous high-resolution streams under realistic GPU pressure.
+- Broad subtitle styling, fonts and animations beyond the tested ASS caption.
+
+## Smallest developer retest
+
+1. Extract the complete matching preview into a new folder. Keep its host,
+   player and inference binaries together. Do not copy these into a public 3.6.1
+   installation piecemeal.
+2. Require API 1.9 and capability `mediaStreams` 1.1. Approve the source and a
+   DirectML Balanced profile. Request H.264/MPEG-TS, `encoder: "nvenc"`,
+   `bitDepth: 8`, AAC stereo, and a short duration.
+3. Probe tracks; call `check`, poll `ready`, and close the handle. Then open the
+   same plan. Verify `native.processing` and `encodedMedia` before serving it.
+4. Repeat with the real authorized Plex source. Verify the TV receives the
+   processed stream. Do not infer that from a successful connection alone.
+5. Test TensorRT and AMD separately and retain their actual result evidence.
+
+The source regression is
+`addons/tests/AnimeJaNai.Addons.NativeTests/NativeStreamingPolicyChecks.cs`.
+Build the project, then invoke its DLL with the AJN root, a new result directory,
+dotnet, Wasmtime, Javy and FFmpeg paths, followed by `--streaming-policy-only`.
+The optional test environment variable `AJN_STREAM_TEST_BACKEND` selects
+`DirectML` or `TensorRT`; omission runs both. It intentionally corrupts and
+restores a model for its negative test, so use an isolated test installation.

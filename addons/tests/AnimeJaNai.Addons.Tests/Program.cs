@@ -87,6 +87,7 @@ internal static partial class Checks
         await MuxDemandChecks();
         await StreamHttpChecks();
         await MediaStreamsChecks();
+        await StreamingPolicyChecks();
         await SubtitleChecks();
         await HostSettingsChecks();
         await LifecycleChecks();

@@ -1,4 +1,4 @@
-/** AJN addon API 1.8 development. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.9 development. Plain JavaScript, with optional editor type checking. */
 interface AjnScenePair {
     requestId: string; epoch: string;
     previousPtsSeconds: number; currentPtsSeconds: number;
@@ -28,6 +28,8 @@ interface AjnProbeTrack {
     language: string | null; title: string | null; default: boolean; forced: boolean; startSeconds: number | null;
     width?: number | null; height?: number | null;
     pixelFormat?: string | null;
+    /** API 1.9: observed codec profile and pixel component depth. */
+    profile?: string | null; bitDepth?: number | null;
     pixelAspectRatio?: AjnRatio | null; displayAspectRatio?: AjnRatio | null;
     averageFrameRate?: AjnRatio | null; nominalFrameRate?: AjnRatio | null;
     /** null means the bounded probe cannot establish CFR or VFR. */
@@ -48,6 +50,8 @@ interface AjnOutputOptions {
         videoCodec: "h264" | "hevc" | "av1"; container: "matroska" | "mpegts" | "fragmentedMp4";
         videoKbps: number; audioCodec?: "none" | "aac" | "opus"; audioKbps?: number;
         keyframeFrames?: number; lengthSeconds?: number; audioChannels?: 2;
+        /** API 1.9. Encoder selection never changes the approved inference backend. */
+        encoder?: "auto" | "nvenc" | "amf"; bitDepth?: 8 | 10;
     };
     destination: {
         type?: "httpUpload"; destinationId: string; path?: string; method?: "POST" | "PUT";
@@ -77,7 +81,8 @@ interface AjnStreamPage {
     initializationId: string | null; continuousResourceId: string | null;
 }
 interface AjnStreamStatus extends AjnStreamHandle {
-    state: "opening" | "starting" | "probing" | "loadingSubtitles" | "loading" | "running" | "finishing" | "paused" | "bufferPaused" | "producerCompleted" | "closing" | "closed" | "failed" | "cleanupFailed";
+    state: "ready" | "building" | "opening" | "starting" | "probing" | "loadingSubtitles" | "loading" | "running" | "finishing" | "paused" | "bufferPaused" | "producerCompleted" | "closing" | "closed" | "failed" | "cleanupFailed";
+    operation: "required" | "check" | "prepare"; ready: boolean;
     nativeCapacityReleased: boolean; requestedStartSeconds: number; demandPositionSeconds: number; userPaused: boolean;
     retainedStartSeconds: number | null; retainedEndSeconds: number | null;
     native: Record<string, unknown>; transfer: Record<string, number>;
@@ -268,6 +273,10 @@ interface AjnApi {
     };
     mediaStreams: {
         formats(): Record<string, unknown>;
+        /** API 1.9 / mediaStreams 1.1. Readiness handles produce no media; inspect status and close them. */
+        check(source: AjnProbeSource, profileId: string | null, options: AjnStreamOptions): AjnStreamHandle;
+        /** Same handle lifecycle. Builds missing/incompatible engines for the selected profile and source dimensions. */
+        prepare(source: AjnProbeSource, profileId: string | null, options: AjnStreamOptions): AjnStreamHandle;
         open(source: AjnProbeSource, profileId: string | null, options: AjnStreamOptions): AjnStreamHandle;
         status(streamId: string): AjnStreamStatus;
         segments(streamId: string, cursor?: string | null, limit?: number): AjnStreamPage;

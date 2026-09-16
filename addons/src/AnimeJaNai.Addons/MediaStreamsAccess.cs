@@ -42,10 +42,14 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
             ["storagePressureSeconds"] = 15,
             ["defaultSegmentSeconds"] = 1, ["retainBehindSeconds"] = 30, ["produceAheadSeconds"] = 15, ["resumeAheadSeconds"] = 5,
             ["abandonmentSeconds"] = 600, ["maximumPauseSeconds"] = 7200, ["maximumLifetimeSeconds"] = 86400,
-            ["requires"] = "Matching native runtime, an approved DirectML profile, and a supported NVIDIA encoder",
+            ["requires"] = "Matching native streaming runtime, an approved profile, prepared engines and a supported encoder",
+            ["readinessVersion"] = provider.SupportsReadiness ? 1 : 0, ["encoders"] = new JsonArray("auto", "nvenc", "amf"),
+            ["bitDepths"] = new JsonArray(8, 10), ["defaultBitDepth"] = 8,
+            ["sourceLimits"] = new JsonObject { ["maximumWidth"] = 8192, ["maximumHeight"] = 8192, ["maximumPixels"] = 3840 * 2160, ["progressiveSdrOnly"] = true },
             ["hardwareQualified"] = false,
         };
     }
+    internal bool SupportsReadiness => provider.SupportsReadiness;
     internal JsonObject Open(ProbeRequest source, string? profile, StreamRequest options)
     {
         lock (sync)
@@ -81,6 +85,8 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
             while (true)
             {
                 item.Lifetime.Token.ThrowIfCancellationRequested();
+                Contract.Require(item.Options.NativeMode == "required" || item.NativeReleased || Stopwatch.GetElapsedTime(item.Created) < TimeSpan.FromMinutes(20),
+                    "preparation_timeout", "Native preparation exceeded its bounded lifetime.");
                 double demand; bool paused; long lastUsed, pausedAt;
                 lock (sync) { demand = item.Demand; paused = item.UserPaused; lastUsed = item.LastUsed; pausedAt = item.PausedAt; }
                 Contract.Require(Stopwatch.GetElapsedTime(item.Created) < TimeSpan.FromHours(24) &&
@@ -101,15 +107,17 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
                         // Re-read after disposal: CSV indexes can precede the final writer close.
                         if (item.Options.Segmented) await item.Cache.PublishAsync(index.Read(item.Cache.Directory), item.Lifetime.Token);
                         else item.Cache.PublishContinuous(item.Options.Encoding.Container);
-                        item.Cache.Complete(item.Options.Segmented ? index.Read(item.Cache.Directory) : null);
-                        lock (sync) { item.NativeReleased = true; item.State = "producerCompleted"; }
+                        if (item.Options.NativeMode == "required") item.Cache.Complete(item.Options.Segmented ? index.Read(item.Cache.Directory) : null);
+                        lock (sync) { item.NativeReleased = true; item.State = item.Options.NativeMode == "required" ? "producerCompleted" : "ready"; }
                     }
                     else
                     {
                         Contract.Require(item.Producer is IMediaStreamProducer, "native_protocol", "Stream provider lacks demand controls.");
                         var producer = (IMediaStreamProducer)item.Producer;
-                        if (sentDemand != demand) { await producer.SetDemandAsync(demand, item.Lifetime.Token); sentDemand = demand; }
-                        if (sentPause != paused) { await producer.PauseAsync(paused, item.Lifetime.Token); sentPause = paused; }
+                        if (item.Options.NativeMode == "required") {
+                            if (sentDemand != demand) { await producer.SetDemandAsync(demand, item.Lifetime.Token); sentDemand = demand; }
+                            if (sentPause != paused) { await producer.PauseAsync(paused, item.Lifetime.Token); sentPause = paused; }
+                        }
                     }
                 }
                 item.Cache.Expire(demand);
@@ -117,7 +125,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
                 lock (sync)
                 {
                     item.Counters = counters;
-                    item.Metrics = item.Measurements.Update(item.NativeStatus, counters, item.Options.Playback.StartSeconds, item.Cache.Range().End, item.Options.Segmented, paused || item.NativeReleased);
+                    item.Metrics = item.Measurements.Update(item.NativeStatus, counters, item.Options.Playback.StartSeconds, item.Cache.Range().End, item.Options.Segmented, paused, item.NativeReleased);
                 }
                 await Task.Delay(100, item.Lifetime.Token);
             }
@@ -157,6 +165,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
             var item = Find(streamId); var range = item.Closed ? (Start: (double?)null, End: (double?)null) : item.Cache.Range();
             return new() { ["streamId"] = item.Id, ["sessionId"] = item.SessionId, ["generationId"] = item.Cache.Generation,
                 ["state"] = item.State, ["nativeCapacityReleased"] = item.NativeReleased, ["requestedStartSeconds"] = item.Options.Playback.StartSeconds,
+                ["operation"] = item.Options.NativeMode, ["ready"] = item.Options.NativeMode != "required" && item.State == "ready",
                 ["demandPositionSeconds"] = item.Demand, ["userPaused"] = item.UserPaused,
                 ["retainedStartSeconds"] = range.Start, ["retainedEndSeconds"] = range.End,
                 ["native"] = item.NativeStatus.DeepClone(), ["transfer"] = item.Counters.DeepClone(),

@@ -20,12 +20,18 @@ internal sealed class NativePlayback : IDisposable
     private readonly JsonObject status = new() { ["state"] = "opening", ["paused"] = false };
     private long nextCommand;
     private readonly object controlGate = new();
+    private readonly string streamMode, workDirectory;
+    private readonly NativeEncoderPlan? encoderPlan;
+    private readonly NativeEncoding? readinessEncoding;
+    private int diagnosticCharacters;
+    private long nextReadinessPoll;
     public bool Ended { get; private set; }
     public bool Failed { get; private set; }
 
     public NativePlayback(string installRoot, string? source, string configuration, string workDirectory, int slot, string backend,
         long sampleMapping = 0, NativeEncoding? encoding = null, int outputDescriptor = -1, Stream? sourceStream = null,
-        OutputPlayback? playback = null, JsonObject? resolvedPlayback = null, Action? sourceCancel = null, Stream? externalSubtitles = null)
+        OutputPlayback? playback = null, JsonObject? resolvedPlayback = null, Action? sourceCancel = null, Stream? externalSubtitles = null,
+        string streamMode = "normal", NativeEncoding? readinessEncoding = null)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) throw new PlatformNotSupportedException("Native media currently requires Windows x64.");
         Contract.Require(sourceStream is null ? source is not null && Path.IsPathFullyQualified(source) && File.Exists(source)
@@ -35,6 +41,9 @@ internal sealed class NativePlayback : IDisposable
         encoding?.Validate();
         Contract.Require(encoding is null ? outputDescriptor == -1 : outputDescriptor >= 0, "native_output", "Invalid native output configuration.");
         installRoot = Path.GetFullPath(installRoot);
+        this.streamMode = streamMode; this.workDirectory = workDirectory;
+        this.readinessEncoding = readinessEncoding;
+        status["selectedBackend"] = backend;
         library = NativeRuntime.Load(installRoot);
         T Load<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
         try
@@ -52,11 +61,16 @@ internal sealed class NativePlayback : IDisposable
             player = create();
             Contract.Require(player != IntPtr.Zero, "native_start", "Could not create the native processing context.");
             void Set(string key, string value) => Check(option(player, key, value));
+            Check(Load<RequestLogs>("mpv_request_log_messages")(player, "info"));
+            NativeEncoderPlan? encoder = encoding is not null || readinessEncoding is not null
+                ? NativeEncoderPlan.Select(encoding ?? readinessEncoding!, NativeEncoderPlan.AdapterVendors()) : null;
+            encoderPlan = encoder;
+            if (encoder is not null) status["encoder"] = encoder.ToJson();
             foreach (string name in new[] { "config", "load-scripts", "osc", "ytdl", "load-stats-overlay", "load-console",
                 "load-auto-profiles", "load-select", "load-positioning", "load-commands", "load-context-menu",
                 "input-default-bindings", "input-terminal", "terminal", "audio", "sub", "access-references" }) Set(name, "no");
             Set("sub-auto", "no"); Set("audio-file-auto", "no"); Set("cover-art-auto", "no");
-            Set("vo", "null"); Set("hwdec", backend == "DirectML" ? "d3d11va" : "cuda"); Set("idle", "yes");
+            Set("vo", "null"); Set("hwdec", backend == "DirectML" ? "d3d11va" : "nvdec"); Set("idle", "yes");
             if (encoding is null)
             {
                 // Opt in only for our discard sink. Older native previews used
@@ -73,9 +87,8 @@ internal sealed class NativePlayback : IDisposable
                     "fragmentedMp4" => "movflags=frag_keyframe+empty_moov+default_base_moof,frag_duration=1000000,flush_packets=1",
                     _ => "mpegts_flags=+resend_headers,flush_packets=1",
                 });
-                Set("ovc", encoding.VideoCodec + "_nvenc"); Set("ovc-hwframes", playback?.SubtitleMode == "burn" ? "no" : "yes");
-                Set("ovcopts", "preset=p4,tune=ll,bf=0,rc-lookahead=0,b=" + (encoding.VideoKbps * 1000).ToString(CultureInfo.InvariantCulture)
-                    + ",g=" + encoding.KeyframeFrames.ToString(CultureInfo.InvariantCulture) + (encoding.KeyframeSeconds > 0 ? ",forced-idr=1" : ""));
+                Set("ovc", encoder!.Codec); Set("ovc-hwframes", "no");
+                Set("ovcopts", encoder.Options);
                 if (encoding.KeyframeSeconds > 0) Set("ovc-keyframe-seconds", encoding.KeyframeSeconds.ToString("R", CultureInfo.InvariantCulture));
                 Set("ocopy-metadata", "no");
                 if (encoding.AudioCodec != "none" && playback?.AudioTrack != "none")
@@ -117,6 +130,8 @@ internal sealed class NativePlayback : IDisposable
                 ["trtexec"] = Path.Combine(inference, "trtexec.exe"), ["stats"] = Path.Combine(workDirectory, "inference.log"),
             };
             string filters = "@aji:animejanai:" + string.Join(':', parameters.Select(p => p.Key + "=" + Quote(p.Value))) + ":slot=" + slot;
+            if (streamMode != "normal") filters += ":stream-mode=" + streamMode;
+            if (encoding is not null) filters += ",format=fmt=" + encoder!.PixelFormat + ":convert=yes";
             if (sampleMapping > 0) filters += ",@ajn-sample:ajn-sample:mapping=" + sampleMapping.ToString(CultureInfo.InvariantCulture);
             Set("vf", filters);
             selectedFile = sourceStream is null ? new SelectedFileStream(source!)
@@ -144,12 +159,18 @@ internal sealed class NativePlayback : IDisposable
 
     public JsonObject Poll()
     {
+        if (!Ended && streamMode is "prepare" or "check" && Environment.TickCount64 >= nextReadinessPoll)
+        {
+            nextReadinessPoll = Environment.TickCount64 + 100;
+            Send("vf-command", "aji", "poll", "");
+        }
         for (int i = 0; i < 256; i++)
         {
             var message = Marshal.PtrToStructure<Event>(wait(player, i == 0 ? .05 : 0));
             if (message.Id == 0) break;
             switch (message.Id)
             {
+                case 2: ObserveLog(Marshal.PtrToStructure<LogMessage>(message.Data)); break;
                 case 1: Ended = true; break;
                 case 5:
                     status["lastCommandId"] = message.UserData;
@@ -158,9 +179,12 @@ internal sealed class NativePlayback : IDisposable
                 case 7:
                     int reason = Marshal.ReadInt32(message.Data);
                     int error = Marshal.ReadInt32(message.Data, 4);
-                    Ended = true; Failed = reason is 4 or 5 || error < 0;
+                    Ended = true; Failed |= reason is 4 or 5 || error < 0;
                     status["state"] = Failed ? "failed" : "completed";
-                    if (Failed) status["error"] = reason == 5 ? "Playlist redirection is not a selected media source." : Describe(error);
+                    if (Failed) {
+                        status["error"] ??= reason == 5 ? "Playlist redirection is not a selected media source." : Describe(error);
+                        status["errorCode"] ??= "native_processing_failed";
+                    }
                     break;
                 case 8: status["state"] = "loading"; break;
                 case 21: status["state"] = status["paused"]?.GetValue<bool>() == true ? "paused" : "running"; break;
@@ -181,8 +205,71 @@ internal sealed class NativePlayback : IDisposable
                         status["state"] = status["paused"]?.GetValue<bool>() == true ? "paused" : "running";
                     break;
             }
+            if (Ended) break;
         }
         return (JsonObject)status.DeepClone();
+    }
+
+    private void ObserveLog(LogMessage message)
+    {
+        string prefix = Marshal.PtrToStringUTF8(message.Prefix) ?? "";
+        string level = Marshal.PtrToStringUTF8(message.Level) ?? "";
+        string text = Marshal.PtrToStringUTF8(message.Text) ?? "";
+        if (text.Length > 4096) return;
+        // Operator-only diagnostics. The supervisor keeps a bounded private
+        // log; none of this text enters the addon-visible status contract.
+        if (level is "error" or "fatal" && diagnosticCharacters < 8192)
+        {
+            string line = (prefix + ": " + text).Replace('\0', ' ');
+            Console.Error.WriteLine(line[..Math.Min(line.Length, 8192 - diagnosticCharacters)]);
+            diagnosticCharacters += line.Length;
+        }
+        if (prefix is "animejanai" or "vf/animejanai")
+        {
+            var evidence = NativeProcessingEvidence.Parse(text);
+            if (evidence is not null)
+            {
+                evidence["activeModels"] = NativeProcessingEvidence.Models(workDirectory);
+                status["processing"] = evidence;
+                string state = evidence["state"]!.GetValue<string>();
+                if (state is "engineMissing" or "engineIncompatible" or "preparationFailed" or "failed")
+                    Fail(state switch { "engineMissing" => "engine_missing", "engineIncompatible" => "engine_incompatible", "preparationFailed" => "preparation_failed", _ => "ai_filter_failed" });
+                else if (streamMode is "prepare" or "check")
+                {
+                    if (state == "building") status["state"] = "building";
+                    else
+                    {
+                        if (encoderPlan is not null && readinessEncoding is not null)
+                        {
+                            Contract.Require(NativeLibrary.TryGetExport(library, "mpv_ajn_encoder_check_v1", out var address), "native_update_required", "Native encoder readiness requires the matching player runtime.");
+                            var probe = Marshal.GetDelegateForFunctionPointer<EncoderCheck>(address);
+                            int result = probe(encoderPlan.Codec, encoderPlan.Options, evidence["outputWidth"]!.GetValue<int>(), evidence["outputHeight"]!.GetValue<int>(), readinessEncoding.BitDepth, evidence["outputFrameRate"]!.GetValue<double>());
+                            if (result < 0) { Fail(result == -12 ? "resource_exhausted" : "encoder_unavailable"); return; }
+                            status["encoder"]!["validation"] = "openedForOutputFormat";
+                        }
+                        status["state"] = "completed"; Ended = true;
+                    }
+                }
+                return;
+            }
+            // The backend logs its detailed error before the filter emits the
+            // typed streaming result. Keep consuming events so engine_missing
+            // and engine_incompatible are not replaced by a generic failure.
+            // Required filters are terminal on failure in the native chain.
+            if (level is "error" or "fatal")
+            {
+                if (text.Contains("AJN_STREAM_POLICY_UNAVAILABLE", StringComparison.Ordinal)) Fail("native_update_required");
+                else status["errorCode"] ??= "ai_filter_failed";
+            }
+        }
+        else if (level is "error" or "fatal" && (text.Contains("_nvenc", StringComparison.Ordinal) || text.Contains("_amf", StringComparison.Ordinal))) Fail("encoder_failed");
+        else if (prefix == "vf" && text.Contains("Disabling filter aji", StringComparison.Ordinal)) Fail("ai_filter_failed");
+    }
+    private void Fail(string code)
+    {
+        Failed = Ended = true; status["state"] = "failed"; status["errorCode"] = code;
+        status["error"] = "The selected native processing pipeline could not complete.";
+        if (code == "ai_filter_failed" && status["processing"] is JsonObject processing) processing["state"] = "failed";
     }
 
     public void Pause(bool paused) => Send("set", "pause", paused ? "yes" : "no");
@@ -241,6 +328,10 @@ internal sealed class NativePlayback : IDisposable
     ];
     [StructLayout(LayoutKind.Sequential)] private struct Event { public int Id, Error; public ulong UserData; public IntPtr Data; }
     [StructLayout(LayoutKind.Sequential)] private struct Property { public IntPtr Name; public int Format; public IntPtr Data; }
+    [StructLayout(LayoutKind.Sequential)] private struct LogMessage { public IntPtr Prefix, Level, Text; public int LogLevel; }
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int RequestLogs(IntPtr player, [MarshalAs(UnmanagedType.LPUTF8Str)] string level);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int EncoderCheck([MarshalAs(UnmanagedType.LPUTF8Str)] string name,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string options, int width, int height, int bitDepth, double fps);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr Create();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate uint ApiVersion();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void Destroy(IntPtr context);

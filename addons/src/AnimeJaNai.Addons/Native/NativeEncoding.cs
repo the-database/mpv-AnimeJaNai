@@ -6,11 +6,14 @@ namespace AnimeJaNai.Addons.Native;
 // remain separate; an addon cannot supply FFmpeg options, a path or a handle.
 internal sealed record NativeEncoding(string VideoCodec, string Container, int VideoKbps,
     string AudioCodec = "none", int AudioKbps = 128, int KeyframeFrames = 60, double LengthSeconds = 0, int? AudioChannels = null,
-    double KeyframeSeconds = 0)
+    double KeyframeSeconds = 0, string Encoder = "auto", int BitDepth = 8)
 {
     public void Validate()
     {
         Contract.Require(VideoCodec is "h264" or "hevc" or "av1", "invalid_encoding", "Unsupported video codec.");
+        Contract.Require(Encoder is "auto" or "nvenc" or "amf", "invalid_encoding", "Choose auto, nvenc or amf encoding.");
+        Contract.Require(BitDepth == 8 || BitDepth == 10 && VideoCodec == "hevc", "unsupported_format", "Use 8-bit output, or explicitly request 10-bit HEVC.");
+        Contract.Require(Encoder != "amf" || VideoCodec != "av1", "unsupported_format", "The AMD path currently supports H.264 and HEVC.");
         Contract.Require(Container is "matroska" or "mpegts" or "fragmentedMp4", "invalid_encoding", "Unsupported output container.");
         Contract.Require(AudioCodec is "none" or "aac" or "opus", "invalid_encoding", "Unsupported audio codec.");
         Contract.Require(AudioChannels is null || AudioChannels == 2 && AudioCodec != "none", "invalid_encoding", "Explicit channel selection currently supports encoded stereo audio.");
@@ -25,7 +28,7 @@ internal sealed record NativeEncoding(string VideoCodec, string Container, int V
     public JsonObject ToJson() => new() { ["videoCodec"] = VideoCodec, ["container"] = Container,
         ["videoKbps"] = (long)VideoKbps, ["audioCodec"] = AudioCodec, ["audioKbps"] = (long)AudioKbps,
         ["keyframeFrames"] = (long)KeyframeFrames, ["lengthSeconds"] = LengthSeconds, ["audioChannels"] = AudioChannels is int channels ? JsonValue.Create((long)channels) : null,
-        ["keyframeSeconds"] = KeyframeSeconds };
+        ["keyframeSeconds"] = KeyframeSeconds, ["encoder"] = Encoder, ["bitDepth"] = (long)BitDepth };
     public static NativeEncoding Parse(JsonObject value)
     {
         Contract.Require(value["lengthSeconds"] is JsonValue duration && duration.TryGetValue<double>(out _),
@@ -34,7 +37,9 @@ internal sealed record NativeEncoding(string VideoCodec, string Container, int V
             checked((int)Contract.Number(value, "videoKbps")), Contract.Text(value, "audioCodec", 16),
             checked((int)Contract.Number(value, "audioKbps")), checked((int)Contract.Number(value, "keyframeFrames")),
             value["lengthSeconds"]!.GetValue<double>(), value["audioChannels"] is null ? null : checked((int)Contract.Number(value, "audioChannels")),
-            value["keyframeSeconds"] is null ? 0 : value["keyframeSeconds"]!.GetValue<double>());
+            value["keyframeSeconds"] is null ? 0 : value["keyframeSeconds"]!.GetValue<double>(),
+            value["encoder"] is null ? "auto" : Contract.Text(value, "encoder", 16),
+            value["bitDepth"] is null ? 8 : checked((int)Contract.Number(value, "bitDepth")));
         result.Validate(); return result;
     }
 }

@@ -112,6 +112,9 @@ internal static partial class Checks
             await using (var worker = await AddonWorker.StartAsync(package, new(package, package.Manifest.Permissions), runtime, Path.Combine(area, "workers"),
                 Path.Combine(area, "data"), new WorkerCommand(Path.GetFullPath(dotnet), [typeof(AddonWorker).Assembly.Location]), sceneDetection: registry))
             {
+                // The production manager sends start before actions. The
+                // example initializes its cached detector settings there.
+                await worker.SendEventAsync("start");
                 var attached = await worker.SendEventAsync("action", new JsonObject { ["id"] = "attach" });
                 True(attached?["attached"]?.GetValue<int>() == 1);
                 foreach (int id in new[] { 1, 2 })

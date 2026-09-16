@@ -186,6 +186,14 @@ const __ajnSdk = (() => {
         }),
         mediaStreams: Object.freeze({
             formats: () => request("mediaStreams.formats"),
+            check: (source, profileId, options) => request("mediaStreams.check", {
+                source: source.type === "local" ? source : Object.assign({ type: "http", path: "/", useCredential: false }, source), profileId: profileId || null,
+                options: Object.assign({}, options, { encoding: Object.assign({ audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0 }, options.encoding) }),
+            }),
+            prepare: (source, profileId, options) => request("mediaStreams.prepare", {
+                source: source.type === "local" ? source : Object.assign({ type: "http", path: "/", useCredential: false }, source), profileId: profileId || null,
+                options: Object.assign({}, options, { encoding: Object.assign({ audioCodec: "none", audioKbps: 128, keyframeFrames: 60, lengthSeconds: 0 }, options.encoding) }),
+            }),
             open: (source, profileId, options) => request("mediaStreams.open", {
                 source: source.type === "local" ? source : Object.assign({ type: "http", path: "/", useCredential: false }, source),
                 profileId: profileId || null,

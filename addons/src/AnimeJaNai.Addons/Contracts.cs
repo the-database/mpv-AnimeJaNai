@@ -16,7 +16,7 @@ public sealed class AddonException(string code, string message) : Exception(mess
 public static class Contract
 {
     public const int Major = 1;
-    public const int Minor = 8;
+    public const int Minor = 9;
     public const int MaxMessageBytes = 128 * 1024;
     public static readonly FrozenSet<string> PermissionNames = new[] {
         "log.write", "storage.read", "storage.write", "sessions.manage", "frames.read", "network.connect", "credentials.use", "credentials.delegate", "media.output", "media.input", "player.observe", "player.sceneDetection", "network.listen", "network.proxy"

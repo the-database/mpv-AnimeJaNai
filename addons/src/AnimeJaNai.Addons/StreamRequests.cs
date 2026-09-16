@@ -3,7 +3,7 @@ using AnimeJaNai.Addons.Native;
 
 namespace AnimeJaNai.Addons;
 
-internal sealed record StreamRequest(NativeEncoding Encoding, OutputPlayback Playback, bool Segmented, double SegmentSeconds)
+internal sealed record StreamRequest(NativeEncoding Encoding, OutputPlayback Playback, bool Segmented, double SegmentSeconds, string NativeMode = "required")
 {
     internal static StreamRequest ParseOutput(JsonObject parameters)
     {
@@ -14,6 +14,7 @@ internal sealed record StreamRequest(NativeEncoding Encoding, OutputPlayback Pla
     internal void Validate()
     {
         Encoding.Validate(); Playback.Validate();
+        Contract.Require(NativeMode is "required" or "prepare" or "check", "invalid_stream", "Unknown trusted stream mode.");
         Contract.Require(double.IsFinite(SegmentSeconds) && SegmentSeconds is >= .5 and <= 6, "invalid_stream", "Segment duration must be between 0.5 and 6 seconds.");
     }
     internal static void ValidateSource(JsonObject probe)
@@ -43,6 +44,7 @@ internal sealed record StreamRequest(NativeEncoding Encoding, OutputPlayback Pla
 internal interface IMediaStreamProvider
 {
     bool SupportsStreams { get; }
+    bool SupportsReadiness => false;
     Task<IProcessingSession> OpenStreamAsync(ProbeRequest source, string? profile, StreamRequest output, string cacheDirectory, CancellationToken token);
 }
 internal interface IMediaStreamProducer : IControllableProcessingSession

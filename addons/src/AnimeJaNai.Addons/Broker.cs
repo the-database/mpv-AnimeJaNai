@@ -63,7 +63,7 @@ public sealed class Broker : IAsyncDisposable
         .. Subtitles is null ? [] : new[] { "subtitles" },
         .. playerFrames is not null ? new[] { "playerFrames" } : [],
         .. sceneDetection is not null ? new[] { "sceneDetection" } : []];
-    private int CapabilityMinor(string name) => name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
+    private int CapabilityMinor(string name) => name == "mediaStreams" && MediaStreams?.SupportsReadiness == true ? 1 : name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
     {
@@ -161,9 +161,12 @@ public sealed class Broker : IAsyncDisposable
             case "subtitles.read": throw new AddonException("binary_transport_required", "Subtitle chunks require the binary response transport.");
             case "mediaStreams.formats": return Streams().Formats();
             case "mediaStreams.open":
+            case "mediaStreams.check":
+            case "mediaStreams.prepare":
                 Contract.Require(parameters["source"] is JsonObject && parameters["options"] is JsonObject, "invalid_stream", "Expected source and stream options.");
                 return Streams().Open(ProbeRequest.Parse(parameters["source"]!.AsObject()),
-                    parameters["profileId"] is null ? null : Contract.Text(parameters, "profileId", 128), StreamRequest.Parse(parameters["options"]!.AsObject()));
+                    parameters["profileId"] is null ? null : Contract.Text(parameters, "profileId", 128), StreamRequest.Parse(parameters["options"]!.AsObject()) with {
+                        NativeMode = method == "mediaStreams.check" ? "check" : method == "mediaStreams.prepare" ? "prepare" : "required" });
             case "mediaStreams.status": return Streams().Status(Contract.Text(parameters, "streamId", 64));
             case "mediaStreams.segments":
                 long pageLimit = parameters["limit"] is null ? 32 : Contract.Number(parameters, "limit");

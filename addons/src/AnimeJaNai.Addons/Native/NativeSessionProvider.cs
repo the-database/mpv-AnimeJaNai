@@ -18,6 +18,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
     private readonly bool probesAvailable;
     private readonly bool muxAvailable;
     private readonly bool subtitlesAvailable;
+    private readonly bool streamingAvailable;
     private readonly NetworkSelections networkSelections;
 
     public NativeSessionProvider(string installRoot, string dataRoot, MediaSelections selections, WorkerCommand command, int maximumSessions = 2, NetworkSelections? networkSelections = null, HostSettings? hostSettings = null)
@@ -38,6 +39,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
         probesAvailable = NativeCapabilities.Has(root, "privateProbeAbi");
         muxAvailable = NativeCapabilities.Has(root, "privateMuxAbi");
         subtitlesAvailable = NativeCapabilities.Has(root, "privateSubtitlesAbi");
+        streamingAvailable = NativeCapabilities.Has(root, "privateStreamingAbi");
     }
 
     internal static bool HasOutputRuntime(string root)
@@ -90,6 +92,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
         public bool SupportsProbes => host.probesAvailable;
         public bool SupportsOutputPlayback => SupportsOutputs && SupportsProbes;
         public bool SupportsStreams => SupportsOutputPlayback && host.muxAvailable;
+        public bool SupportsReadiness => SupportsStreams && host.streamingAvailable;
         public bool SupportsSubtitles => SupportsProbes && host.subtitlesAvailable;
         public async Task<byte[]> ExtractSubtitlesAsync(ProbeRequest request, SubtitleRequest options, CancellationToken token)
         {
@@ -139,7 +142,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
         };
         public JsonObject OutputFormats() => new()
         {
-            ["encoders"] = new JsonArray("nvenc"), ["requires"] = "Supported NVIDIA GPU and driver; Windows UCRT native output runtime",
+            ["encoders"] = new JsonArray("nvenc", "amf"), ["requires"] = "A matching hardware encoder and driver; Windows UCRT native output runtime",
             ["videoCodecs"] = new JsonArray("h264", "hevc", "av1"), ["containers"] = new JsonArray("matroska", "mpegts", "fragmentedMp4"),
             ["audioCodecs"] = new JsonArray("none", "aac", "opus"), ["destinations"] = SupportsStreams ? new JsonArray("httpUpload", "servedStream") : new JsonArray("httpUpload"),
             ["mpegtsVideoCodecs"] = new JsonArray("h264", "hevc"), ["mpegtsAudioCodecs"] = new JsonArray("none", "aac"),
@@ -179,10 +182,10 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             Contract.Require(output?.Playback is null || host.probesAvailable, "feature_unavailable", "Output playback controls require the matching native probe runtime.");
             var selected = remoteSource is null ? host.selections.Resolve(package, grant, sourceId!, profileId) : null;
             var profile = selected?.Profile ?? host.selections.ResolveProfile(package, grant, profileId);
-            Contract.Require(stream is null || profile.Backend == "DirectML", "backend_unavailable", "Served streams currently require an approved DirectML profile.");
+            Contract.Require(stream is null || host.streamingAvailable, "native_update_required", "Install the matching native streaming runtime before opening, checking or preparing streams.");
             if (profile.Backend == "TensorRT")
                 Contract.Require(new[] { "nvinfer_11.dll", "trtexec.exe", "aji_trt.dll" }.All(name => File.Exists(Path.Combine(host.root, "animejanai", "inference", name))),
-                    "backend_unavailable", "The selected TensorRT runtime is not installed. Install it through AJN Manager or approve a DirectML profile.");
+                    "runtime_missing", "The selected TensorRT runtime is not installed. Install it through AJN Manager.");
             lock (host.gate)
             {
                 Contract.Require(host.reserved < host.Capacity, "capacity_exceeded", "Native processing capacity is in use. Close a session before starting another.");
@@ -190,6 +193,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             }
             RequestCredentials.Lease? credential = null;
             RequestCredentials.Lease? subtitleCredential = null;
+            IDisposable? memory = null;
             try
             {
                 // Resolve/decrypt only after reserving capacity, but before any
@@ -202,13 +206,24 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
                 var input = remoteSource is null ? null : RemoteInputPlan.Prepare(package, grant, host.networkSelections, remoteSource, credential);
                 string? subtitles = playback?.ExternalSourceId is string external ? host.selections.ResolveSource(package, grant, external).Path : null;
                 var remoteSubtitles = playback?.ExternalRemoteSource is { } remoteSubtitle ? RemoteInputPlan.Prepare(package, grant, host.networkSelections, remoteSubtitle, subtitleCredential) : null;
+                int width = 1920, height = 1080;
+                if (stream is not null)
+                {
+                    var probe = await NativeProbeProcess.RunAsync(host.root, selected?.Source.Path, input, host.work, host.command, linked.Token);
+                    StreamRequest.ValidateSource(probe);
+                    var video = probe["tracks"]!.AsArray().First(t => t?["type"]?.GetValue<string>() == "video")!;
+                    width = checked((int)video["width"]!.GetValue<long>()); height = checked((int)video["height"]!.GetValue<long>());
+                }
+                bool preparation = profile.Backend == "TensorRT" && (stream is null || stream.NativeMode == "prepare");
+                var budget = NativeResourcePolicy.Select(profile, width, height, preparation);
+                memory = NativeResourcePolicy.Reserve(budget, profile.Backend, preparation);
                 var served = stream is null ? null : new ServedOutputPlan(cacheDirectory!, stream.Encoding.Container, stream.Segmented, stream.SegmentSeconds);
                 var process = await MediaProcess.StartAsync(host.root, selected?.Source.Path, profile.Configuration,
                     profile.Slot, profile.Backend, host.work, host.command, linked.Token,
                     enableFrameSamples: host.framesAvailable && grant.Allowed.Contains("frames.read"), encoding: stream?.Encoding ?? output?.NativeOptions, remoteSource: input, playback: playback,
-                    subtitleSource: subtitles, servedOutput: served, remoteSubtitles: remoteSubtitles);
+                    subtitleSource: subtitles, servedOutput: served, remoteSubtitles: remoteSubtitles, budget: budget, streamMode: stream?.NativeMode ?? "normal");
                 process.CancelOn(credential?.Token ?? default, subtitleCredential?.Token ?? default);
-                try { return new Reserved(host, plan is null ? process : new OutputUploadSession(process, plan), credential, subtitleCredential); }
+                try { return new Reserved(host, plan is null ? process : new OutputUploadSession(process, plan), credential, subtitleCredential, memory); }
                 catch
                 {
                     try { await process.DisposeAsync(); }
@@ -218,12 +233,12 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             }
             catch (ProcessingSessionStartException error)
             {
-                throw new ProcessingSessionStartException(new Reserved(host, error.Session, credential, subtitleCredential), error);
+                throw new ProcessingSessionStartException(new Reserved(host, error.Session, credential, subtitleCredential, memory), error);
             }
-            catch { credential?.Dispose(); subtitleCredential?.Dispose(); lock (host.gate) host.reserved--; throw; }
+            catch { memory?.Dispose(); credential?.Dispose(); subtitleCredential?.Dispose(); lock (host.gate) host.reserved--; throw; }
         }
     }
-    private sealed class Reserved(NativeSessionProvider host, IProcessingSession process, RequestCredentials.Lease? credential = null, RequestCredentials.Lease? subtitleCredential = null) : IControllableProcessingSession, IFrameProcessingSession, IMediaStreamProducer
+    private sealed class Reserved(NativeSessionProvider host, IProcessingSession process, RequestCredentials.Lease? credential = null, RequestCredentials.Lease? subtitleCredential = null, IDisposable? memory = null) : IControllableProcessingSession, IFrameProcessingSession, IMediaStreamProducer
     {
         private int released;
         public Task<JsonObject> GetStatusAsync(CancellationToken token) => process.GetStatusAsync(token);
@@ -234,7 +249,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
         public async ValueTask DisposeAsync()
         {
             await process.DisposeAsync();
-            if (Interlocked.Exchange(ref released, 1) == 0) { credential?.Dispose(); subtitleCredential?.Dispose(); lock (host.gate) host.reserved--; }
+            if (Interlocked.Exchange(ref released, 1) == 0) { memory?.Dispose(); credential?.Dispose(); subtitleCredential?.Dispose(); lock (host.gate) host.reserved--; }
         }
     }
 }

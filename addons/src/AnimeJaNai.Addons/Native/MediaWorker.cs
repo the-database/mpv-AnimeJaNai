@@ -33,6 +33,9 @@ internal static class MediaWorker
         using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var launch = await channel.ReadAsync(startup.Token);
         Contract.Require(Contract.Number(launch, "version") == 1, "native_version", "Unsupported internal media protocol.");
+        string streamMode = launch["streamMode"]?.GetValue<string>() ?? "normal";
+        Contract.Require(streamMode is "normal" or "required" or "prepare" or "check", "native_protocol", "Invalid native processing mode.");
+        bool preparationOnly = streamMode is "prepare" or "check";
         long sampleHandle = launch["sampleMapping"] is null ? 0 : Contract.Number(launch, "sampleMapping");
         Contract.Require(sampleHandle >= 0, "native_protocol", "Invalid private sample mapping.");
         // The handle was duplicated into this process before the execution gate.
@@ -142,6 +145,8 @@ internal static class MediaWorker
             if (replay is not null) { replay.BeginReplay(); source = replay; }
             else source!.Position = 0;
         }
+        var readinessEncoding = preparationOnly ? encoding : null;
+        if (preparationOnly) { served = null; encoding = null; playback = null; }
         using var remuxLifetime = new CancellationTokenSource();
         using var remuxPipe = served is null ? null : new NativeEncodedPipe();
         using var self = Process.GetCurrentProcess();
@@ -155,7 +160,7 @@ internal static class MediaWorker
             Contract.Text(launch, "configuration", 4096), Contract.Text(launch, "work", 4096),
             checked((int)Contract.Number(launch, "slot")), Contract.Text(launch, "backend", 32), sampleHandle, processingEncoding,
             remuxWriter?.Descriptor ?? encodedWriter?.Descriptor ?? -1, source,
-            playback, resolvedPlayback, remote is null ? null : remote.Cancel, externalSubtitles);
+            playback, resolvedPlayback, remote is null ? null : remote.Cancel, externalSubtitles, streamMode, readinessEncoding);
         Task muxing = muxer is null ? Task.CompletedTask : Task.Run(() => muxer.Run(installRoot, served!.Container, served.Segmented, served.SegmentSeconds));
         if (remuxPipe is not null)
             _ = muxing.ContinueWith(t => { _ = t.Exception; remuxPipe.Dispose(); }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
@@ -204,6 +209,7 @@ internal static class MediaWorker
             while (!commands.IsCompleted)
             {
                 var state = Volatile.Read(ref flushing) == 0 ? player.Poll() : (JsonObject)terminalState!.DeepClone();
+                state["resourceBudget"] = launch["resourceBudget"]?.DeepClone();
                 if (served is not null)
                 {
                     state["encoding"] = encoding!.ToJson();
@@ -232,7 +238,7 @@ internal static class MediaWorker
                     // publish completion before their destruction flushes them.
                     state["state"] = "finishing";
                 }
-                if (served is not null && player.Ended && !sourceFailed && !muxFailed && Interlocked.CompareExchange(ref flushing, 1, 0) == 0)
+                if (served is not null && player.Ended && !player.Failed && !sourceFailed && !muxFailed && Interlocked.CompareExchange(ref flushing, 1, 0) == 0)
                 {
                     // Flushing may meet demand backpressure. Keep the control channel and
                     // heartbeats live so a long pause can resume the final buffered packets.
@@ -244,7 +250,7 @@ internal static class MediaWorker
                     await channel.WriteAsync(new JsonObject { ["version"] = 1, ["status"] = state }, deadline.Token);
                     last = Stopwatch.GetTimestamp();
                 }
-                if (sourceFailed || muxFailed || player.Ended && (served is null || flush.IsCompleted && muxing.IsCompleted)) break;
+                if (sourceFailed || muxFailed || player.Failed || player.Ended && (served is null || flush.IsCompleted && muxing.IsCompleted)) break;
                 if (Volatile.Read(ref flushing) != 0) await Task.Delay(50);
             }
         }
@@ -257,7 +263,7 @@ internal static class MediaWorker
             try { await commands.WaitAsync(TimeSpan.FromSeconds(1)); }
             catch (TimeoutException) { _ = commands.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); }
         }
-        if (served is not null && (!muxing.IsCompleted || sourceFailed || muxFailed))
+        if (served is not null && (!muxing.IsCompleted || sourceFailed || muxFailed || player.Failed))
         {
             remuxLifetime.Cancel(); remuxPipe!.Dispose();
         }
@@ -272,8 +278,8 @@ internal static class MediaWorker
             {
                 remuxLifetime.Cancel(); remuxPipe!.Dispose(); muxFailed = true;
                 terminalState ??= new JsonObject(); terminalState["state"] = "failed";
-                terminalState["errorCode"] = error is AddonException addon ? addon.Code : "native_mux_failed";
-                terminalState["error"] = "The native stream muxer could not complete its output.";
+                terminalState["errorCode"] ??= error is AddonException addon ? addon.Code : "native_mux_failed";
+                terminalState["error"] ??= "The native stream muxer could not complete its output.";
             }
         }
         if (terminalState is not null)

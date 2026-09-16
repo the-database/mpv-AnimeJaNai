@@ -54,9 +54,7 @@ a normal file-serving HTTP server does not provide an upload endpoint.
 
 `outputs.formats` requires `media.output` and `sessions.manage`; it describes
 this adapter's options, bounds and host session limit. It is not a GPU/driver or
-remote-client compatibility probe. This preview uses NVIDIA NVENC even when AJN
-inference uses DirectML. Unsupported hardware or input formats produce a failed
-session. Other encoders/transports can be added through capability negotiation.
+remote-client compatibility probe. API 1.9 supports explicit NVENC and AMF selection, with an 8-bit default and no automatic software fallback. Inference selection remains separate. See [readiness and encoding combinations](STREAMING-READINESS.md) for device checks and qualification limits.
 
 | Choice | Current adapter |
 | --- | --- |

@@ -1,4 +1,6 @@
-# Addon API 1.8 preview
+# Addon API 1.9 preview
+
+API 1.9 adds `mediaStreams` 1.1: `check`, `prepare`, encoder/bit-depth selection and structured processing evidence. See [streaming readiness](STREAMING-READINESS.md) for the lifecycle and failure contract.
 
 The addon API is versioned separately from AJN, mpv, inference DLLs, and the package's own version. Windows implements this preview. Public messages use no Windows handles or filesystem paths.
 

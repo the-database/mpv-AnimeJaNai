@@ -40,7 +40,7 @@ foreach ($page in $pages) {
     }
     $html = @"
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>$title · AJN addons</title><style>$style</style></head>
-<body><nav aria-label="Addon documentation"><a href="USER-GUIDE.html">Using addons</a><a href="CREATOR-GUIDE.html">Create an addon</a><a href="CREATOR-RECIPES.html">Recipes</a><a href="API.html">API reference</a><a href="TROUBLESHOOTING.html">Troubleshooting</a></nav>$contents<main>$body</main><footer>AJN addon developer preview · API 1.8 · Offline documentation</footer></body></html>
+<body><nav aria-label="Addon documentation"><a href="USER-GUIDE.html">Using addons</a><a href="CREATOR-GUIDE.html">Create an addon</a><a href="CREATOR-RECIPES.html">Recipes</a><a href="API.html">API reference</a><a href="TROUBLESHOOTING.html">Troubleshooting</a></nav>$contents<main>$body</main><footer>AJN addon developer preview · API 1.9 · Offline documentation</footer></body></html>
 "@
     [IO.File]::WriteAllText($destination, $html, [Text.UTF8Encoding]::new($false))
 }
