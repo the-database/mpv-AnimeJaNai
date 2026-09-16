@@ -34,10 +34,10 @@ Values below are the current ones; read the file for truth.
 |---|---|---|
 | `AjiVersion` | `v0.9.0` | `the-database/animejanai-inference` release tag |
 | `RifeModelsVersion` | `models-rife-fp16-1` | an animejanai-inference release tag (fp16 conversions) |
-| `MpvForkVersion` | `2026-09-13-d4c06dd342` | `the-database/mpv-winbuild` release tag |
-| `MpvForkBuildDate` | `20260913` | the date **inside the archive filename** |
-| `MpvForkGitHash` | `d4c06dd342` | the short hash **inside the archive filename** |
-| `MpvForkLinuxVersion` | `2026-10-13-e88bd2c` | `the-database/mpv` release tag (Linux bundle) |
+| `MpvForkVersion` | `2026-09-16-de455c94da` | `the-database/mpv-winbuild` release tag |
+| `MpvForkBuildDate` | `20260916` | the date **inside the archive filename** |
+| `MpvForkGitHash` | `de455c94da` | the short hash **inside the archive filename** |
+| `MpvForkLinuxVersion` | `09-16-2023-de455c9` | `the-database/mpv` release tag (Linux bundle) |
 | `ManagerVersion` | `0.6.0` | `the-database/AnimeJaNaiManager` release tag |
 | `TrtVersion` | `11.3.0.99` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
 | `TrtCudaVersion` | `13.4` | the CUDA flavour of that TensorRT build |
