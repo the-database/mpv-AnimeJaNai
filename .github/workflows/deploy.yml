@@ -9,6 +9,9 @@ on:
       linux_only:
         description: 'Build only the Linux artifacts (skip the Windows leg)'
         default: 'false'
+      windows_only:
+        description: 'Build only the Windows artifacts (skip the Linux leg)'
+        default: 'false'
 
 jobs:
   deploy:
@@ -94,6 +97,7 @@ jobs:
   # release tag, suffixed with the RID so they don't collide with the Windows
   # assets; the updater resolves its platform's assets by that suffix.
   deploy-linux:
+    if: ${{ github.event.inputs.windows_only != 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:

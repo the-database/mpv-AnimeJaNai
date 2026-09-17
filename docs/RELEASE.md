@@ -166,9 +166,18 @@ The Windows leg is gated on `github.event_name == 'workflow_dispatch'`; a push t
 gh workflow run Deploy -R the-database/mpv-AnimeJaNai -f release_version=3.6.0
 # Linux artifacts only (e.g. adding Linux to an already-published release):
 gh workflow run Deploy -R the-database/mpv-AnimeJaNai -f release_version=3.6.0 -f linux_only=true
+# Windows artifacts only (the other half of a sequential release):
+gh workflow run Deploy -R the-database/mpv-AnimeJaNai -f release_version=3.6.0 -f windows_only=true
 ```
 
 Commit the constant bumps first — `Deploy` builds from the checked-out ref.
+
+**When asset uploads crawl, release the legs sequentially.** Both legs push ~5.5 GB to
+the same tag with the same `GITHUB_TOKEN`, and GitHub's secondary rate limit on release
+asset uploads can stall them for tens of minutes at a time (3.6.3's first attempt sat at
+14 of 29 assets after two hours, against 13 minutes for the whole of 3.6.2). Dispatch
+`windows_only=true`, wait for it, then `linux_only=true`. Re-running a leg is safe: both
+use `allowUpdates: true` and replace same-named assets, so a partial draft is overwritten.
 
 ## What `Deploy` does
 
@@ -191,6 +200,8 @@ Skipped when `linux_only == 'true'`.
 8. `ncipollo/release-action@v1` with `draft: true`
 
 ### `deploy-linux` (`ubuntu-latest`, in the build container)
+
+Skipped when `windows_only == 'true'`.
 
 Runs in `ghcr.io/the-database/animejanai-linux-build:ubuntu2204` (GHCR login via
 `github.actor` + `GITHUB_TOKEN`) with `shell: bash` forced, because the container's default
