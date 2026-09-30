@@ -36,6 +36,7 @@ local function read_conf()
     local backend
     local default_slot
     local sub_render_mode
+    local display_rate_match = false
     local rife = false
     local in_global = false
     for line in f:lines() do
@@ -55,13 +56,17 @@ local function read_conf()
             if s then
                 sub_render_mode = s
             end
+            local r = line:match('^display_rate_match=([^%s]+)')
+            if r then
+                display_rate_match = r:lower() == 'yes' or r:lower() == 'true'
+            end
         end
         if line:match('^chain_%d+_rife=yes') or line:match('^chain_%d+_rife=true') then
             rife = true
         end
     end
     f:close()
-    return backend, rife, default_slot, sub_render_mode
+    return backend, rife, default_slot, sub_render_mode, display_rate_match
 end
 
 local function exists(rel)
@@ -156,7 +161,13 @@ local function check_components(backend, rife_configured)
     end)
 end
 
-local backend_raw, rife_configured, default_slot, sub_render_mode = read_conf()
+local backend_raw, rife_configured, default_slot, sub_render_mode, display_rate_match = read_conf()
+if display_rate_match and mp.get_property('platform') == 'windows' then
+    local ok, err = mp.set_property('display-rate-match', 'yes')
+    if not ok then
+        msg.error('Automatic Display Refresh Rate requires a matching AJN player build: ' .. tostring(err))
+    end
+end
 local backend = (backend_raw or 'TensorRT'):lower()
 local hwdec = 'nvdec'
 -- DirectML/ncnn use D3D11 frames (hwdec=d3d11va, gpu-api=d3d11). Windows-only:
