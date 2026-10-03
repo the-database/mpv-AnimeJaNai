@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "2df1ea77-700b-4f1e-943b-bcdce4765a50",
+  "submitted_at": "2026-09-18T14:19:02.029Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5060",
+  "vram_mb": 8151,
+  "gpu_power_w": 145,
+  "cpu": "AMD Ryzen 5 9600X 6-Core Processor",
+  "cpu_mhz": 3900,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 15989,
+  "ram_speed_mhz": 5200,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1692",
+  "results": {
+    "Balanced": {
+      "480x360": 605,
+      "640x480": 273.2,
+      "768x576": 177.2,
+      "1280x720": 82.4,
+      "1920x1080": 36.2
+    },
+    "Performance": {
+      "480x360": 605.5,
+      "640x480": 404.6,
+      "768x576": 301.6,
+      "1280x720": 132,
+      "1920x1080": 59.8
+    }
+  },
+  "submitted_by": "Bradjy",
+  "note": "This is a low profile 5060 ASUS. It's undervolted running at 2895Mhz @ 900Mv. Incredible performance so far."
+}
