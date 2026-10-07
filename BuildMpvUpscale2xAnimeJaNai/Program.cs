@@ -70,7 +70,7 @@ const string AjiVersion           = "v0.9.0";       // github.com/the-database/a
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.6.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; preserves the RIFE ensemble flag across profile export/import)
+const string ManagerVersion       = "0.7.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; experimental automatic display refresh setting)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -89,15 +89,15 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
 // v8); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-09-17-63d127174d"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20260917";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "63d127174d";   // git short hash (master; aji ABI v8)
+const string MpvForkVersion       = "2026-10-07-d6d93599d5"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20261007";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "d6d93599d5";   // git short hash (master; aji ABI v8)
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
-// Same master commit as the Windows pin above (63d127174d); the tag spells the
+// Same master commit as the Windows pin above (d6d93599d5); the tag spells the
 // date differently (MM-DD-YYYY) because that is the release_tag the Linux build
 // was dispatched with, and the asset filename embeds it - pin it as published.
-const string MpvForkLinuxVersion  = "09-17-2026-63d1271";
+const string MpvForkLinuxVersion  = "10-07-2026-d6d9359";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor
