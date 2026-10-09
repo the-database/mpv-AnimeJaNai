@@ -32,13 +32,13 @@ Values below are the current ones; read the file for truth.
 
 | Constant | Current | Source of the value |
 |---|---|---|
-| `AjiVersion` | `v0.9.0` | `the-database/animejanai-inference` release tag |
+| `AjiVersion` | `v0.11.1` | `the-database/animejanai-inference` release tag |
 | `RifeModelsVersion` | `models-rife-fp16-1` | an animejanai-inference release tag (fp16 conversions) |
-| `MpvForkVersion` | `2026-10-07-d6d93599d5` | `the-database/mpv-winbuild` release tag |
-| `MpvForkBuildDate` | `20261007` | the date **inside the archive filename** |
-| `MpvForkGitHash` | `d6d93599d5` | the short hash **inside the archive filename** |
-| `MpvForkLinuxVersion` | `10-07-2026-d6d9359` | `the-database/mpv` release tag (Linux bundle) |
-| `ManagerVersion` | `0.7.0` | `the-database/AnimeJaNaiManager` release tag |
+| `MpvForkVersion` | `2026-10-09-19c0fcf895` | `the-database/mpv-winbuild` release tag |
+| `MpvForkBuildDate` | `20261009` | the date **inside the archive filename** |
+| `MpvForkGitHash` | `19c0fcf895` | the short hash **inside the archive filename** |
+| `MpvForkLinuxVersion` | `2026-10-09-19c0fcf` | `the-database/mpv` release tag (Linux bundle) |
+| `ManagerVersion` | `0.8.0` | `the-database/AnimeJaNaiManager` release tag |
 | `TrtVersion` | `11.3.0.99` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
 | `TrtCudaVersion` | `13.4` | the CUDA flavour of that TensorRT build |
 | `CudartVersion` | `13.4.49` | `cudart` from NVIDIA's CUDA redistributable manifest |
@@ -54,7 +54,7 @@ Values below are the current ones; read the file for truth.
 **The filter↔engine ABI couples mpv and aji.** `aji.h`'s `AJI_API_VERSION` is shared by
 `vf_animejanai` (in the mpv fork) and the engine. When it changes, rebuild **both** and bump
 **both** `MpvForkVersion`/`MpvForkLinuxVersion` and `AjiVersion`. `Program.cs` notes the filter
-lives on the mpv fork's `master` (aji ABI v8) and that the old standalone `vf-animejanai`
+lives on the mpv fork's `master` (aji ABI v9) and that the old standalone `vf-animejanai`
 branch is stale (ABI v4) and must not be used.
 
 `TrtVersion` and `AjiVersion` must agree on the TensorRT major.minor — `aji_trt` links
@@ -103,12 +103,12 @@ gh workflow run MPV -R the-database/mpv-winbuild \
 ### 3. mpv, Linux — `the-database/mpv`
 
 ```bash
-gh workflow run "Build Linux (portable mpv + vf_animejanai)" -R the-database/mpv \
-  --ref master -f release_tag=2026-07-23-7fc08d9
+gh workflow run "Build Linux (portable mpv + vf_animejanai)" -R the-database/mpv --ref master
 ```
 
-`release_tag` is **required** on dispatch and becomes both the release tag and part of the
-asset name (`mpv-linux-x64-<tag>.tar.zst`).
+`release_tag` is optional: left blank it defaults to `<yyyy-mm-dd>-<7-char commit hash>` (UTC
+date, e.g. `2026-10-09-19c0fcf`). It becomes both the release tag and part of the asset name
+(`mpv-linux-x64-<tag>.tar.zst`).
 
 > **Dispatch from `master`, not `linux-support`.** The workflow's `push` trigger targets
 > `linux-support`, but that branch is hundreds of commits behind `master`, so a push-triggered

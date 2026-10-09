@@ -66,11 +66,11 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "059864bcf6eb95647d775e5b8b4e3f5a93a742c212f1f857c41688d2d81a5b01",
     ["libnvinfer-bin"]      = "e8268620847063fc0c41567c8d4b722c7a6e90e25be9a9b3462041f2b4897e9c",
 };
-const string AjiVersion           = "v0.9.0";       // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.3; spawns trtexec via CreateProcessW so non-ASCII install paths survive, and the harnesses get the UTF-8 argv manifest)
+const string AjiVersion           = "v0.11.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.3; aji ABI v9: temporal multi-frame models on TensorRT and DirectML)
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.7.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; experimental automatic display refresh setting)
+const string ManagerVersion       = "0.8.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; temporal model settings)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -87,17 +87,17 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // + bump alongside AjiVersion when the filter changes.
 //
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
-// v8); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
+// v9); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-10-07-d6d93599d5"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20261007";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "d6d93599d5";   // git short hash (master; aji ABI v8)
+const string MpvForkVersion       = "2026-10-09-19c0fcf895"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20261009";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "19c0fcf895";   // git short hash (master; aji ABI v9)
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
-// Same master commit as the Windows pin above (d6d93599d5); the tag spells the
-// date differently (MM-DD-YYYY) because that is the release_tag the Linux build
-// was dispatched with, and the asset filename embeds it - pin it as published.
-const string MpvForkLinuxVersion  = "10-07-2026-d6d9359";
+// Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
+// tags <yyyy-mm-dd>-<7-char hash> by default and the asset filename embeds the
+// tag, so pin it exactly as published.
+const string MpvForkLinuxVersion  = "2026-10-09-19c0fcf";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor
