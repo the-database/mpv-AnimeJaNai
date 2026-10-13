@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "86a4da14-3799-47fb-9250-2e8f19eb1796",
+  "submitted_at": "2026-10-13T07:34:55.352Z",
+  "app_version": "3.7.0",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon RX 6600 XT",
+  "vram_mb": 8147,
+  "gpu_power_w": 160,
+  "cpu": "Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz",
+  "cpu_mhz": 2904,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 16253,
+  "ram_speed_mhz": 2666,
+  "os": "Microsoft Windows 10.0.22631",
+  "driver": "32.0.21045.5002",
+  "results": {
+    "Balanced": {
+      "480x360": 181.6,
+      "640x480": 104.5,
+      "768x576": 69.8,
+      "1280x720": 29.5,
+      "1920x1080": 14
+    },
+    "Performance": {
+      "480x360": 301.1,
+      "640x480": 186.6,
+      "768x576": 126.5,
+      "1280x720": 54.1,
+      "1920x1080": 24.4
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
