@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "f03cad06-8ce1-4e3c-8a3d-d2068f34ab9b",
+  "submitted_at": "2026-10-02T18:09:58.640Z",
+  "app_version": "3.5.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5070",
+  "vram_mb": 12227,
+  "gpu_power_w": 250,
+  "cpu": "AMD Ryzen 5 9600X 6-Core Processor",
+  "cpu_mhz": 3900,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 32421,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26300",
+  "driver": "32.0.16.1714",
+  "results": {
+    "Balanced": {
+      "480x360": 605.8,
+      "640x480": 402.5,
+      "768x576": 302.1,
+      "1280x720": 122.2,
+      "1920x1080": 52.5
+    },
+    "Performance": {
+      "480x360": 1217.5,
+      "640x480": 604.8,
+      "768x576": 602.8,
+      "1280x720": 239.8,
+      "1920x1080": 91.6
+    }
+  },
+  "submitted_by": "wvve",
+  "note": ""
+}

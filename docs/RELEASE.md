@@ -32,14 +32,14 @@ Values below are the current ones; read the file for truth.
 
 | Constant | Current | Source of the value |
 |---|---|---|
-| `AjiVersion` | `v0.9.0` | `the-database/animejanai-inference` release tag |
+| `AjiVersion` | `v0.11.2` | `the-database/animejanai-inference` release tag |
 | `RifeModelsVersion` | `models-rife-fp16-1` | an animejanai-inference release tag (fp16 conversions) |
-| `MpvForkVersion` | `2026-09-13-d4c06dd342` | `the-database/mpv-winbuild` release tag |
-| `MpvForkBuildDate` | `20260913` | the date **inside the archive filename** |
-| `MpvForkGitHash` | `d4c06dd342` | the short hash **inside the archive filename** |
-| `MpvForkLinuxVersion` | `2026-10-13-e88bd2c` | `the-database/mpv` release tag (Linux bundle) |
-| `ManagerVersion` | `0.6.0` | `the-database/AnimeJaNaiManager` release tag |
-| `TrtVersion` | `11.3.0.99` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
+| `MpvForkVersion` | `2026-10-24-b4f9f5bfed` | `the-database/mpv-winbuild` release tag |
+| `MpvForkBuildDate` | `20261024` | the date **inside the archive filename** |
+| `MpvForkGitHash` | `b4f9f5bfed` | the short hash **inside the archive filename** |
+| `MpvForkLinuxVersion` | `2026-10-24-c493f1c` | `the-database/mpv` release tag (Linux bundle) |
+| `ManagerVersion` | `0.8.0` | `the-database/AnimeJaNaiManager` release tag |
+| `TrtVersion` | `11.4.0.106` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
 | `TrtCudaVersion` | `13.4` | the CUDA flavour of that TensorRT build |
 | `CudartVersion` | `13.4.49` | `cudart` from NVIDIA's CUDA redistributable manifest |
 | `OrtDmlVersion` | `1.24.4` | `Microsoft.ML.OnnxRuntime.DirectML` on NuGet |
@@ -54,14 +54,17 @@ Values below are the current ones; read the file for truth.
 **The filter↔engine ABI couples mpv and aji.** `aji.h`'s `AJI_API_VERSION` is shared by
 `vf_animejanai` (in the mpv fork) and the engine. When it changes, rebuild **both** and bump
 **both** `MpvForkVersion`/`MpvForkLinuxVersion` and `AjiVersion`. `Program.cs` notes the filter
-lives on the mpv fork's `master` (aji ABI v8) and that the old standalone `vf-animejanai`
+lives on the mpv fork's `master` (aji ABI v9) and that the old standalone `vf-animejanai`
 branch is stale (ABI v4) and must not be used.
 
-`TrtVersion` and `AjiVersion` must agree on the TensorRT major.minor — `aji_trt` links
-`nvinfer_11` and must be built against the version it runs on.
+`TrtVersion` and `AjiVersion` must agree on the TensorRT **major** — `aji_trt` links
+`nvinfer_11`, which every 11.x release ships under the same name, so an aji built against an
+earlier 11.x runs on a later 11.x runtime (aji v0.11.1, built against 11.3, was verified on
+11.4.0). Rebuild aji for a major bump, or when it needs API newer than it was built against,
+and smoke-test a minor bump (upscale + a RIFE engine) before shipping it without a rebuild.
 
 **`TrtCudaVersion` is a separate pin and is not derivable from `TrtVersion`.** NVIDIA's
-TRT↔CUDA pairing varies per release (11.0→13.2, 11.1→13.3, 11.2→13.3, 11.3→13.4); guessing it
+TRT↔CUDA pairing varies per release (11.0→13.2, 11.1→13.3, 11.2→13.3, 11.3→13.4, 11.4→13.4); guessing it
 produces a 404. Confirm the pairing on NVIDIA's download page before bumping.
 
 The bits come straight from NVIDIA, so no third-party release gates a TensorRT bump:
@@ -103,12 +106,12 @@ gh workflow run MPV -R the-database/mpv-winbuild \
 ### 3. mpv, Linux — `the-database/mpv`
 
 ```bash
-gh workflow run "Build Linux (portable mpv + vf_animejanai)" -R the-database/mpv \
-  --ref master -f release_tag=2026-07-23-7fc08d9
+gh workflow run "Build Linux (portable mpv + vf_animejanai)" -R the-database/mpv --ref master
 ```
 
-`release_tag` is **required** on dispatch and becomes both the release tag and part of the
-asset name (`mpv-linux-x64-<tag>.tar.zst`).
+`release_tag` is optional: left blank it defaults to `<yyyy-mm-dd>-<7-char commit hash>` (UTC
+date, e.g. `2026-10-09-19c0fcf`). It becomes both the release tag and part of the asset name
+(`mpv-linux-x64-<tag>.tar.zst`).
 
 > **Dispatch from `master`, not `linux-support`.** The workflow's `push` trigger targets
 > `linux-support`, but that branch is hundreds of commits behind `master`, so a push-triggered
@@ -166,9 +169,18 @@ The Windows leg is gated on `github.event_name == 'workflow_dispatch'`; a push t
 gh workflow run Deploy -R the-database/mpv-AnimeJaNai -f release_version=3.6.0
 # Linux artifacts only (e.g. adding Linux to an already-published release):
 gh workflow run Deploy -R the-database/mpv-AnimeJaNai -f release_version=3.6.0 -f linux_only=true
+# Windows artifacts only (the other half of a sequential release):
+gh workflow run Deploy -R the-database/mpv-AnimeJaNai -f release_version=3.6.0 -f windows_only=true
 ```
 
 Commit the constant bumps first — `Deploy` builds from the checked-out ref.
+
+**When asset uploads crawl, release the legs sequentially.** Both legs push ~5.5 GB to
+the same tag with the same `GITHUB_TOKEN`, and GitHub's secondary rate limit on release
+asset uploads can stall them for tens of minutes at a time (3.6.3's first attempt sat at
+14 of 29 assets after two hours, against 13 minutes for the whole of 3.6.2). Dispatch
+`windows_only=true`, wait for it, then `linux_only=true`. Re-running a leg is safe: both
+use `allowUpdates: true` and replace same-named assets, so a partial draft is overwritten.
 
 ## What `Deploy` does
 
@@ -191,6 +203,8 @@ Skipped when `linux_only == 'true'`.
 8. `ncipollo/release-action@v1` with `draft: true`
 
 ### `deploy-linux` (`ubuntu-latest`, in the build container)
+
+Skipped when `windows_only == 'true'`.
 
 Runs in `ghcr.io/the-database/animejanai-linux-build:ubuntu2204` (GHCR login via
 `github.actor` + `GITHUB_TOKEN`) with `shell: bash` forced, because the container's default

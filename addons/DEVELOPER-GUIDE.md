@@ -2,14 +2,14 @@
 
 **Development preview:** API 1.9 adds native streaming readiness, engine preparation, required AI processing and encoder selection. Use the matching build report for hardware qualification. Scene detection remains available from API 1.8.
 
-**Edition:** 2026-09-15 · **Addon API:** 1.9 preview · **Platform:** Windows x64
+**Edition:** 2026-10-24 · **Addon API:** 1.9 preview · **Platform:** Windows x64
 
 Create, build, install, test and distribute an AnimeJaNai (AJN) addon using this
 document and the matching release tools. No previous conversation, maintainer
 handoff or checkout of AJN's repositories is required. The complete JavaScript
 API declarations and ten feature examples are included in this file.
 
-This guide targets the **API 1.9 development preview**. API 1.9 remains a
+This guide targets the **AnimeJaNai 3.8.0 addon development preview**. API 1.9 remains a
 preview, so it is suitable for developing and testing addons but is not yet a
 frozen community compatibility promise. Use the guide shipped with your release.
 The addon API version, AJN application version and your addon's version are
@@ -119,8 +119,8 @@ Download and extract **one** matching release asset into a writable folder:
 
 | Release asset | Use it for |
 | --- | --- |
-| `AnimeJaNai-3.6.1-addons.integration.2-win-x64.zip` | Recommended: Manager, actual playback/native testing and developer tools |
-| `AnimeJaNai-Addon-Foundation-integration.2-win-x64.zip` | Standalone host/SDK tutorial; native playback needs the full AJN build |
+| `AnimeJaNai-3.8.0-addons.preview.1-win-x64.zip` | Recommended: Manager, actual playback/native testing and developer tools |
+| `AnimeJaNai-Addon-Foundation-3.8.0-preview.1-win-x64.zip` | Standalone host/SDK tutorial; native playback needs the full AJN build |
 
 Get the assets from the GitHub release carrying this guide. Do not use GitHub's
 automatic **Source code** download as a substitute for these executable bundles.

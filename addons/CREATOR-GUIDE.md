@@ -1,7 +1,7 @@
 # Create an AJN addon
 
 Build a small addon, run it, save its settings, and package an update. This guide
-uses **plain JavaScript** and AJN API 1.7's supported API 1.0 subset. The tutorial
+uses **plain JavaScript** and AJN API 1.9's supported API 1.0 subset. The tutorial
 needs no GPU or inference engines. Video features can be added afterwards using
 the same package and permission model.
 

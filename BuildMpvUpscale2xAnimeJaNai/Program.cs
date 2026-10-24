@@ -30,22 +30,25 @@ using static Downloader;
 // runtime DLLs, every per-SM builder resource, a prebuilt trtexec.exe, the
 // headers + import libs that animejanai-inference builds against, and
 // doc/Acknowledgements.txt. NVIDIA does not rotate old versions (10.13.3.9
-// through 11.3.0.99 are all still live), so old releases stay buildable.
+// through 11.4.0.106 are all still live), so old releases stay buildable.
 //
 // Should a URL ever 404, two archival fallbacks carry the same bits:
 // pypi.nvidia.com/tensorrt-cu13-libs/ (all versions, sha256 in the index, but
 // no trtexec) and the CUDA apt repo (including trtexec via libnvinfer-bin).
 //
 // TrtCudaVersion is its own pin, NOT derivable from TrtVersion: the pairing
-// varies per release (11.0 -> 13.2, 11.1 -> 13.3, 11.2 -> 13.3, 11.3 -> 13.4).
+// varies per release (11.0 -> 13.2, 11.1 -> 13.3, 11.2 -> 13.3, 11.3 -> 13.4,
+// 11.4 -> 13.4).
 //
-// aji_trt must be built against the SAME TensorRT major.minor it runs on, so
-// bump AjiVersion alongside this.
-const string TrtVersion           = "11.3.0.99";
+// aji_trt links nvinfer_11, which every 11.x release ships under the same name,
+// so an aji built against an earlier 11.x still runs on a later 11.x runtime
+// (v0.11.1, built against 11.3, was verified on 11.4.0). Release builds are
+// still made against the TensorRT they ship with: bump AjiVersion alongside.
+const string TrtVersion           = "11.4.0.106";
 const string TrtCudaVersion       = "13.4";
 // NVIDIA publishes no checksum beside the zip, so this is recorded from a
 // verified download and enforced on every build afterwards.
-const string TrtSha256Win         = "8ffd112d7bab97bc81eed818358b85df8c317bcdfc3cd3c731c220df7ca737eb";
+const string TrtSha256Win         = "b6fd86301ad803492adf7a06de29ce45e3968d29637a1437d0fb0994f412c980";
 
 // CUDA runtime (cudart64_13.dll), from NVIDIA's CUDA redistributable archive.
 // Version + hash come from the public manifest, which does publish per-file
@@ -61,16 +64,16 @@ const string CudartSha256Linux    = "ec3df9f91560db23a064c6b395d4fde17b2893f5bf9
 const string CudaAptRepo          = "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64";
 var trtDebSha256 = new Dictionary<string, string>
 {
-    ["libnvinfer11"]        = "f7685ff32593519c1929ac5412ebc1eb24f7698fd0ed2b2e5fd883ebdaa5fb31",
-    ["libnvinfer-plugin11"] = "4c23aab86ec4b67b7e4d5fdce317a5a61e137128102bee78d5233821dbdd1b27",
-    ["libnvonnxparsers11"]  = "059864bcf6eb95647d775e5b8b4e3f5a93a742c212f1f857c41688d2d81a5b01",
-    ["libnvinfer-bin"]      = "e8268620847063fc0c41567c8d4b722c7a6e90e25be9a9b3462041f2b4897e9c",
+    ["libnvinfer11"]        = "bd24db760728779e980c8852ba87e148a0bf9fb4e69d69bc14f3bdabc0423797",
+    ["libnvinfer-plugin11"] = "a99bd3de4fd45585d4a1fce8f6a8d6415e1a7946c86d907f64af0b9b487aee66",
+    ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
+    ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.9.0";       // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.3; spawns trtexec via CreateProcessW so non-ASCII install paths survive, and the harnesses get the UTF-8 argv manifest)
+const string AjiVersion           = "v0.11.2";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9: temporal multi-frame models on TensorRT and DirectML)
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.6.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; preserves the RIFE ensemble flag across profile export/import)
+const string ManagerVersion       = "0.8.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; temporal model settings)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -87,17 +90,17 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // + bump alongside AjiVersion when the filter changes.
 //
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
-// v8); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
+// v9); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-09-13-d4c06dd342"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20260913";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "d4c06dd342";   // git short hash (master; aji ABI v8)
+const string MpvForkVersion       = "2026-10-24-b4f9f5bfed"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20261024";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "b4f9f5bfed";   // git short hash (master; aji ABI v9)
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
-// NOTE: this is a *different* master commit than the Windows pin above (e88bd2c
-// is one upstream-merge commit ahead of d4c06dd342) - the two release workflows
-// were dispatched minutes apart. vf_animejanai/aji.h are identical in both.
-const string MpvForkLinuxVersion  = "2026-10-13-e88bd2c";
+// Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
+// tags <yyyy-mm-dd>-<7-char hash> by default and the asset filename embeds the
+// tag, so pin it exactly as published.
+const string MpvForkLinuxVersion  = "2026-10-24-c493f1c";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor

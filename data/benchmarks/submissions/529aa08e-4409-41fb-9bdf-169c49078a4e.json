@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "529aa08e-4409-41fb-9bdf-169c49078a4e",
+  "submitted_at": "2026-10-10T23:31:08.233Z",
+  "app_version": "3.7.0",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5060 Ti",
+  "vram_mb": 16311,
+  "gpu_power_w": 180,
+  "cpu": "11th Gen Intel(R) Core(TM) i5-11400 @ 2.60GHz",
+  "cpu_mhz": 2592,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 32605,
+  "ram_speed_mhz": 3200,
+  "os": "Microsoft Windows 10.0.19045",
+  "driver": "32.0.16.1742",
+  "results": {
+    "Balanced": {
+      "480x360": 605.2,
+      "640x480": 301.7,
+      "768x576": 216.5,
+      "1280x720": 87,
+      "1920x1080": 37.8
+    },
+    "Performance": {
+      "480x360": 1213,
+      "640x480": 605,
+      "768x576": 401.5,
+      "1280x720": 147.8,
+      "1920x1080": 65.8
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
