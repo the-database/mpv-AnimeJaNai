@@ -41,10 +41,9 @@ using static Downloader;
 // 11.4 -> 13.4).
 //
 // aji_trt links nvinfer_11, which every 11.x release ships under the same name,
-// so an aji built against an earlier 11.x runs on this runtime: AjiVersion
-// v0.11.1 (built against 11.3) was verified on 11.4.0 on Windows (SD/HD
-// upscale and a RIFE engine, RTX 5090). Rebuild aji and bump AjiVersion for a
-// TensorRT major bump, or when aji needs API newer than it was built against.
+// so an aji built against an earlier 11.x still runs on a later 11.x runtime
+// (v0.11.1, built against 11.3, was verified on 11.4.0). Release builds are
+// still made against the TensorRT they ship with: bump AjiVersion alongside.
 const string TrtVersion           = "11.4.0.106";
 const string TrtCudaVersion       = "13.4";
 // NVIDIA publishes no checksum beside the zip, so this is recorded from a
@@ -70,7 +69,7 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.11.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.3; aji ABI v9: temporal multi-frame models on TensorRT and DirectML)
+const string AjiVersion           = "v0.11.2";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9: temporal multi-frame models on TensorRT and DirectML)
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
