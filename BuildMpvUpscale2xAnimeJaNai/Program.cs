@@ -89,15 +89,15 @@ const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inferenc
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
 // v9); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-10-09-19c0fcf895"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20261009";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "19c0fcf895";   // git short hash (master; aji ABI v9)
+const string MpvForkVersion       = "2026-10-24-b4f9f5bfed"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20261024";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "b4f9f5bfed";   // git short hash (master; aji ABI v9)
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
 // Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
 // tags <yyyy-mm-dd>-<7-char hash> by default and the asset filename embeds the
 // tag, so pin it exactly as published.
-const string MpvForkLinuxVersion  = "2026-10-09-19c0fcf";
+const string MpvForkLinuxVersion  = "2026-10-24-c493f1c";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor
