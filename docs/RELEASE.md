@@ -39,7 +39,7 @@ Values below are the current ones; read the file for truth.
 | `MpvForkGitHash` | `b4f9f5bfed` | the short hash **inside the archive filename** |
 | `MpvForkLinuxVersion` | `2026-10-24-c493f1c` | `the-database/mpv` release tag (Linux bundle) |
 | `ManagerVersion` | `0.8.0` | `the-database/AnimeJaNaiManager` release tag |
-| `TrtVersion` | `11.3.0.99` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
+| `TrtVersion` | `11.4.0.106` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
 | `TrtCudaVersion` | `13.4` | the CUDA flavour of that TensorRT build |
 | `CudartVersion` | `13.4.49` | `cudart` from NVIDIA's CUDA redistributable manifest |
 | `OrtDmlVersion` | `1.24.4` | `Microsoft.ML.OnnxRuntime.DirectML` on NuGet |
@@ -57,11 +57,14 @@ Values below are the current ones; read the file for truth.
 lives on the mpv fork's `master` (aji ABI v9) and that the old standalone `vf-animejanai`
 branch is stale (ABI v4) and must not be used.
 
-`TrtVersion` and `AjiVersion` must agree on the TensorRT major.minor — `aji_trt` links
-`nvinfer_11` and must be built against the version it runs on.
+`TrtVersion` and `AjiVersion` must agree on the TensorRT **major** — `aji_trt` links
+`nvinfer_11`, which every 11.x release ships under the same name, so an aji built against an
+earlier 11.x runs on a later 11.x runtime (aji v0.11.1, built against 11.3, was verified on
+11.4.0). Rebuild aji for a major bump, or when it needs API newer than it was built against,
+and smoke-test a minor bump (upscale + a RIFE engine) before shipping it without a rebuild.
 
 **`TrtCudaVersion` is a separate pin and is not derivable from `TrtVersion`.** NVIDIA's
-TRT↔CUDA pairing varies per release (11.0→13.2, 11.1→13.3, 11.2→13.3, 11.3→13.4); guessing it
+TRT↔CUDA pairing varies per release (11.0→13.2, 11.1→13.3, 11.2→13.3, 11.3→13.4, 11.4→13.4); guessing it
 produces a 404. Confirm the pairing on NVIDIA's download page before bumping.
 
 The bits come straight from NVIDIA, so no third-party release gates a TensorRT bump:
