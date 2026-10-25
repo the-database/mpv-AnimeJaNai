@@ -4035,8 +4035,8 @@ engines built for one GPU are not portable release assets.
 ## Smallest developer retest
 
 1. Extract the complete matching preview into a new folder. Keep its host,
-   player and inference binaries together. Do not copy these into a public 3.6.1
-   installation piecemeal.
+   player and inference binaries together. Do not copy individual binaries into
+   a stock AJN installation; it does not include the matching addon interfaces.
 2. Require API 1.9 and capability `mediaStreams` 1.1. Approve the source and a
    DirectML Balanced profile. Request H.264/MPEG-TS, `encoder: "nvenc"`,
    `bitDepth: 8`, AAC stereo, and a short duration.
