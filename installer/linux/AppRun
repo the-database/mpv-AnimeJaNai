@@ -142,11 +142,14 @@ fetch_pack() { # $1 = pack base (e.g. trt-sm120, rife); $2 = human note
 }
 
 # Per-SM TensorRT builder (needed to BUILD new engines; cached engines run
-# without it) - just the one matching this GPU, on first run.
-sm="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' .')"
-if [ -n "$sm" ] && ! ls "$INFDATA"/libnvinfer_builder_resource_sm${sm}.so* >/dev/null 2>&1; then
-    fetch_pack "trt-sm${sm}" "TensorRT kernels for sm${sm} (~250 MB)"
-fi
+# without it) - one per NVIDIA GPU generation present, on first run. Not just
+# the first GPU: aji builds engines on the GPU mpv renders on, which need not
+# be nvidia-smi's first.
+for sm in $(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | tr -d ' .' | sort -u); do
+    if ! ls "$INFDATA"/libnvinfer_builder_resource_sm${sm}.so* >/dev/null 2>&1; then
+        fetch_pack "trt-sm${sm}" "TensorRT kernels for sm${sm} (~250 MB)"
+    fi
+done
 
 # RIFE models (interpolation only) - fetched only when the user's config enables
 # a RIFE chain, so pure-upscaling users never download them.
