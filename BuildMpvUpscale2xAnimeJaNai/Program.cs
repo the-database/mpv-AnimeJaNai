@@ -69,7 +69,7 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.11.2";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9: temporal multi-frame models on TensorRT and DirectML)
+const string AjiVersion           = "v0.15.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; aji_trt uses the CUDA context's device, not device 0)
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
