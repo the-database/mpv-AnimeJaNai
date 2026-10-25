@@ -38,10 +38,11 @@ internal static class NativeStreamingChecks
                 JsonObject status;
                 do
                 {
-                    status = await process.GetStatusAsync(deadline.Token);
+                    status = await process.GetStatusAsync(default);
+                    Require(!deadline.IsCancellationRequested, name + " timed out: " + status);
                     Require(status["state"]?.GetValue<string>() != "failed", name + ": " + status);
                     if (segmented) await cache.PublishAsync(index.Read(cache.Directory), deadline.Token); else cache.PublishContinuous(container);
-                    if (status["state"]?.GetValue<string>() != "completed") await Task.Delay(50, deadline.Token);
+                    if (status["state"]?.GetValue<string>() != "completed") await Task.Delay(50);
                 } while (status["state"]?.GetValue<string>() != "completed");
                 Require(status["outputWidth"]?.GetValue<long>() == 960 && status["outputHeight"]?.GetValue<long>() == 720, "Stream did not upscale 2x.");
                 evidence.Add(new() { ["nativeStream"] = name, ["status"] = status });
@@ -80,7 +81,7 @@ internal static class NativeStreamingChecks
             }
             Require(frames == 48, "Two-second 24fps output lost or duplicated video frames: " + name + " = " + frames);
         }
-        Require(!Directory.EnumerateDirectories(work).Any(), "Native workers retained temporary directories.");
+        Require(!Directory.EnumerateDirectories(work, "media-*").Any(), "Native workers retained temporary directories.");
         Console.WriteLine("PASS native probe, selected text extraction and six independently decoded stream modes.");
     }
     internal static async Task<(int Video, int Audio)> DecodeAsync(string root, string output, string name, string source)

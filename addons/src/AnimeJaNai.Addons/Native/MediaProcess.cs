@@ -72,16 +72,18 @@ internal sealed class MediaProcess : IControllableProcessingSession, IFrameProce
             string snapshot = Path.Combine(directory, "animejanai.conf");
             SafeFiles.AtomicWrite(snapshot, Encoding.UTF8.GetBytes(configuration));
             var info = WorkerBridge.ProcessInfo(command.Executable, directory);
-            // GPU drivers use these Windows locations for cache discovery. Keep
-            // their per-process profile/cache files in this owned work tree.
+            // GPU libraries resolve AppData through both USERPROFILE and the
+            // explicit environment variables. Keep those paths consistent,
+            // with all per-process profile/cache files in this owned work tree.
             info.Environment["SystemDrive"] = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))!.TrimEnd('\\');
             info.Environment["WINDIR"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-            info.Environment["USERPROFILE"] = SafeFiles.DirectoryPath(directory, "profile");
-            info.Environment["LOCALAPPDATA"] = SafeFiles.DirectoryPath(directory, "local");
-            info.Environment["APPDATA"] = SafeFiles.DirectoryPath(directory, "roaming");
-            // NVIDIA's user-mode driver also consults the common application
-            // data location. Without it, driver logs can fall back to the mux
-            // working directory and prevent strict stream-cache cleanup.
+            string profile = SafeFiles.DirectoryPath(directory, "profile");
+            string appData = SafeFiles.DirectoryPath(profile, "AppData");
+            info.Environment["USERPROFILE"] = profile;
+            info.Environment["LOCALAPPDATA"] = SafeFiles.DirectoryPath(appData, "Local");
+            info.Environment["APPDATA"] = SafeFiles.DirectoryPath(appData, "Roaming");
+            // Without an explicit common-data location, driver logs can fall
+            // back to the mux working directory and break stream-cache cleanup.
             info.Environment["ProgramData"] = SafeFiles.DirectoryPath(directory, "common");
             info.Environment["ALLUSERSPROFILE"] = info.Environment["ProgramData"];
             foreach (string arg in command.PrefixArguments.Append("media-worker")) info.ArgumentList.Add(arg);
