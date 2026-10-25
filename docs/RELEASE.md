@@ -38,7 +38,7 @@ Values below are the current ones; read the file for truth.
 | `MpvForkBuildDate` | `20261024` | the date **inside the archive filename** |
 | `MpvForkGitHash` | `b4f9f5bfed` | the short hash **inside the archive filename** |
 | `MpvForkLinuxVersion` | `2026-10-24-c493f1c` | `the-database/mpv` release tag (Linux bundle) |
-| `ManagerVersion` | `0.8.0` | `the-database/AnimeJaNaiManager` release tag |
+| `ManagerVersion` | `0.9.0` | `the-database/AnimeJaNaiManager` release tag |
 | `TrtVersion` | `11.4.0.106` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
 | `TrtCudaVersion` | `13.4` | the CUDA flavour of that TensorRT build |
 | `CudartVersion` | `13.4.49` | `cudart` from NVIDIA's CUDA redistributable manifest |
