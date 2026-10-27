@@ -127,3 +127,4 @@ The 2x_AnimeJaNai_V2 ONNX models can be used on a PC with any graphics card to r
 - [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)
 - [OpenModelDB](https://openmodeldb.info/)
 - [getnative](https://github.com/Infiziert90/getnative) and [anibin](https://anibin.blogspot.com/)
+- [vs_temporalfix](https://github.com/pifroggi/vs_temporalfix) by pifroggi: temporal fix models
