@@ -73,7 +73,7 @@ const string AjiVersion           = "v0.17.0";      // github.com/the-database/a
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.10.0";       // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; UI refresh, upscale toggle, temporal fix key)
+const string ManagerVersion       = "0.10.2";       // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; UI refresh, upscale toggle, temporal fix key; Linux updater path and TensorRT detection)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
