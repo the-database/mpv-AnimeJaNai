@@ -29,6 +29,7 @@ static string? Arg(string[] a, string name)
 }
 
 bool isWin = OperatingSystem.IsWindows();
+int cellSeq = 0;   // numbers each cell's IPC endpoint
 
 // ---- locate the install tree -------------------------------------------------
 // Default: this exe sits at the install root (Windows) or is invoked from it.
@@ -51,8 +52,9 @@ if (!Directory.Exists(benchDir))
 // Platform-varying names (mirror the assembler's Platform descriptor).
 string ajiLib = isWin ? "aji.dll" : "libaji.so";
 string trtexec = Path.Combine(inference, isWin ? "trtexec.exe" : "trtexec");
+// The standalone mpv, not mpv.net: it takes --no-config and the IPC server as is.
 string player = isWin
-    ? Path.Combine(installRoot, "mpvnet.com")
+    ? Path.Combine(installRoot, "mpv.exe")
     : Path.Combine(installRoot, "mpv", "mpv");
 if (!File.Exists(player))
 {
@@ -136,15 +138,20 @@ return 0;
 // ---- one cell: launch mpv, sample estimated-frame-number, kill --------------
 async Task<double> BenchmarkCell(int slot, string clip)
 {
+    // A fresh name per cell: the previous cell's player may still hold the old one
+    // while it exits.
+    string id = $"aji-bench-{Environment.ProcessId}-{slot}-{++cellSeq}";
     string ipc = isWin
-        ? $@"\\.\pipe\aji-bench-{Environment.ProcessId}-{slot}"
-        : Path.Combine(Path.GetTempPath(), $"aji-bench-{Environment.ProcessId}-{slot}.sock");
+        ? $@"\\.\pipe\{id}"
+        : Path.Combine(Path.GetTempPath(), $"{id}.sock");
     if (!isWin) { try { File.Delete(ipc); } catch { } }
 
     string stats = Path.Combine(Path.GetTempPath(), $"aji-bench-{slot}.log");
-    string vf = $"@aji:animejanai:lib={Path.Combine(inference, ajiLib)}:conf={confPath}" +
-                $":model-dir={onnxDir}:rife-model-dir={rifeDir}:trtexec={trtexec}" +
-                $":stats={stats}:slot={slot}";
+    // %len% quotes each path: a drive letter's ':' would otherwise end the value.
+    static string Q(string v) => $"%{Encoding.UTF8.GetByteCount(v)}%{v}";
+    string vf = $"@aji:animejanai:lib={Q(Path.Combine(inference, ajiLib))}:conf={Q(confPath)}" +
+                $":model-dir={Q(onnxDir)}:rife-model-dir={Q(rifeDir)}:trtexec={Q(trtexec)}" +
+                $":stats={Q(stats)}:slot={slot}";
 
     var psi = new ProcessStartInfo
     {
@@ -170,13 +177,20 @@ async Task<double> BenchmarkCell(int slot, string clip)
     }
 
     using var proc = Process.Start(psi)!;
+    // Drain mpv's output: a full, unread pipe blocks the player (Windows' is only 4 KB).
+    proc.OutputDataReceived += (_, _) => { };
+    proc.ErrorDataReceived += (_, _) => { };
+    proc.BeginOutputReadLine();
+    proc.BeginErrorReadLine();
     try
     {
         using var ipcConn = await ConnectIpc(ipc, proc, TimeSpan.FromSeconds(60));
-        // Wait for the first decoded frame: this excludes process launch AND the
-        // one-time TensorRT engine build (the filter pauses playback to build, so
-        // the counter only starts advancing once real upscaling begins).
-        double f0 = await SampleFrame(ipcConn, TimeSpan.FromSeconds(180));
+        // Wait until the output is actually upscaled. While TensorRT builds an engine
+        // (first play at a resolution) the filter passes frames through unscaled, and
+        // if it fails (no TensorRT runtime, failed build) it stays unscaled; timing
+        // either would measure plain decoding.
+        await WaitUpscaled(ipcConn, proc, TimeSpan.FromMinutes(10));
+        double f0 = await SampleFrame(ipcConn, TimeSpan.FromSeconds(30));
         if (f0 < 0) return -1;
 
         // Time the remaining frames until mpv exits at --frames=FRAMES.
@@ -192,15 +206,19 @@ async Task<double> BenchmarkCell(int slot, string clip)
         {
             double f = await SampleFrame(ipcConn, TimeSpan.FromSeconds(3));
             if (f < 0) break;
-            if (f < prev) accumulated += prev;
-            prev = f;
-            double total = accumulated + f;
+            // estimated-frame-number is an estimate and can step back a frame; only a
+            // large drop is the clip looping back to the start.
+            if (f < prev / 2) { accumulated += prev; prev = f; }
+            else if (f > prev) prev = f;
+            double total = accumulated + prev;
             if (baseTotal < 0) { baseTotal = total; baseTime = sw.Elapsed; }
             lastTotal = total; lastTime = sw.Elapsed;
             await Task.Delay(100);
         }
         double dt = (lastTime - baseTime).TotalSeconds;
         if (baseTotal < 0 || dt < 0.5 || lastTotal <= baseTotal) return -1;
+        if (!await IsUpscaled(ipcConn))
+            throw new InvalidOperationException($"upscaling stopped during the run; see {stats}");
         return (lastTotal - baseTotal) / dt;
     }
     finally
@@ -236,6 +254,22 @@ async Task<IpcConn> ConnectIpc(string ipc, Process proc, TimeSpan timeout)
         catch { await Task.Delay(300); }
     }
     throw new TimeoutException("could not connect to mpv IPC");
+}
+
+async Task<bool> IsUpscaled(IpcConn conn) =>
+    await conn.GetProperty("video-params/h") is double inH &&
+    await conn.GetProperty("video-out-params/h") is double outH && outH > inH;
+
+async Task WaitUpscaled(IpcConn conn, Process proc, TimeSpan budget)
+{
+    var deadline = DateTime.UtcNow + budget;
+    while (DateTime.UtcNow < deadline)
+    {
+        if (proc.HasExited) throw new InvalidOperationException("player exited");
+        if (await IsUpscaled(conn)) return;
+        await Task.Delay(500);
+    }
+    throw new TimeoutException("upscaling never became active (engine build failed or TensorRT missing?)");
 }
 
 // Polls estimated-frame-number until it returns a number (engine still building
