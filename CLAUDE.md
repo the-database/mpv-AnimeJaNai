@@ -198,7 +198,8 @@ The `aji` engine parses `animejanai.conf` (the old Python `animejanai_config.rea
   `_temporal_fix_scene_threshold`) makes the engine run a vs_temporalfix model after the chain's
   models; the Manager writes the newest bundled `temporalfix_s<k>_v*` for the chosen strength.
   `chain_<n>_upscale=no` skips the chain's models (they stay in the conf) so only temporal fix /
-  RIFE run. The models (vs_temporalfix, Apache-2.0) ship in `animejanai/onnx/` with their
+  RIFE run. `chain_<n>_temporal_fix_before_upscale=yes` (aji v0.17.1+; the Manager's default)
+  runs temporal fix at the source resolution before the models instead, 2-3x cheaper. The models (vs_temporalfix, Apache-2.0) ship in `animejanai/onnx/` with their
   licence.
 
 ### Stats overlay
