@@ -929,6 +929,7 @@ void WriteVersionAndManifest()
         {
             "animejanai/animejanai.conf",
             "animejanai/currentanimejanai.log",
+            "animejanai/manager-ui.json",
             "portable_config/mpv.conf",
             "portable_config/input.conf",
             "portable_config/saved-props.json",
