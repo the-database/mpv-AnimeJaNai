@@ -731,9 +731,9 @@ void GenerateInputConf()
 
 // Keep the runtime configs a single source: on non-Windows targets, rewrite
 // the handful of platform-specific literals in the laid-down portable_config
-// (the vf=@aji line's library/tool filenames, the OSD font, the Manager
-// launcher path) rather than forking the whole files. Runs before
-// GenerateInputConf so the managed input.conf block inherits the ported line.
+// (the vf=@aji line's library/tool filenames, the OSD font) rather than
+// forking the whole files. The Manager launcher (Ctrl+E) needs no porting:
+// scripts/animejanai_manager.lua picks the platform's file name.
 // hwdec=nvdec / vo=gpu-next / gpu-api=vulkan already work on Linux as-is.
 void PortConfigsForTarget()
 {
@@ -746,11 +746,6 @@ void PortConfigsForTarget()
         .Replace("inference/trtexec.exe", "inference/trtexec")
         .Replace("'Segoe UI'", "'sans-serif'");
     File.WriteAllText(mpvConf, c);
-
-    var inputConf = Path.Combine(pc, "input-animejanai.conf");
-    var ic = File.ReadAllText(inputConf)
-        .Replace("~~\\\\..\\\\AnimeJaNaiManager.exe", "~~/../AnimeJaNaiManager");
-    File.WriteAllText(inputConf, ic);
 }
 
 // Linux launcher: runs the bundled mpv against portable_config via
