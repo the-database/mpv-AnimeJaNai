@@ -861,7 +861,10 @@ void WriteThirdPartyNotices()
         $"        {trtSource}\n" +
         dmlBlock + "\n" +
         $"        {ajiNames}:\n" +
-        "        https://github.com/the-database/animejanai-inference\n";
+        "        https://github.com/the-database/animejanai-inference\n\n" +
+        "        animejanai/onnx/temporalfix_*.onnx: vs_temporalfix models by pifroggi,\n" +
+        "        redistributed under the Apache License 2.0 (vs_temporalfix_LICENSE.txt\n" +
+        "        next to them; https://github.com/pifroggi/vs_temporalfix).\n";
     File.WriteAllText(Path.Combine(inferencePath, "THIRD_PARTY_NOTICES.txt"), notice);
 }
 
