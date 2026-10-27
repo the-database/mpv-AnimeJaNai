@@ -69,11 +69,11 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.16.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; a chain may hold several temporal models)
+const string AjiVersion           = "v0.17.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; chain_N_upscale / chain_N_temporal_fix_model keys)
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.9.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; guided diagnostics + support ZIP export)
+const string ManagerVersion       = "0.10.0";       // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; UI refresh, upscale toggle, temporal fix key)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -929,6 +929,7 @@ void WriteVersionAndManifest()
         {
             "animejanai/animejanai.conf",
             "animejanai/currentanimejanai.log",
+            "animejanai/manager-ui.json",
             "portable_config/mpv.conf",
             "portable_config/input.conf",
             "portable_config/saved-props.json",
