@@ -194,11 +194,12 @@ The `aji` engine parses `animejanai.conf` (the old Python `animejanai_config.rea
   and read by the Lua scripts, not by the engine (`aji_conf.cpp` looks up only the keys it knows, so
   unknown ones are ignored). This is the pattern for any future "Manager configures mpv" setting:
   a `[global]` key here, the actual mpv options in a managed profile.
-- **Temporal fix is just a trailing model.** The Manager's per-chain "Temporal fix" toggle writes
-  one extra `chain_<n>_model_<m>_name=temporalfix_s<k>_v*` after the chain's models and reads a
-  trailing `temporalfix_s<k>_` model back as the toggle. There is no dedicated conf key; the engine
-  stacks it like any temporal model. The models (vs_temporalfix, Apache-2.0) ship in
-  `animejanai/onnx/` with their licence.
+- **Chain feature keys (aji v0.17.0+).** `chain_<n>_temporal_fix_model` (+
+  `_temporal_fix_scene_threshold`) makes the engine run a vs_temporalfix model after the chain's
+  models; the Manager writes the newest bundled `temporalfix_s<k>_v*` for the chosen strength.
+  `chain_<n>_upscale=no` skips the chain's models (they stay in the conf) so only temporal fix /
+  RIFE run. The models (vs_temporalfix, Apache-2.0) ship in `animejanai/onnx/` with their
+  licence.
 
 ### Stats overlay
 
