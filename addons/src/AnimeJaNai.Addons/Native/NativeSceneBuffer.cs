@@ -24,9 +24,11 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
     private Lease? active;
     internal string Name { get; } = "Local\\AJN.Scene." + Guid.NewGuid().ToString("N");
     internal bool Enabled { get { lock (sync) return !disposed && active is not null; } }
+    public bool SupportsNativeMvtools { get; }
 
-    internal NativeSceneBuffer()
+    internal NativeSceneBuffer(bool nativeMvtools = false)
     {
+        SupportsNativeMvtools = nativeMvtools;
         mapping = NativeFrameBuffer.CreatePlayerMapping(Name, Size);
         try
         {
@@ -64,12 +66,17 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
         lock (sync)
         {
             Alive(); Contract.Require(active is null, "scene_detector_in_use", "This player already has a detector.");
+            Contract.Require(request.Algorithm != "mvtools" || SupportsNativeMvtools,
+                "feature_unavailable", "The native MVTools detector is not installed.");
             Contract.Require(Enter(), "scene_busy", "The native scene buffer is being updated; retry attachment.");
             try
             {
                 generation = checked(generation + 1); L(24) = generation;
                 I(96) = request.Width; I(100) = request.Height; I(120) = request.DeadlineMs;
                 I(108) = 0; I(112) = 0; I(116) = 0; I(124) = 0;
+                I(136) = request.Algorithm == "mvtools" ? 1 : 0;
+                I(140) = request.Thscd1; I(144) = request.Thscd2;
+                I(148) = 0; I(152) = 0; I(156) = 0; L(160) = 0; L(168) = 0; I(176) = 0;
                 L(32) = 0; L(48) = 0; lastRead = 0;
                 notify = readyCallback; I(20) = 1;
                 active = new(this, generation); return active;
@@ -86,7 +93,7 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
             try
             {
                 long id = L(32);
-                if (id <= 0 || id == lastRead || L(24) != lease.Generation || I(20) == 0 ||
+                if (I(136) != 0 || id <= 0 || id == lastRead || L(24) != lease.Generation || I(20) == 0 ||
                     I(108) != 1 || L(64) <= Environment.TickCount64 || L(56) <= Environment.TickCount64) return null;
                 int width = I(96), height = I(100);
                 Contract.Require(width is >= 1 and <= 320 && height is >= 1 and <= 180, "invalid_frame", "Native scene dimensions are invalid.");
@@ -110,7 +117,7 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
             Check(lease); if (!Enter()) return false;
             try
             {
-                if (L(24) != lease.Generation || I(20) == 0 || L(32) != id || L(48) == id || I(108) != 1 ||
+                if (I(136) != 0 || L(24) != lease.Generation || I(20) == 0 || L(32) != id || L(48) == id || I(108) != 1 ||
                     L(64) <= Environment.TickCount64 || L(56) <= Environment.TickCount64) return false;
                 I(104) = decision; L(48) = id;
             }
@@ -124,8 +131,12 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
         {
             Check(lease);
             int status = Volatile.Read(ref I(108));
-            return new() { ["state"] = status switch { 0 => "waitingForPlayer", 1 => "pending", 2 => "active", 3 => "fallback", 4 => "sampleUnavailable", 5 => "backendUnavailable", 6 => "suspended", _ => "unavailable" },
-                ["acceptedPairs"] = Math.Max(0, Volatile.Read(ref I(116))), ["timedOutPairs"] = Math.Max(0, Volatile.Read(ref I(112))) };
+            return new() { ["state"] = status switch { 0 => "waitingForPlayer", 1 => "pending", 2 => "active", 3 => "fallback", 4 => "sampleUnavailable", 5 => "backendUnavailable", 6 => "suspended", 7 => "detectorUnavailable", 8 => "detectorError", _ => "unavailable" },
+                ["acceptedPairs"] = Math.Max(0, Volatile.Read(ref I(116))), ["timedOutPairs"] = Math.Max(0, Volatile.Read(ref I(112))),
+                ["algorithm"] = I(136) == 1 ? "mvtools" : "custom", ["cutPairs"] = Math.Max(0, Volatile.Read(ref I(156))),
+                ["changedBlocks"] = Math.Max(0, Volatile.Read(ref I(148))), ["totalBlocks"] = Math.Max(0, Volatile.Read(ref I(152))),
+                ["analysisMs"] = Math.Max(0, Volatile.Read(ref L(160))) / 1000.0,
+                ["blockSadThreshold"] = Math.Max(0, Volatile.Read(ref L(168))), ["sourceBits"] = Volatile.Read(ref I(176)) };
         }
     }
     private void Detach(Lease lease)

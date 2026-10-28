@@ -2,7 +2,8 @@
 
 ## Start here
 
-This branch implements **API 1.9 preview**, including
+This branch implements **API 1.10 preview**, including the optional
+[RIFE Settings / MVTools detector](rife-settings/README.md), plus
 [HTTP, proxy and credential APIs](HTTP-SERVER.md), reviewed HTTPS listeners and
 the [streaming API](STREAMING.md) and [readiness/preparation](STREAMING-READINESS.md). The native qualification and packaging checks
 in [STREAMING-TESTS.md](STREAMING-TESTS.md) must pass before a matching runtime is

@@ -184,17 +184,23 @@ interface AjnApi {
      * One exclusive detector per player; callbacks remain inside the addon sandbox.
      * The host delivers scene.request events containing {detectorId}. */
     sceneDetection: {
-        list(): { playerId: string; inUse: boolean; format: "gray8"; stage: "beforeInterpolation" }[];
-        attach(playerId: string, options?: { width?: number; height?: number; deadlineMs?: number }): {
-            detectorId: string; width: number; height: number; deadlineMs: number; format: "gray8"; stage: "beforeInterpolation";
+        list(): { playerId: string; inUse: boolean; format: "gray8"; stage: "beforeInterpolation"; nativeMvtools: boolean }[];
+        /** API 1.10 / sceneDetection 1.1: mvtools runs in the trusted player on
+         * full-resolution YUV. No scene.request events or binary samples are
+         * delivered for that mode; width/height/deadlineMs apply only to custom. */
+        attach(playerId: string, options?: { width?: number; height?: number; deadlineMs?: number;
+            algorithm?: "custom" | "mvtools"; thscd1?: number; thscd2?: number }): {
+            detectorId: string; width: number; height: number; deadlineMs: number; format: "gray8"; stage: "beforeInterpolation"; algorithm: "custom" | "mvtools";
         };
         /** Latest pending pair once, or null if consumed, expired, reset or unavailable. */
         read(detectorId: string): AjnScenePair | null;
         /** false means late, duplicate or stale. It never applies to a later pair. */
         submit(detectorId: string, requestId: string, decision: "cut" | "continuous" | "default"): { accepted: boolean };
         status(detectorId: string): {
-            state: "waitingForPlayer" | "pending" | "active" | "fallback" | "sampleUnavailable" | "backendUnavailable" | "suspended" | "unavailable";
+            state: "waitingForPlayer" | "pending" | "active" | "fallback" | "sampleUnavailable" | "backendUnavailable" | "suspended" | "detectorUnavailable" | "detectorError" | "unavailable";
             acceptedPairs: number; timedOutPairs: number;
+            algorithm: "custom" | "mvtools"; cutPairs: number; changedBlocks: number; totalBlocks: number;
+            analysisMs: number; blockSadThreshold: number; sourceBits: number;
         };
         detach(detectorId: string): void;
     };

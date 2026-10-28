@@ -40,6 +40,27 @@ internal static partial class Checks
             True((await second.InvokeAsync("sceneDetection.attach", Request(), default))?["detectorId"] is not null);
         });
         if (!OperatingSystem.IsWindows()) return;
+        await Test("Scene detection MVTools requires a matching native runtime and preserves legacy offsets", async () =>
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            using var older = new NativeSceneBuffer();
+            await Error("feature_unavailable", () => older.Subscribe(new(Algorithm: "mvtools"), () => { }));
+            using var buffer = new NativeSceneBuffer(nativeMvtools: true); buffer.RenewLease();
+            using var mapping = MemoryMappedFile.OpenExisting(buffer.Name);
+            using var view = mapping.CreateViewAccessor(0, NativeSceneBuffer.Size);
+            using var native = buffer.Subscribe(new(Algorithm: "mvtools", Thscd1: 240, Thscd2: 130), () => { });
+            True(view.ReadInt32(4) == 1 && view.ReadInt32(12) == 256 && view.ReadInt32(136) == 1 &&
+                view.ReadInt32(140) == 240 && view.ReadInt32(144) == 130);
+            PublishScene(view, 1, 2, 1, true);
+            True(native.Read() is null && !native.Submit("1", 1), "Native mode must not accept guest decisions.");
+            view.Write(108, 2); view.Write(116, 4); view.Write(156, 2); view.Write(160, 1500L);
+            var status = native.Status();
+            True(status["algorithm"]!.GetValue<string>() == "mvtools" && status["cutPairs"]!.GetValue<int>() == 2 &&
+                status["analysisMs"]!.GetValue<double>() == 1.5);
+            native.Dispose(); True(view.ReadInt32(20) == 0);
+            using var custom = buffer.Subscribe(new(), () => { });
+            True(view.ReadInt32(136) == 0, "Custom detectors must keep the original protocol.");
+        });
         await Test("Scene detection native mapping rejects stale late duplicate and revoked decisions", async () =>
         {
             if (!OperatingSystem.IsWindows()) return;
@@ -98,6 +119,32 @@ internal static partial class Checks
     private static async Task SceneRuntimeChecks(string runtime, string compiler, string dotnet)
     {
         if (!OperatingSystem.IsWindows()) return;
+        await Test("Scene detection RIFE Settings Wasm attaches automatically and default mode releases ownership", async () =>
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            string area = Area();
+            var package = await DeveloperTools.BuildAsync(Path.Combine(AppContext.BaseDirectory, "rife-settings"), compiler, Path.Combine(area, "rife.ajnaddon"));
+            using var registry = new SceneDetectionRegistry();
+            using var buffer = new NativeSceneBuffer(nativeMvtools: true); buffer.RenewLease();
+            using var registration = registry.Register("rife-player", buffer);
+            using var mapping = MemoryMappedFile.OpenExisting(buffer.Name);
+            using var view = mapping.CreateViewAccessor(0, NativeSceneBuffer.Size);
+            string data = Path.Combine(area, "data");
+            await using var worker = await AddonWorker.StartAsync(package, new(package, package.Manifest.Permissions), runtime,
+                Path.Combine(area, "workers"), data, new WorkerCommand(Path.GetFullPath(dotnet), [typeof(AddonWorker).Assembly.Location]), sceneDetection: registry);
+            await worker.SendEventAsync("start");
+            True(view.ReadInt32(20) == 1 && view.ReadInt32(136) == 1 && view.ReadInt32(140) == 240 && view.ReadInt32(144) == 130);
+            var status = await worker.SendEventAsync("action", new JsonObject { ["id"] = "status" });
+            True(status?["players"]?.AsArray().Count == 1);
+            new AddonSettings(data, package.Manifest).Update(new() { ["sceneMode"] = "default" });
+            await worker.SendEventAsync("settings.changed");
+            True(view.ReadInt32(20) == 0);
+            new AddonSettings(data, package.Manifest).Update(new() { ["sceneMode"] = "mvtools", ["thscd1"] = 300 });
+            await worker.SendEventAsync("settings.changed");
+            True(view.ReadInt32(20) == 1 && view.ReadInt32(140) == 300);
+            await worker.SendEventAsync("stop");
+            True(view.ReadInt32(20) == 0);
+        });
         await Test("Scene detection compiled Wasm addon handles real binary pairs and releases its native lease", async () =>
         {
             if (!OperatingSystem.IsWindows()) return;

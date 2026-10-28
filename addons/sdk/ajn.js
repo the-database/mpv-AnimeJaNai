@@ -104,7 +104,8 @@ const __ajnSdk = (() => {
         sceneDetection: Object.freeze({
             list: () => request("sceneDetection.list"),
             attach: (playerId, options = {}) => request("sceneDetection.attach", { playerId,
-                width: options.width ?? 160, height: options.height ?? 90, deadlineMs: options.deadlineMs ?? 25 }),
+                width: options.width ?? 160, height: options.height ?? 90, deadlineMs: options.deadlineMs ?? 25,
+                algorithm: options.algorithm ?? "custom", thscd1: options.thscd1 ?? 240, thscd2: options.thscd2 ?? 130 }),
             read: detectorId => request("sceneDetection.read", { detectorId }, "scene"),
             submit: (detectorId, requestId, decision) => request("sceneDetection.submit", { detectorId, requestId, decision }),
             status: detectorId => request("sceneDetection.status", { detectorId }),

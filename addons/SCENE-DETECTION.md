@@ -1,5 +1,28 @@
 # Custom RIFE scene detectors — API 1.8 preview
 
+## Native MVTools extension — API 1.10 / sceneDetection 1.1
+
+`sceneDetection.list()` adds `nativeMvtools`, indicating a verified matching
+player and optional detector library. Attach with
+`{algorithm:"mvtools", thscd1:240, thscd2:130}` to select the legacy `sc_mode=2`
+analysis core. Thresholds are integers in 0..16320 and 0..255 respectively.
+The original `custom` algorithm remains the default for existing callers.
+
+Native mode operates on full-resolution planar YUV/gray in the trusted player.
+It does not deliver `scene.request` events or samples to the addon; `read` returns
+null and `submit` is not accepted for this mode. Sample dimensions and the guest
+deadline apply only to `custom`. Ownership, leases, revocation and fallback to
+AJN on unsupported inputs remain in effect. The detector DLL is loaded only
+after activation; normal playback performs no new analysis or GPU readback.
+
+Status adds `algorithm`, `cutPairs`, `changedBlocks`, `totalBlocks`, `analysisMs`,
+`blockSadThreshold`, and `sourceBits`. The last-pair time includes native sample
+preparation. `detectorUnavailable` means the optional DLL is missing or has the
+wrong ABI; `detectorError` means native analysis failed. Both use AJN's detector.
+See [RIFE Settings](rife-settings/README.md) for the packaged addon and limits.
+
+## Original custom-detector contract
+
 This optional API lets a WebAssembly addon decide whether RIFE should interpolate
 between a pair of frames. Creators can port motion-aware detectors to Wasm.
 The `scene-detector` example demonstrates the contract using average luma

@@ -2,17 +2,28 @@ using System.Text.Json.Nodes;
 
 namespace AnimeJaNai.Addons;
 
-public sealed record SceneRequest(int Width = 160, int Height = 90, int DeadlineMs = 25)
+public sealed record SceneRequest(int Width = 160, int Height = 90, int DeadlineMs = 25,
+    string Algorithm = "custom", int Thscd1 = 240, int Thscd2 = 130)
 {
     public const int MaximumBytes = 320 * 180 * 2;
-    public void Validate() => Contract.Require(Width is >= 1 and <= 320 && Height is >= 1 and <= 180 && DeadlineMs is >= 5 and <= 100,
-        "invalid_request", "Scene samples must be 1..320 by 1..180 pixels with a 5..100 ms decision deadline.");
+    public void Validate()
+    {
+        Contract.Require(Width is >= 1 and <= 320 && Height is >= 1 and <= 180 && DeadlineMs is >= 5 and <= 100,
+            "invalid_request", "Scene samples must be 1..320 by 1..180 pixels with a 5..100 ms decision deadline.");
+        Contract.Require(Algorithm is "custom" or "mvtools" && Thscd1 is >= 0 and <= 16320 && Thscd2 is >= 0 and <= 255,
+            "invalid_request", "Choose custom or mvtools, with thscd1 0..16320 and thscd2 0..255.");
+    }
     public static SceneRequest Parse(JsonObject value)
     {
         long width = Contract.Number(value, "width"), height = Contract.Number(value, "height"), deadline = Contract.Number(value, "deadlineMs");
         Contract.Require(width is >= 1 and <= 320 && height is >= 1 and <= 180 && deadline is >= 5 and <= 100,
             "invalid_request", "Scene sample dimensions or deadline are outside the supported limits.");
-        return new((int)width, (int)height, (int)deadline);
+        string algorithm = value.ContainsKey("algorithm") ? Contract.Text(value, "algorithm", 16) : "custom";
+        long th1 = value.ContainsKey("thscd1") ? Contract.Number(value, "thscd1") : 240;
+        long th2 = value.ContainsKey("thscd2") ? Contract.Number(value, "thscd2") : 130;
+        Contract.Require(th1 is >= 0 and <= 16320 && th2 is >= 0 and <= 255, "invalid_request", "Invalid MVTools thresholds.");
+        var request = new SceneRequest((int)width, (int)height, (int)deadline, algorithm, (int)th1, (int)th2);
+        request.Validate(); return request;
     }
 }
 public sealed record ScenePair(JsonObject Metadata, ReadOnlyMemory<byte> Pixels);
@@ -24,6 +35,7 @@ public interface ISceneSubscription : IDisposable
 }
 public interface ISceneSource : IDisposable
 {
+    bool SupportsNativeMvtools => false;
     ISceneSubscription Subscribe(SceneRequest request, Action ready);
 }
 
@@ -59,8 +71,9 @@ public sealed class SceneDetectionRegistry : IDisposable
         lock (sync)
         {
             Check(owner);
-            return new(players.Keys.Select(id => (JsonNode)new JsonObject { ["playerId"] = id,
-                ["inUse"] = detectors.Values.Any(d => d.PlayerId == id), ["format"] = "gray8", ["stage"] = "beforeInterpolation" }).ToArray());
+            return new(players.Select(p => (JsonNode)new JsonObject { ["playerId"] = p.Key,
+                ["inUse"] = detectors.Values.Any(d => d.PlayerId == p.Key), ["format"] = "gray8", ["stage"] = "beforeInterpolation",
+                ["nativeMvtools"] = p.Value.SupportsNativeMvtools }).ToArray());
         }
     }
     public JsonObject Attach(Owner owner, string playerId, SceneRequest request)
@@ -70,13 +83,16 @@ public sealed class SceneDetectionRegistry : IDisposable
         {
             Check(owner);
             Contract.Require(players.TryGetValue(playerId, out var source), "player_not_found", "The selected player is no longer attached.");
+            Contract.Require(request.Algorithm != "mvtools" || source.SupportsNativeMvtools,
+                "feature_unavailable", "This player needs the native MVTools scene-detection runtime update.");
             Contract.Require(!detectors.Values.Any(d => d.PlayerId == playerId), "scene_detector_in_use", "This player already has a scene detector.");
             Contract.Require(detectors.Values.Count(d => d.Owner == owner) < 4, "capacity_exceeded", "An addon can attach at most four scene detectors.");
             string id = Guid.NewGuid().ToString("N");
             var subscription = source.Subscribe(request, () => Notify(owner, id));
             detectors.Add(id, new(owner, playerId, subscription));
             return new() { ["detectorId"] = id, ["width"] = request.Width, ["height"] = request.Height,
-                ["deadlineMs"] = request.DeadlineMs, ["format"] = "gray8", ["stage"] = "beforeInterpolation" };
+                ["deadlineMs"] = request.DeadlineMs, ["format"] = "gray8", ["stage"] = "beforeInterpolation",
+                ["algorithm"] = request.Algorithm };
         }
     }
     private void Notify(Owner owner, string id)
