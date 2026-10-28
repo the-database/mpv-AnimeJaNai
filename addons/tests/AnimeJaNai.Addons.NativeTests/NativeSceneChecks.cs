@@ -33,7 +33,8 @@ internal static class NativeSceneChecks
         ManagementClient? manager = null;
         async Task Until(Func<Task<bool>> ready)
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+            // A first TensorRT run builds engines for each new model/resolution.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(backend == "TensorRT" ? 300 : 40));
             while (!await ready()) await Task.Delay(100, timeout.Token);
         }
         await Until(async () => {
