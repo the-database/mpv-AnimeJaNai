@@ -53,7 +53,7 @@ internal static class PlayerAttachment
                             var configuration = (JsonObject)(await client.CallAsync("player.poll", cancellationToken: lifetime.Token))!;
                             configuration["schemaVersion"] = 1; configuration["instance"] = instance;
                             configuration["revision"] = (++revision).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                            SafeFiles.AtomicWrite(control!, Encoding.UTF8.GetBytes(configuration.ToJsonString()));
+                            await PublishControlAsync(control!, Encoding.UTF8.GetBytes(configuration.ToJsonString()), lifetime.Token);
                         }
                         else await client.CallAsync("lifecycle.ping", cancellationToken: lifetime.Token);
                         await Task.Delay(TimeSpan.FromMilliseconds(observing ? 500 : 5000), lifetime.Token);
@@ -78,6 +78,19 @@ internal static class PlayerAttachment
                 try { SafeFiles.CheckParents(control); File.Delete(control); }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or AddonException) { }
             }
+        }
+    }
+
+    internal static async Task PublishControlAsync(string path, byte[] contents, CancellationToken cancellationToken = default)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { SafeFiles.AtomicWrite(path, contents); return; }
+            // Lua's CRT file reader briefly denies delete sharing on Windows.
+            // Replacing its open snapshot returns ACCESS_DENIED. Keep atomic
+            // replacement, and propagate persistent access errors after 80 ms.
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() && attempt < 4)
+            { await Task.Delay(20, cancellationToken); }
         }
     }
 

@@ -6,6 +6,27 @@ internal static partial class Checks
 {
     private static async Task LifecycleChecks()
     {
+        if (OperatingSystem.IsWindows()) await Test("Player lifecycle snapshot survives a concurrent Lua reader and preserves persistent errors", async () =>
+        {
+            string path = Path.Combine(Area(), "control.json");
+            File.WriteAllText(path, "old");
+            using (var reader = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                var write = PlayerAttachment.PublishControlAsync(path, "new"u8.ToArray());
+                True(!write.IsCompleted && File.ReadAllText(path) == "old");
+                reader.Dispose();
+                await write.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            True(File.ReadAllText(path) == "new");
+            using var blocked = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            try
+            {
+                await PlayerAttachment.PublishControlAsync(path, "blocked"u8.ToArray()).WaitAsync(TimeSpan.FromSeconds(5));
+                throw new Exception("Persistent access errors must propagate.");
+            }
+            catch (UnauthorizedAccessException) { }
+            True(File.ReadAllText(path) == "new");
+        });
         static AddonPackage LifecyclePackage(string version = "1.0.0", string[]? activation = null)
         {
             var manifest = Manifest(version: version);
