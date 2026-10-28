@@ -17,6 +17,7 @@ if (args.Length == 4 && args[0] == "--interrupt-update-helper")
 }
 
 bool framesOnly = args.Length == 6 && args[^1] == "--frames-only";
+bool rifeSettingsOnly = args.Length == 6 && args[^1] == "--rife-settings-only";
 bool updatesOnly = args.Length == 4 && args[^1] == "--updates-only";
 bool archiveRoundTripOnly = args.Length == 6 && args[^1] == "--archive-roundtrip-only";
 bool installerOnly = args.Length == 5 && args[^1] == "--installer-only";
@@ -41,6 +42,7 @@ bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
 bool lifecycleNetOnly = args.Length == 4 && args[^1] == "--lifecycle-mpvnet-only";
 if (framesOnly) args = args[..5];
+if (rifeSettingsOnly) args = args[..5];
 if (streamingPolicyOnly) args = args[..6];
 if (largeReadOnly) args = args[..6];
 if (updatesOnly) args = args[..3];
@@ -69,9 +71,9 @@ Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
-    if (sceneOnly)
+    if (sceneOnly || rifeSettingsOnly)
     {
-        await NativeSceneChecks.RunAsync(root, output, args[4], evidence);
+        await NativeSceneChecks.RunAsync(root, output, args[4], evidence, rifeSettingsOnly);
         File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
         return 0;
     }

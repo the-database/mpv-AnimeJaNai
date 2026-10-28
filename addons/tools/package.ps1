@@ -128,6 +128,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Remote inspector compilation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Player inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/scene-detector') $metadata.javy.path (Join-Path $outputRoot 'scene-detector.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'Scene detector compilation failed.' }
+& (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $sourceRoot 'rife-settings') $metadata.javy.path (Join-Path $outputRoot 'rife-settings.ajnaddon')
+if ($LASTEXITCODE -ne 0) { throw 'RIFE Settings compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/http-inspector') $metadata.javy.path (Join-Path $outputRoot 'http-inspector.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'HTTP listener inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/http-bridge') $metadata.javy.path (Join-Path $outputRoot 'http-bridge.ajnaddon')

@@ -201,6 +201,7 @@ interface AjnApi {
             acceptedPairs: number; timedOutPairs: number;
             algorithm: "custom" | "mvtools"; cutPairs: number; changedBlocks: number; totalBlocks: number;
             analysisMs: number; blockSadThreshold: number; sourceBits: number;
+            epoch: string; previousPtsSeconds: number; currentPtsSeconds: number; sourceWidth: number; sourceHeight: number;
         };
         detach(detectorId: string): void;
     };

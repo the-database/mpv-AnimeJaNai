@@ -136,7 +136,10 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
                 ["algorithm"] = I(136) == 1 ? "mvtools" : "custom", ["cutPairs"] = Math.Max(0, Volatile.Read(ref I(156))),
                 ["changedBlocks"] = Math.Max(0, Volatile.Read(ref I(148))), ["totalBlocks"] = Math.Max(0, Volatile.Read(ref I(152))),
                 ["analysisMs"] = Math.Max(0, Volatile.Read(ref L(160))) / 1000.0,
-                ["blockSadThreshold"] = Math.Max(0, Volatile.Read(ref L(168))), ["sourceBits"] = Volatile.Read(ref I(176)) };
+                ["blockSadThreshold"] = Math.Max(0, Volatile.Read(ref L(168))), ["sourceBits"] = Volatile.Read(ref I(176)),
+                ["epoch"] = Volatile.Read(ref L(128)).ToString(CultureInfo.InvariantCulture),
+                ["previousPtsSeconds"] = D(72), ["currentPtsSeconds"] = D(80),
+                ["sourceWidth"] = Volatile.Read(ref I(88)), ["sourceHeight"] = Volatile.Read(ref I(92)) };
         }
     }
     private void Detach(Lease lease)

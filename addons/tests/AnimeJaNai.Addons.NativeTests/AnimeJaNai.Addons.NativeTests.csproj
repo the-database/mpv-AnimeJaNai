@@ -15,4 +15,5 @@
   <ItemGroup><Content Include="../../examples/media-stream/*" Link="media-stream/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><None Update="fixtures/*" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../examples/scene-detector/*" Link="scene-detector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../rife-settings/*" Link="rife-settings/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>
