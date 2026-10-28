@@ -15,11 +15,12 @@ internal static class NativeSceneChecks
         File.WriteAllText(config, $"[global]\nconfig_version=3\nbackend={backend}\nlogging=yes\ndefault_slot=1\n" +
             "[slot_1]\nprofile_name=Scene hook check\nchain_1_max_fps=61\nchain_1_rife=yes\nchain_1_rife_model=414\n" +
             "chain_1_rife_factor_numerator=2\nchain_1_rife_factor_denominator=1\nchain_1_rife_scene_detect_threshold=0.000001\n");
-        foreach (int slot in new[] { 2, 3 })
+        foreach (int slot in new[] { 2, 3, 4 })
             File.AppendAllText(config, $"[slot_{slot}]\nchain_1_max_fps=61\nchain_1_rife=yes\nchain_1_rife_model=414\n" +
                 "chain_1_rife_factor_numerator=2\nchain_1_rife_factor_denominator=1\n" +
                 "chain_1_model_1_name=2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16\n" +
-                $"chain_1_rife_before_upscale={(slot == 2 ? "no" : "yes")}\n");
+                $"chain_1_rife_before_upscale={(slot == 2 ? "no" : "yes")}\n" +
+                $"chain_1_model_1_resize_factor_before_upscale={(slot == 4 ? 50 : 100)}\n");
         var package = await DeveloperTools.BuildAsync(Path.Combine(AppContext.BaseDirectory, nativeMvtools ? "rife-settings" : "scene-detector"), compiler, Path.Combine(output, "scene.ajnaddon"));
         new AddonRegistry(addonData).Install(package, package.Manifest.Permissions);
         string Q(string s) => "%" + Encoding.UTF8.GetByteCount(s) + "%" + s;
@@ -112,19 +113,25 @@ internal static class NativeSceneChecks
             else await Action("attach");
             var reattached = await State(s => s["acceptedPairs"]!.GetValue<int>() >= 5);
             evidence.Add(new() { ["detachPlaybackContinued"] = true, ["reattached"] = reattached.DeepClone(), ["backend"] = backend });
-            foreach (int slot in new[] { 2, 3 })
+            // Slot 4 also covers cold TensorRT builds: the upscale engine may
+            // become ready before RIFE, after hoisting its 50% input resize.
+            foreach (int slot in new[] { 2, 3, 4 })
             {
                 int count = reattached["acceptedPairs"]!.GetValue<int>();
                 await player.CommandAsync("vf-command", "aji", "slot", slot.ToString());
                 reattached = await State(s => s["acceptedPairs"]!.GetValue<int>() >= count + 8 &&
-                    Pair(s)["sourceWidth"]?.GetValue<int>() == (slot == 2 ? 960 : 480));
-                evidence.Add(new() { ["rifeBeforeUpscale"] = slot == 3, ["status"] = reattached.DeepClone() });
+                    Pair(s)["sourceWidth"]?.GetValue<int>() == (slot == 2 ? 960 : slot == 4 ? 240 : 480));
+                evidence.Add(new() { ["rifeBeforeUpscale"] = slot != 2,
+                    ["resizeBeforeUpscalePercent"] = slot == 4 ? 50 : 100, ["status"] = reattached.DeepClone() });
             }
             await Call("addons.stop");
             if (nativeMvtools) await Until(() => Task.FromResult(!LibraryLoaded()));
             await player.QuitAsync();
-            if (File.ReadAllText(Path.Combine(output, "scene-mpv.log")).Contains("interpolation failed:", StringComparison.Ordinal))
-                throw new Exception("RIFE interpolation failed; see scene-mpv.log");
+            string log = File.ReadAllText(Path.Combine(output, "scene-mpv.log"));
+            if (log.Contains("interpolation failed:", StringComparison.Ordinal) ||
+                log.Contains("inference failed:", StringComparison.Ordinal) ||
+                log.Contains("Disabling filter aji", StringComparison.Ordinal))
+                throw new Exception("RIFE/upscale playback failed; see scene-mpv.log");
         }
         finally
         {
