@@ -40,6 +40,7 @@ bool playerOnly = args.Length == 6 && args[^1] == "--player-frames-only";
 bool analysisOnly = args.Length == 7 && args[^1] is "--analysis-only" or "--analysis-pipeline-only" or "--source-color-only";
 bool analysisPipelineOnly = analysisOnly && args[^1] == "--analysis-pipeline-only";
 bool sourceColorOnly = analysisOnly && args[^1] == "--source-color-only";
+bool analysisPathOnly = args.Length == 7 && args[^1] == "--analysis-long-path-only";
 bool sceneOnly = args.Length == 6 && args[^1] == "--scene-only";
 bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
@@ -64,6 +65,7 @@ if (outputsOnly) args = args[..5];
 if (remoteOnly) args = args[..5];
 if (playerOnly) args = args[..5];
 if (analysisOnly) args = args[..6];
+if (analysisPathOnly) { analysisOnly = true; args = args[..6]; }
 if (sceneOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
@@ -77,7 +79,8 @@ try
 {
     if (analysisOnly)
     {
-        await NativeAnalysisChecks.RunAsync(root, output, args[4], args[5], evidence, analysisPipelineOnly, sourceColorOnly);
+        if (analysisPathOnly) await NativeAnalysisPathChecks.RunAsync(root, output, args[4], args[5], evidence);
+        else await NativeAnalysisChecks.RunAsync(root, output, args[4], args[5], evidence, analysisPipelineOnly, sourceColorOnly);
         File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
         return 0;
     }

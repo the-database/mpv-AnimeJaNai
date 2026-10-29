@@ -2,7 +2,15 @@
 
 This is API 1.12 on the existing 3.8.0 addon integration branch, not a claim that the public 3.9.0 release contains these APIs. The matched preview's `build-info/addon-preview.json` records its exact source commits and evidence. The lighting addon and physical light controllers are separate work.
 
-## Implemented and tested
+## Preview 2: Windows long-path correction
+
+The theater-lighting consumer's verification exposed a cache-lock failure in mpv.net at a long installation path. The optional analysis module now normalizes the model path into Windows extended-path form before deriving the cache, lock and temporary paths. Model/engine existence checks, reads, writes and cache publication all use that form. Windows file failures include their numeric error code. The change runs during optional setup/file I/O; per-frame analysis and normal playback code are unchanged. API and addon package versions do not need to change.
+
+The focused regression passed in two fresh **mpv.net** processes with a **286-character model path**, **354-character engine path** and **359-character lock path**. The first built and saved an engine and returned a real color/mask pair; the second returned a pair without rebuilding or changing the cache file. Both unsubscribed and exited normally. The test used existing matched runtime components and a verified ONNX, not a new dependency download. The creator guide now explicitly explains the TensorRT runtime/GPU-kernel prerequisite and Manager's Components setup.
+
+The baseline evidence below was collected for preview 1 and is retained. The 195 host checks and broader playback/performance tests were not repeated for this setup-only path correction.
+
+## Baseline implementation and tests
 
 - The real `character-mask` JavaScript example was compiled to Wasm, installed with reviewed permissions, and run through the public broker in Windows mpv and mpv.net. It received source color and nontrivial IS-Net masks from 1920×1080 Frieren footage using NVDEC/Vulkan, with upscaling and RIFE off. Exported color/mask pairs were inspected visually.
 - The fixed SHA256 model and its exact float input/output shapes were verified. TensorRT built an engine locally, then loaded it during playback. A discovered Windows builder-resource search-path problem was fixed and a fresh engine build passed from the workspace directory.

@@ -2,6 +2,12 @@
 
 This optional Windows capability observes the video already playing in AJN. It opens no second decoder and does not need upscaling or RIFE enabled. The addon chooses when to subscribe, its sample dimensions and analysis rate. No observation filter, GPU model, download or analysis work is started without that request. The optional `aji_analysis.dll` is not imported by the normal inference backend.
 
+## First-use setup
+
+A clean core installation needs the matching **TensorRT/CUDA runtime and the engine-builder component for its NVIDIA GPU**, as well as `aji_analysis.dll`. In Manager, open **Components**, select the TensorRT components recommended for the PC, and choose **Apply changes**. This preview uses TensorRT **11.4.0.106 / CUDA 13**. Use the components for this build rather than copying unrelated DLL versions. Select the TensorRT backend so normal playback supplies CUDA source frames; upscaling and RIFE may remain off.
+
+The `player.analysis` grant provisions the approved ONNX model; it does **not** install TensorRT or CUDA dependencies. Windows error **126** loading the optional runtime means a DLL or one of its dependencies could not be loaded. Check the Components installation first. Addon setup should present this prerequisite before enabling character analysis and display the host's setup status instead of treating an unavailable mask as background.
+
 ## Grants and discovery
 
 Declare API `{ "major": 1, "minMinor": 12 }`, required capability `playerAnalysis` `{ "major": 1, "minMinor": 0 }`, and permissions `player.observe`, `frames.read`, `player.analysis`. Manager asks the user to approve GPU analysis and the first-use model download. Network destinations for light controllers still require their own existing grants; this capability grants no network access to the guest.

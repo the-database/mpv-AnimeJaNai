@@ -4104,6 +4104,12 @@ restores a model for its negative test, so use an isolated test installation.
 
 This optional Windows capability observes the video already playing in AJN. It opens no second decoder and does not need upscaling or RIFE enabled. The addon chooses when to subscribe, its sample dimensions and analysis rate. No observation filter, GPU model, download or analysis work is started without that request. The optional `aji_analysis.dll` is not imported by the normal inference backend.
 
+## First-use setup
+
+A clean core installation needs the matching **TensorRT/CUDA runtime and the engine-builder component for its NVIDIA GPU**, as well as `aji_analysis.dll`. In Manager, open **Components**, select the TensorRT components recommended for the PC, and choose **Apply changes**. This preview uses TensorRT **11.4.0.106 / CUDA 13**. Use the components for this build rather than copying unrelated DLL versions. Select the TensorRT backend so normal playback supplies CUDA source frames; upscaling and RIFE may remain off.
+
+The `player.analysis` grant provisions the approved ONNX model; it does **not** install TensorRT or CUDA dependencies. Windows error **126** loading the optional runtime means a DLL or one of its dependencies could not be loaded. Check the Components installation first. Addon setup should present this prerequisite before enabling character analysis and display the host's setup status instead of treating an unavailable mask as background.
+
 ## Grants and discovery
 
 Declare API `{ "major": 1, "minMinor": 12 }`, required capability `playerAnalysis` `{ "major": 1, "minMinor": 0 }`, and permissions `player.observe`, `frames.read`, `player.analysis`. Manager asks the user to approve GPU analysis and the first-use model download. Network destinations for light controllers still require their own existing grants; this capability grants no network access to the guest.
@@ -4153,6 +4159,8 @@ Character masks currently require progressive, mono, SDR CUDA frames and the mat
 Install `character-mask.ajnaddon`, approve its three grants, start it in Manager, open visible anime footage, then choose **List players** and **Start character analysis**. **Show status and latest pair** reports identity, mask range/coverage and timing. **Capture pair for inspection** retains one matched pair in the guest. **Export next inspection chunk** returns successive 4096-byte hex chunks for diagnostics; concatenate in offset order, split at `width*height*4`, and interpret the remainder as little-endian mask values. This bounded action export is optional; live observations use binary transport. The example sends nothing to physical lights.
 
 An addon should hold its last calculated light color when no new sample is ready, handle unsupported input explicitly, and unsubscribe when it no longer needs analysis. The host independently cleans up on worker failure, permission revocation, player exit or lease expiry.
+
+See [qualification results and measured cost](PLAYER-ANALYSIS-VALIDATION.md) for what has actually been tested and the remaining limits.
 
 ### Complete character-mask inspector example
 
