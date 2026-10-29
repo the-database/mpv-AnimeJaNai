@@ -279,6 +279,9 @@ def assemble(args):
         manifest = json.loads((output / "manifest.json").read_text())
         if manifest.get("platform", "win-x64") != "win-x64":
             raise ValueError("Linux core packages cannot include this Windows addon runtime")
+        # Preview tags are not public releases. Keep optional component
+        # downloads bound to the core whose runtime/model packs we retain.
+        manifest.setdefault("component_package_version", manifest["package_version"])
         manifest["package_version"] = args.version
         manifest.setdefault("user_preserve", []).append("animejanai/addons")
         manifest.setdefault("overlay_paths", []).extend(["addon-host", "addon-development", "addon-package.json", "build-info"])

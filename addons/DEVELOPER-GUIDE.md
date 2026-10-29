@@ -9,7 +9,7 @@ document and the matching release tools. No previous conversation, maintainer
 handoff or checkout of AJN's repositories is required. The complete JavaScript
 API declarations and feature examples are included in this file.
 
-This guide targets the **AnimeJaNai 3.8.0 addon development preview**. API 1.12 remains a
+This guide targets the **AnimeJaNai 3.9.0 addon development preview**. API 1.12 remains a
 preview, so it is suitable for developing and testing addons but is not yet a
 frozen community compatibility promise. Use the guide shipped with your release.
 The addon API version, AJN application version and your addon's version are
@@ -119,8 +119,8 @@ Download and extract **one** matching release asset into a writable folder:
 
 | Release asset | Use it for |
 | --- | --- |
-| `AnimeJaNai-3.8.0-addons.preview.1-win-x64.zip` | Recommended: Manager, actual playback/native testing and developer tools |
-| `AnimeJaNai-Addon-Foundation-3.8.0-preview.1-win-x64.zip` | Standalone host/SDK tutorial; native playback needs the full AJN build |
+| `AnimeJaNai-3.9.0-addons.preview.1-win-x64.zip` | Recommended: Manager, actual playback/native testing and developer tools |
+| `AnimeJaNai-Addon-Foundation-3.9.0-preview.1-win-x64.zip` | Standalone host/SDK tutorial; native playback needs the full AJN build |
 
 Get the assets from the GitHub release carrying this guide. Do not use GitHub's
 automatic **Source code** download as a substitute for these executable bundles.

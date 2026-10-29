@@ -1,6 +1,14 @@
 # Player analysis qualification — 2026-10-29
 
-This is API 1.12 on the existing 3.8.0 addon integration branch, not a claim that the public 3.9.0 release contains these APIs. The matched preview's `build-info/addon-preview.json` records its exact source commits and evidence. The lighting addon and physical light controllers are separate work.
+This is API 1.12 on the 3.9.0 addon integration branch, not a claim that the public 3.9.0 release contains these APIs. The matched preview's `build-info/addon-preview.json` records its exact source commits and evidence. The lighting addon and physical light controllers are separate work.
+
+## 3.9.0 integration preview
+
+The integration includes the exact public 3.9.0 main release, Manager 0.10.3 and inference v0.17.1. The Windows player base and optional runtime versions are unchanged from the previous preview, so its already-tested addon mpv build is reused. API 1.12, the SDK and host implementation are unchanged. Manager keeps the 3.9.0 interface and Temporal Fix controls alongside Addons and Troubleshooting. Optional component downloads use the public 3.9.0 component release.
+
+The merged Manager, updater and inference runtime compiled. Existing Manager configuration/Temporal Fix round trips, diagnostics and addon UI checks passed; the headless UI fixture now matches Avalonia 12.1 and waits for dialog continuations before the next action. All 15 updater regressions passed. Real mpv/mpv.net analysis passed again on the merged runtime, including seeks, shared observers, software-decoding rejection and last-observer cleanup. The inactive check found no analysis module/filter and no added playback drops; the short active check also added no drops. The existing RIFE addon hook and continuous/segmented streaming checks passed. Two stacked temporal stages, including the new Temporal Fix configuration key, produced all 12 expected frames on DirectML and TensorRT with maximum luma error 0.25 and complete EOF draining. TensorRT used the previously qualified dynamic-shape fixture.
+
+The long-path correction below remains included without changes. The 195 host checks and long-path cache creation/reuse were already qualified before this port and were not repeated; their evidence is retained separately from these 3.9.0 checks. Physical light-controller testing remains separate addon work.
 
 ## Preview 2: Windows long-path correction
 
