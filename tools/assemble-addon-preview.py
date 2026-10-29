@@ -229,7 +229,8 @@ def assemble(args):
     shutil.copy2(args.updater_executable, output / "AnimeJaNaiUpdater.exe")
     for src, dst in (("host", "addon-host"), ("runtime", "addon-host/runtime"), ("licenses", "addon-host/licenses"),
                      ("source", "addon-development/source"), ("shared", "addon-development/shared"), ("sdk", "addon-development/sdk"),
-                     ("examples", "addon-development/examples"), ("tools", "addon-development/tools")):
+                     ("examples", "addon-development/examples"), ("tools", "addon-development/tools"),
+                     ("rife-settings", "addon-development/rife-settings")):
         copy_tree(args.host_bundle / src, output / dst)
     for path in args.host_bundle.iterdir():
         if path.is_file() and path.suffix in (".ajnaddon", ".md", ".html"):
