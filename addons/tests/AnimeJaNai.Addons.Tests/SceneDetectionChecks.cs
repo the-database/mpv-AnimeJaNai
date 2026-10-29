@@ -46,6 +46,7 @@ internal static partial class Checks
             using var older = new NativeSceneBuffer();
             await Error("feature_unavailable", () => older.Subscribe(new(Algorithm: "mvtools"), () => { }));
             using var buffer = new NativeSceneBuffer(nativeMvtools: true); buffer.RenewLease();
+            await Error("feature_unavailable", () => buffer.Subscribe(new(Algorithm: "enhanced"), () => { }));
             using var mapping = MemoryMappedFile.OpenExisting(buffer.Name);
             using var view = mapping.CreateViewAccessor(0, NativeSceneBuffer.Size);
             using var native = buffer.Subscribe(new(Algorithm: "mvtools", Thscd1: 240, Thscd2: 130), () => { });
@@ -119,13 +120,13 @@ internal static partial class Checks
     private static async Task SceneRuntimeChecks(string runtime, string compiler, string dotnet)
     {
         if (!OperatingSystem.IsWindows()) return;
-        await Test("Scene detection RIFE Settings Wasm attaches automatically and default mode releases ownership", async () =>
+        await Test("Scene detection RIFE Settings Wasm switches enhanced mode and default releases ownership", async () =>
         {
             if (!OperatingSystem.IsWindows()) return;
             string area = Area();
             var package = await DeveloperTools.BuildAsync(Path.Combine(AppContext.BaseDirectory, "rife-settings"), compiler, Path.Combine(area, "rife.ajnaddon"));
             using var registry = new SceneDetectionRegistry();
-            using var buffer = new NativeSceneBuffer(nativeMvtools: true); buffer.RenewLease();
+            using var buffer = new NativeSceneBuffer(nativeMvtools: true, nativeEnhanced: true); buffer.RenewLease();
             using var registration = registry.Register("rife-player", buffer);
             using var mapping = MemoryMappedFile.OpenExisting(buffer.Name);
             using var view = mapping.CreateViewAccessor(0, NativeSceneBuffer.Size);
@@ -136,6 +137,11 @@ internal static partial class Checks
             True(view.ReadInt32(20) == 1 && view.ReadInt32(136) == 1 && view.ReadInt32(140) == 240 && view.ReadInt32(144) == 130);
             var status = await worker.SendEventAsync("action", new JsonObject { ["id"] = "status" });
             True(status?["players"]?.AsArray().Count == 1);
+            new AddonSettings(data, package.Manifest).Update(new() { ["sceneMode"] = "enhanced" });
+            await worker.SendEventAsync("settings.changed");
+            True(view.ReadInt32(20) == 1 && view.ReadInt32(136) == 2 && view.ReadInt32(140) == 240 && view.ReadInt32(144) == 130);
+            status = await worker.SendEventAsync("action", new JsonObject { ["id"] = "status" });
+            True(status?["players"]?[0]?["algorithm"]?.GetValue<string>() == "enhanced");
             new AddonSettings(data, package.Manifest).Update(new() { ["sceneMode"] = "default" });
             await worker.SendEventAsync("settings.changed");
             True(view.ReadInt32(20) == 0);

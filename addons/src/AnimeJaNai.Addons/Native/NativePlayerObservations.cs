@@ -14,6 +14,7 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
     internal PlayerFrameRegistry Frames { get; } = new();
     internal SceneDetectionRegistry? Scenes { get; } = NativeCapabilities.Has(installRoot, "privateSceneAbi") ? new() : null;
     private readonly bool nativeMvtools = NativeCapabilities.Has(installRoot, "privateMvtoolsSceneAbi");
+    private readonly bool nativeEnhanced = NativeCapabilities.Has(installRoot, "privateEnhancedSceneAbi");
 
     internal static bool Available(string root)
     {
@@ -55,7 +56,7 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
                     "invalid_player", "Observation requires a player from this AJN installation.");
                 Contract.Require(!attached.Values.Any(a => a.Source.Process.Id == processId && !a.Source.Process.HasExited),
                     "player_attached", "This player already has an observation bridge.");
-                source = new(process, Scenes is not null, nativeMvtools);
+                source = new(process, Scenes is not null, nativeMvtools, nativeEnhanced);
                 registration = Frames.Register(source, out string playerId);
                 if (source.Scene is not null) sceneRegistration = Scenes!.Register(playerId, source.Scene);
                 attached.Add(client, new(source, registration, sceneRegistration));
@@ -93,11 +94,11 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
         }
     }
     private sealed record Attachment(NativeSource Source, IDisposable Registration, IDisposable? SceneRegistration);
-    private sealed class NativeSource(Process process, bool scenes, bool nativeMvtools) : IPlayerFrameSource
+    private sealed class NativeSource(Process process, bool scenes, bool nativeMvtools, bool nativeEnhanced) : IPlayerFrameSource
     {
         internal Process Process { get; } = process;
         internal NativeFrameBuffer Buffer { get; } = new(player: true);
-        internal NativeSceneBuffer? Scene { get; } = scenes ? new(nativeMvtools) : null;
+        internal NativeSceneBuffer? Scene { get; } = scenes ? new(nativeMvtools, nativeEnhanced) : null;
         public IFrameSubscription Subscribe(FrameRequest request) => Buffer.Subscribe(request, repeatLatest: true);
         public void Dispose() { Scene?.Dispose(); Buffer.Dispose(); Process.Dispose(); }
     }

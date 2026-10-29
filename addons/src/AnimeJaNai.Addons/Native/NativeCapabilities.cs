@@ -21,8 +21,9 @@ internal static class NativeCapabilities
                 Contract.Number(marker, capability) != 1 || marker["files"] is not JsonObject files || files.Count is < 2 or > 256 ||
                 !files.ContainsKey("libmpv-2.dll") || !files.ContainsKey("mpv.exe")) return false;
             if (files.Select(f => f.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Count) return false;
-            if (capability == "privateMvtoolsSceneAbi" &&
+            if (capability is "privateMvtoolsSceneAbi" or "privateEnhancedSceneAbi" &&
                 (Contract.Number(marker, "privateSceneAbi") != 1 || !files.ContainsKey("ajn-mvtools.dll"))) return false;
+            if (capability == "privateEnhancedSceneAbi" && Contract.Number(marker, "privateMvtoolsSceneAbi") != 1) return false;
             if (capability == "privateOutputAbi")
             {
                 if (Contract.Text(marker, "cRuntime") != "ucrt") return false;

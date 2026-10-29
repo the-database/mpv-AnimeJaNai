@@ -77,6 +77,9 @@ internal static class NativeSceneChecks
                 evidence.Add(new() { ["nativeThresholdsApplied"] = cuts.DeepClone() });
                 await Call("addons.configure", new() { ["changes"] = new JsonObject { ["thscd1"] = 240, ["thscd2"] = 130 } });
                 continuous = await State(s => s["acceptedPairs"]?.GetValue<int>() >= 10);
+                await Call("addons.configure", new() { ["changes"] = new JsonObject { ["sceneMode"] = "enhanced" } });
+                continuous = await State(s => s["algorithm"]?.GetValue<string>() == "enhanced" && s["acceptedPairs"]?.GetValue<int>() >= 8);
+                evidence.Add(new() { ["enhancedModeAttached"] = continuous.DeepClone() });
             }
             else
             {
@@ -109,7 +112,7 @@ internal static class NativeSceneChecks
             }
             double position = await player.PositionAsync();
             await Until(async () => await player.PositionAsync() > position + .2);
-            if (nativeMvtools) await Call("addons.configure", new() { ["changes"] = new JsonObject { ["sceneMode"] = "mvtools" } });
+            if (nativeMvtools) await Call("addons.configure", new() { ["changes"] = new JsonObject { ["sceneMode"] = "enhanced" } });
             else await Action("attach");
             var reattached = await State(s => s["acceptedPairs"]!.GetValue<int>() >= 5);
             evidence.Add(new() { ["detachPlaybackContinued"] = true, ["reattached"] = reattached.DeepClone(), ["backend"] = backend });

@@ -1,4 +1,4 @@
-// RIFE Settings: first feature is the native MVTools sc_mode=2 detector.
+// RIFE Settings: legacy MVTools and optional enhanced cut recovery.
 // RIFE must already be enabled in the playback profile.
 let settings;
 let detectors = [];
@@ -13,12 +13,13 @@ function release(ajn) {
 function attach(ajn) {
     players = ajn.sceneDetection.list();
     detectors = detectors.filter(d => players.some(p => p.playerId === d.playerId));
-    if (settings.sceneMode !== "mvtools") return;
+    if (settings.sceneMode === "default") return;
     for (const player of players) {
-        if (player.inUse || !player.nativeMvtools || detectors.some(d => d.playerId === player.playerId)) continue;
+        const supported = settings.sceneMode === "enhanced" ? player.nativeEnhanced : player.nativeMvtools;
+        if (player.inUse || !supported || detectors.some(d => d.playerId === player.playerId)) continue;
         try {
             const detector = ajn.sceneDetection.attach(player.playerId, {
-                algorithm: "mvtools", thscd1: Math.round(settings.thscd1), thscd2: Math.round(settings.thscd2)
+                algorithm: settings.sceneMode, thscd1: Math.round(settings.thscd1), thscd2: Math.round(settings.thscd2)
             });
             detectors.push({id: detector.detectorId, playerId: player.playerId});
         } catch (error) {
@@ -35,6 +36,7 @@ function status(ajn) {
             catch (error) { if (error.code !== "scene_detector_not_found") throw error; }
         }
         return {playerId: player.playerId, state: settings.sceneMode === "default" ? "AJN default" :
+            settings.sceneMode === "enhanced" && !player.nativeEnhanced ? "Requires the enhanced scene runtime update" :
             !player.nativeMvtools ? "Requires the MVTools runtime update" :
             player.inUse ? "Another scene detector is active" : "Waiting to attach"};
     });
@@ -45,7 +47,7 @@ function onEvent(event, ajn) {
     if (event.name === "start" || event.name === "settings.changed") {
         release(ajn);
         settings = ajn.settings.get();
-        if (settings.sceneMode === "mvtools") ajn.timers.set("players", 1000, true);
+        if (settings.sceneMode !== "default") ajn.timers.set("players", 1000, true);
         else ajn.timers.clear("players");
         attach(ajn);
     } else if (event.name === "timer" && event.data.timerId === "players") {

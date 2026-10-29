@@ -10,8 +10,8 @@ public sealed record SceneRequest(int Width = 160, int Height = 90, int Deadline
     {
         Contract.Require(Width is >= 1 and <= 320 && Height is >= 1 and <= 180 && DeadlineMs is >= 5 and <= 100,
             "invalid_request", "Scene samples must be 1..320 by 1..180 pixels with a 5..100 ms decision deadline.");
-        Contract.Require(Algorithm is "custom" or "mvtools" && Thscd1 is >= 0 and <= 16320 && Thscd2 is >= 0 and <= 255,
-            "invalid_request", "Choose custom or mvtools, with thscd1 0..16320 and thscd2 0..255.");
+        Contract.Require(Algorithm is "custom" or "mvtools" or "enhanced" && Thscd1 is >= 0 and <= 16320 && Thscd2 is >= 0 and <= 255,
+            "invalid_request", "Choose custom, mvtools or enhanced, with thscd1 0..16320 and thscd2 0..255.");
     }
     public static SceneRequest Parse(JsonObject value)
     {
@@ -36,6 +36,7 @@ public interface ISceneSubscription : IDisposable
 public interface ISceneSource : IDisposable
 {
     bool SupportsNativeMvtools => false;
+    bool SupportsNativeEnhanced => false;
     ISceneSubscription Subscribe(SceneRequest request, Action ready);
 }
 
@@ -73,7 +74,7 @@ public sealed class SceneDetectionRegistry : IDisposable
             Check(owner);
             return new(players.Select(p => (JsonNode)new JsonObject { ["playerId"] = p.Key,
                 ["inUse"] = detectors.Values.Any(d => d.PlayerId == p.Key), ["format"] = "gray8", ["stage"] = "beforeInterpolation",
-                ["nativeMvtools"] = p.Value.SupportsNativeMvtools }).ToArray());
+                ["nativeMvtools"] = p.Value.SupportsNativeMvtools, ["nativeEnhanced"] = p.Value.SupportsNativeEnhanced }).ToArray());
         }
     }
     public JsonObject Attach(Owner owner, string playerId, SceneRequest request)
@@ -85,6 +86,8 @@ public sealed class SceneDetectionRegistry : IDisposable
             Contract.Require(players.TryGetValue(playerId, out var source), "player_not_found", "The selected player is no longer attached.");
             Contract.Require(request.Algorithm != "mvtools" || source.SupportsNativeMvtools,
                 "feature_unavailable", "This player needs the native MVTools scene-detection runtime update.");
+            Contract.Require(request.Algorithm != "enhanced" || source.SupportsNativeEnhanced,
+                "feature_unavailable", "This player needs the enhanced scene-detection runtime update.");
             Contract.Require(!detectors.Values.Any(d => d.PlayerId == playerId), "scene_detector_in_use", "This player already has a scene detector.");
             Contract.Require(detectors.Values.Count(d => d.Owner == owner) < 4, "capacity_exceeded", "An addon can attach at most four scene detectors.");
             string id = Guid.NewGuid().ToString("N");

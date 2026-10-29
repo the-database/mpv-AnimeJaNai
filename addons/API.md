@@ -46,6 +46,9 @@ Errors use standard integer JSON-RPC error codes and an AJN-specific string at `
 
 ## Broker methods
 
+API 1.11 adds `sceneDetection` 1.2: optional native `enhanced` cut recovery and
+`nativeEnhanced` availability. See [SCENE-DETECTION.md](SCENE-DETECTION.md).
+
 API 1.8 adds the optional `sceneDetection` 1.0 capability, `scene.request`
 events and `player.sceneDetection` permission. Its bounded two-plane binary
 response and decision deadlines are specified in [SCENE-DETECTION.md](SCENE-DETECTION.md).
