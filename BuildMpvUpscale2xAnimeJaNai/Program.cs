@@ -69,11 +69,11 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.11.2";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9: temporal multi-frame models on TensorRT and DirectML)
+const string AjiVersion           = "v0.17.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; chain_N_upscale / chain_N_temporal_fix_model / _before_upscale keys)
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.8.0";        // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; temporal model settings)
+const string ManagerVersion       = "0.10.3";       // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; UI refresh, upscale toggle, temporal fix key; Linux updater path and TensorRT detection; Linux backend, temporal fix before upscaling)
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -745,9 +745,9 @@ void GenerateInputConf()
 
 // Keep the runtime configs a single source: on non-Windows targets, rewrite
 // the handful of platform-specific literals in the laid-down portable_config
-// (the vf=@aji line's library/tool filenames, the OSD font, the Manager
-// launcher path) rather than forking the whole files. Runs before
-// GenerateInputConf so the managed input.conf block inherits the ported line.
+// (the vf=@aji line's library/tool filenames, the OSD font) rather than
+// forking the whole files. The Manager launcher (Ctrl+E) needs no porting:
+// scripts/animejanai_manager.lua picks the platform's file name.
 // hwdec=nvdec / vo=gpu-next / gpu-api=vulkan already work on Linux as-is.
 void PortConfigsForTarget()
 {
@@ -760,11 +760,6 @@ void PortConfigsForTarget()
         .Replace("inference/trtexec.exe", "inference/trtexec")
         .Replace("'Segoe UI'", "'sans-serif'");
     File.WriteAllText(mpvConf, c);
-
-    var inputConf = Path.Combine(pc, "input-animejanai.conf");
-    var ic = File.ReadAllText(inputConf)
-        .Replace("~~\\\\..\\\\AnimeJaNaiManager.exe", "~~/../AnimeJaNaiManager");
-    File.WriteAllText(inputConf, ic);
 }
 
 // Linux launcher: runs the bundled mpv against portable_config via
@@ -875,7 +870,10 @@ void WriteThirdPartyNotices()
         $"        {trtSource}\n" +
         dmlBlock + "\n" +
         $"        {ajiNames}:\n" +
-        "        https://github.com/the-database/animejanai-inference\n";
+        "        https://github.com/the-database/animejanai-inference\n\n" +
+        "        animejanai/onnx/temporalfix_*.onnx: vs_temporalfix models by pifroggi,\n" +
+        "        redistributed under the Apache License 2.0 (vs_temporalfix_LICENSE.txt\n" +
+        "        next to them; https://github.com/pifroggi/vs_temporalfix).\n";
     File.WriteAllText(Path.Combine(inferencePath, "THIRD_PARTY_NOTICES.txt"), notice);
 }
 
@@ -952,6 +950,7 @@ void WriteVersionAndManifest()
             "animejanai/animejanai.conf",
             "animejanai/addons",
             "animejanai/currentanimejanai.log",
+            "animejanai/manager-ui.json",
             "portable_config/mpv.conf",
             "portable_config/input.conf",
             "portable_config/saved-props.json",
