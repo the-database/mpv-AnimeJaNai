@@ -99,6 +99,7 @@ Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/remote-inspector') -Desti
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/player-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/character-mask') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/scene-detector') -Destination (Join-Path $outputRoot 'examples') -Recurse
+Copy-Item -LiteralPath (Join-Path $addonRoot 'rife-settings') -Destination (Join-Path $outputRoot 'rife-settings') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/http-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/http-bridge') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/media-stream') -Destination (Join-Path $outputRoot 'examples') -Recurse
