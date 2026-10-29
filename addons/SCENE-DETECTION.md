@@ -3,22 +3,25 @@
 ## Enhanced extension — API 1.11 / sceneDetection 1.2
 
 `sceneDetection.list()` adds `nativeEnhanced`. Attach with
-`{algorithm:"enhanced", thscd1:240, thscd2:130}` to retain MVTools decisions and
-add conservative recovery of weaker cuts after quiet shots. The matching player
+`{algorithm:"enhanced", thscd1:240, thscd2:130}` to use AJN's scene classifier on
+the existing MVTools motion analysis. It recovers weaker cuts and rejects false
+stops during motion, lighting changes and fades. The matching player
 and DLL must advertise `privateEnhancedSceneAbi: 1`; an older runtime rejects
 attachment with `feature_unavailable`. Shared-header offsets and the MVTools C
 ABI remain unchanged.
 
-The extra check requires at most 2% changed blocks in each of the last eight
-pairs, more than 75/256 changed blocks now, a sampled luma histogram distance of
-at least 0.08, and spatial luma correlation below 0.5. Samples are bounded to
-240x135 and normalized across integer bit depths. This additive heuristic does
-not guarantee correct cuts on every video and does not suppress any legacy cut.
-The first three pairs after a seek, discontinuity or format change use legacy
-decisions while collecting history. No lookahead is added.
+Classification compares luma histograms and spatial correlation in the changed
+regions before and after motion compensation. Recent motion distinguishes a
+new discontinuity from sustained effects or a fade. Weak cut candidates also
+require distinct moving image features, so a pan or zoom is not mistaken for
+an edit. Appearance samples are bounded to 240x135 and feature thumbnails to
+120x68, normalized across integer bit depths. The existing readback is reused;
+no lookahead or fixed quiet-shot warmup is added. History resets on seeks,
+discontinuities and format changes. This heuristic does not guarantee correct
+classification on every video. The separate `mvtools` algorithm is unchanged.
 
 Status counts and thresholds describe the underlying MVTools analysis; enhanced
-mode can declare a cut below its legacy threshold. Permissions, ownership and
+mode can accept or reject a cut independently of its legacy threshold. Permissions, ownership and
 native-mode restrictions remain the same.
 
 ## Native MVTools extension — API 1.10 / sceneDetection 1.1

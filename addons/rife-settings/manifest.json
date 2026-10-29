@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "id": "org.animejanai.rife-settings",
   "name": "RIFE Settings",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "api": { "major": 1, "minMinor": 11 },
   "permissions": ["player.sceneDetection", "frames.read"],
   "requiredCapabilities": { "sceneDetection": { "major": 1, "minMinor": 2 } },
   "activation": ["manual", "on_player"],
   "settings": {
-    "sceneMode": { "type": "choice", "label": "Scene detection (enhanced adds checks for cuts after quiet shots)", "default": "mvtools", "choices": ["mvtools", "enhanced", "default"] },
+    "sceneMode": { "type": "choice", "label": "Scene detection (enhanced recovers cuts and filters false stops)", "default": "mvtools", "choices": ["mvtools", "enhanced", "default"] },
     "thscd1": { "type": "number", "label": "MVTools block difference threshold (legacy: 240)", "default": 240, "minimum": 0, "maximum": 16320 },
     "thscd2": { "type": "number", "label": "MVTools changed-block threshold, out of 256 (legacy: 130)", "default": 130, "minimum": 0, "maximum": 255 }
   },

@@ -17,14 +17,15 @@ automatically to open/new AJN players. It does not turn RIFE on or select models
 - `mvtools`: the original motion-analysis core runs on full-resolution planar
   YUV/gray, retaining chroma and integer sample depth. Default thresholds are
   240 and 130. Lower thresholds detect more cuts; higher thresholds detect fewer.
-- `enhanced`: retains the MVTools decisions and adds checks for weaker cuts
-  after quiet shots. Select this mode in Manager to try the quality improvement;
-  keep thresholds at 240/130 initially. It checks recent motion, brightness
-  distribution and image structure using the same downloaded frames, with no
-  lookahead. It requires `privateEnhancedSceneAbi: 1` in the matching runtime.
-  This is optional; `mvtools` remains the default. Additional cut recovery starts
-  after three source pairs following a seek or format change. It can still miss
-  cuts or mistake unusual animation for a transition.
+- `enhanced`: uses the same motion analysis with AJN's scene classifier. It
+  recovers weaker cuts and filters unnecessary stops during continuous motion,
+  lighting changes and fades. Select this mode in Manager; keep thresholds at
+  240/130 initially. It compares the changed regions, motion-aligned appearance,
+  recent motion and moving image features using the same downloaded frames.
+  It adds no lookahead or fixed warmup after seeking. It requires
+  `privateEnhancedSceneAbi: 1` in the matching runtime. This is optional;
+  `mvtools` remains the default. It can still miss cuts or mistake unusual
+  animation for a transition.
 - `default`: releases the detector and restores AJN's existing scene detection.
 - Stopping/disabling the addon releases every owned detector. Another addon
   already controlling a player keeps ownership.
@@ -38,7 +39,7 @@ Unsupported HDR/interlaced/stereo inputs retain built-in detection and show
 `sampleUnavailable`; missing/broken native libraries are reported explicitly.
 
 This preview uses the pinned upstream MVTools search core and exact SSE2 block
-kernels on x64. Enhanced mode adds AJN's conservative quiet-shot cut checks.
+kernels on x64. Enhanced mode changes classification, not the legacy search.
 Matching the affected user's old DLL revision, visual results on their scenes,
 and real-time cost on their hardware remain qualification work. The addon is
 named RIFE Settings so future RIFE controls can live here; no unrelated controls

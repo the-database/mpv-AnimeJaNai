@@ -1,4 +1,4 @@
-// RIFE Settings: legacy MVTools and optional enhanced cut recovery.
+// RIFE Settings: legacy MVTools and enhanced scene classification.
 // RIFE must already be enabled in the playback profile.
 let settings;
 let detectors = [];
