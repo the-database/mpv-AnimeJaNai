@@ -31,9 +31,9 @@ public sealed class MessageChannel(Stream input, Stream output)
     public async Task WriteAsync(JsonObject message, CancellationToken cancellationToken)
         => await WriteBinaryAsync(message, ReadOnlyMemory<byte>.Empty, cancellationToken);
 
-    public async Task WriteBinaryAsync(JsonObject message, ReadOnlyMemory<byte> binary, CancellationToken cancellationToken)
+    public async Task WriteBinaryAsync(JsonObject message, ReadOnlyMemory<byte> binary, CancellationToken cancellationToken, bool pairedAnalysis = false)
     {
-        Contract.Require(binary.Length <= FrameRequest.MaxBytes, "message_too_large", "Binary response exceeds its bound.");
+        Contract.Require(binary.Length <= (pairedAnalysis ? FrameRequest.MaxBytes * 3 / 2 : FrameRequest.MaxBytes), "message_too_large", "Binary response exceeds its bound.");
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(message, Contract.Json);
         Contract.Require(bytes.Length <= Contract.MaxMessageBytes, "message_too_large", "Host message exceeds 128 KiB.");
         await output.WriteAsync(bytes, cancellationToken);
@@ -42,9 +42,9 @@ public sealed class MessageChannel(Stream input, Stream output)
         await output.FlushAsync(cancellationToken);
     }
 
-    public async Task<byte[]> ReadBinaryAsync(int length, CancellationToken token)
+    public async Task<byte[]> ReadBinaryAsync(int length, CancellationToken token, bool pairedAnalysis = false)
     {
-        Contract.Require(length is >= 0 and <= FrameRequest.MaxBytes, "message_too_large", "Invalid binary payload length.");
+        Contract.Require(length >= 0 && length <= (pairedAnalysis ? FrameRequest.MaxBytes * 3 / 2 : FrameRequest.MaxBytes), "message_too_large", "Invalid binary payload length.");
         byte[] result = new byte[length];
         int buffered = Math.Min(length, available - position);
         buffer.AsSpan(position, buffered).CopyTo(result); position += buffered;

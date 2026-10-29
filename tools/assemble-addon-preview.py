@@ -171,7 +171,10 @@ def assemble(args):
         if dirty or inference_record.get("commit") != commit:
             raise ValueError("Inference source differs from the recorded build revision")
         sources["inference"] = commit
-        for name in ("aji.dll", "aji_dml.dll", "aji_trt.dll"):
+        names = ["aji.dll", "aji_dml.dll", "aji_trt.dll"]
+        if record.get("privatePlayerAnalysisAbi") == 1:
+            names.append("aji_analysis.dll")
+        for name in names:
             path = args.inference_directory / name
             if not path.is_file():
                 raise ValueError("Incomplete inference build: " + name)

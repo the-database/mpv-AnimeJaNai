@@ -22,20 +22,26 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
     private Lease? active;
     private bool disposed;
     private long minimumEpoch;
+    private readonly string stage;
+    private readonly bool analysis;
+    private readonly int size;
     internal string? Name { get; }
     internal bool HasSubscription { get { lock (sync) { return !disposed && active is not null; } } }
 
-    public NativeFrameBuffer(bool player = false)
+    public NativeFrameBuffer(bool player = false, string stage = "processed", bool analysis = false)
     {
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8) throw new PlatformNotSupportedException();
+        this.stage = stage; this.analysis = analysis;
+        size = Size + (analysis ? Capacity / 2 : 0);
         Name = player ? "Local\\AJN.PlayerFrames." + Guid.NewGuid().ToString("N") : null;
-        mapping = Name is null ? MemoryMappedFile.CreateNew(null, Size, MemoryMappedFileAccess.ReadWrite) : CreatePlayerMapping(Name);
+        mapping = Name is null ? MemoryMappedFile.CreateNew(null, size, MemoryMappedFileAccess.ReadWrite) : CreatePlayerMapping(Name, size);
         try
         {
-            view = mapping.CreateViewAccessor(0, Size, MemoryMappedFileAccess.ReadWrite);
+            view = mapping.CreateViewAccessor(0, size, MemoryMappedFileAccess.ReadWrite);
             view.SafeMemoryMappedViewHandle.AcquirePointer(ref pointer);
-            new Span<byte>(pointer, Size).Clear();
-            Write32(0, 0x31464a41); Write32(4, 1); Write32(8, Capacity); Write32(12, HeaderBytes); Write32(104, 1);
+            new Span<byte>(pointer, size).Clear();
+            Write32(0, 0x31464a41); Write32(4, analysis ? 2 : 1); Write32(8, size - HeaderBytes); Write32(12, HeaderBytes); Write32(104, 1);
+            Write32(184, analysis ? 1 : 0); Write32(188, stage == "source" ? 1 : 0);
         }
         catch { view?.Dispose(); mapping.Dispose(); throw; }
     }
@@ -55,6 +61,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
     public IFrameSubscription Subscribe(FrameRequest request, bool repeatLatest = false)
     {
         request.Validate();
+        Contract.Require(request.Stage == stage && request.CharacterMask == analysis, "invalid_request", "Observation channel does not match its producer.");
         lock (sync)
         {
             Alive();
@@ -94,8 +101,9 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
                 state = status >> 32 == producer ? (int)status : 1;
                 if (state == 6) return null;
             }
-            Contract.Require(state != 4, "frame_format_unavailable", "This producer supports progressive mono SDR D3D11 samples only.");
+            Contract.Require(state != 4, "frame_format_unavailable", "This observation requires progressive mono SDR GPU frames (character masks: NVIDIA CUDA only).");
             Contract.Require(state != 5, "frame_unavailable", "The native GPU sample branch failed. Video may continue without samples.");
+            if (state is 7 or 8 or 9) return null;
             Span<byte> header = stackalloc byte[HeaderBytes];
             // A busy or torn snapshot is a dropped sample, never an unbounded
             // retry loop and never a wait for the native producer.
@@ -126,9 +134,10 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
                     throw new AddonException("invalid_frame", "Native sample bounds are invalid.");
                 }
                 byte[] pixels = new ReadOnlySpan<byte>(pointer + HeaderBytes, length).ToArray();
+                byte[] mask = analysis ? new ReadOnlySpan<byte>(pointer + HeaderBytes + Capacity, width * height * 2).ToArray() : [];
                 Thread.MemoryBarrier();
                 if (sequence != Read64(32) || config != Read64(16) || epoch != Read64(24)) continue;
-                var packet = Decode(header, pixels, lease.LastId);
+                var packet = Decode(header, pixels, lease.LastId, mask);
                 lease.LastId = id;
                 if (lease.RepeatLatest) lease.Cached = packet;
                 return packet;
@@ -137,7 +146,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
         }
     }
 
-    private static FramePacket Decode(ReadOnlySpan<byte> header, byte[] pixels, ulong previous)
+    private FramePacket Decode(ReadOnlySpan<byte> header, byte[] pixels, ulong previous, byte[] mask)
     {
         // Local functions cannot capture spans. Copy only the small header for
         // straightforward bounded decoding; pixels remain binary throughout.
@@ -154,7 +163,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
         long pts = L(64);
         return new(new JsonObject {
             ["frameId"] = id.ToString(System.Globalization.CultureInfo.InvariantCulture), ["epoch"] = L(56).ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["width"] = (long)I(80), ["height"] = (long)I(84), ["stride"] = I(88), ["format"] = "bgra8", ["stage"] = "processed",
+            ["width"] = (long)I(80), ["height"] = (long)I(84), ["stride"] = I(88), ["format"] = "bgra8", ["stage"] = stage,
             ["ptsSeconds"] = pts == long.MinValue ? null : pts / 1_000_000.0, ["producerTimeMs"] = L(72) / 1_000_000.0,
             ["sourceWidth"] = sourceWidth, ["sourceHeight"] = sourceHeight, ["rotation"] = I(120), ["verticalFlip"] = I(152) != 0,
             ["pixelAspectRatio"] = I(124) > 0 && I(128) > 0 ? I(124) / (double)I(128) : 1,
@@ -162,7 +171,30 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
             ["color"] = new JsonObject { ["primaries"] = primaries, ["transfer"] = transfer, ["matrix"] = "rgb", ["range"] = "full", ["alpha"] = "opaque" },
             ["skippedSamples"] = previous > 0 && id > previous ? Math.Min(id - previous - 1, int.MaxValue) : 0,
             ["producerDrops"] = (uint)I(108),
-        }, pixels);
+            ["analysis"] = analysis ? new JsonObject { ["model"] = FrameRequest.Model, ["operation"] = "animeCharacterMask",
+                ["format"] = "unorm16le", ["foreground"] = 1, ["width"] = I(80), ["height"] = I(84), ["stride"] = I(80) * 2,
+                ["backend"] = "TensorRT", ["inputWidth"] = 1024, ["inputHeight"] = 1024,
+                ["gpuTimeMs"] = L(192) / 1000.0, ["sampleAgeMs"] = L(200) / 1000.0,
+                ["modelSha256"] = NativeAnalysisModel.Sha256 } : null,
+        }, pixels, mask);
+    }
+
+    internal JsonObject Status()
+    {
+        lock (sync)
+        {
+            Alive();
+            long packed = Read64(176);
+            int status = Name is null ? Volatile.Read(ref *(int*)(pointer + 104)) :
+                Read64(168) <= Environment.TickCount64 ? 6 : packed >> 32 == Read64(160) ? (int)packed : 1;
+            string state = status switch { 0 or 1 => "waitingForFrame", 2 => "processing", 3 => "ready", 4 => "unsupportedFormat", 5 => "failed",
+                6 => "closed", 7 => "loading", 8 => "modelMissing", 9 => "buildingEngine", _ => "failed" };
+            return new() { ["state"] = state, ["model"] = analysis ? FrameRequest.Model : null,
+                ["errorCode"] = Volatile.Read(ref *(int*)(pointer + 132)), ["producerDrops"] = (uint)Volatile.Read(ref *(int*)(pointer + 108)),
+                ["message"] = status switch { 4 => "Use progressive mono SDR CUDA playback for character masks; HDR and software frames are unsupported.",
+                    5 => "Native analysis failed. Check the player log and installed TensorRT runtime; restart this subscription after correcting it.",
+                    8 => "The approved anime segmentation model is missing. Re-enable the addon to provision it.", _ => null } };
+        }
     }
 
     private void Unsubscribe(Lease lease)
@@ -194,6 +226,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
         internal bool RepeatLatest { get; } = repeatLatest;
         internal FramePacket? Cached;
         public FramePacket? ReadLatest() => owner.Read(this);
+        public JsonObject Status() => owner.Status();
         public void Dispose() => owner.Unsubscribe(this);
     }
 

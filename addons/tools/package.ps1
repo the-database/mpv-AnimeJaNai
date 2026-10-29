@@ -82,6 +82,8 @@ Copy-Item -LiteralPath (Join-Path $addonRoot 'HTTP-SERVER.md') -Destination $out
 Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING-TESTS.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'SCENE-DETECTION.md') -Destination $outputRoot
+Copy-Item -LiteralPath (Join-Path $addonRoot 'PLAYER-ANALYSIS.md') -Destination $outputRoot
+Copy-Item -LiteralPath (Join-Path $addonRoot 'PLAYER-ANALYSIS-VALIDATION.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING-READINESS.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING-VALIDATION.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/run-example.ps1') -Destination (Join-Path $outputRoot 'tools')
@@ -95,6 +97,7 @@ Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/service-inspector') -Dest
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/output-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/remote-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/player-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
+Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/character-mask') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/scene-detector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/http-inspector') -Destination (Join-Path $outputRoot 'examples') -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'examples/http-bridge') -Destination (Join-Path $outputRoot 'examples') -Recurse
@@ -125,7 +128,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Output inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/remote-inspector') $metadata.javy.path (Join-Path $outputRoot 'remote-inspector.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'Remote inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/player-inspector') $metadata.javy.path (Join-Path $outputRoot 'player-inspector.ajnaddon')
-if ($LASTEXITCODE -ne 0) { throw 'Player inspector compilation failed.' }
+if ($LASTEXITCODE -ne 0) { throw 'Player inspector build failed.' }
+& (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/character-mask') $metadata.javy.path (Join-Path $outputRoot 'character-mask.ajnaddon')
+if ($LASTEXITCODE -ne 0) { throw 'Character-mask inspector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $outputRoot 'examples/scene-detector') $metadata.javy.path (Join-Path $outputRoot 'scene-detector.ajnaddon')
 if ($LASTEXITCODE -ne 0) { throw 'Scene detector compilation failed.' }
 & (Join-Path $hostRoot 'ajn-addon.exe') build (Join-Path $sourceRoot 'rife-settings') $metadata.javy.path (Join-Path $outputRoot 'rife-settings.ajnaddon')

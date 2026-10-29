@@ -62,8 +62,9 @@ public sealed class Broker : IAsyncDisposable
         .. MediaStreams is null ? [] : new[] { "mediaStreams" },
         .. Subtitles is null ? [] : new[] { "subtitles" },
         .. playerFrames is not null ? new[] { "playerFrames" } : [],
+        .. playerFrames?.SupportsAnalysis == true ? new[] { "playerAnalysis" } : [],
         .. sceneDetection is not null ? new[] { "sceneDetection" } : []];
-    private int CapabilityMinor(string name) => name == "sceneDetection" ? 2 : name == "mediaStreams" && MediaStreams?.SupportsReadiness == true ? 1 : name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
+    private int CapabilityMinor(string name) => name == "playerFrames" && playerFrames?.SupportsAnalysis == true ? 1 : name == "sceneDetection" ? 2 : name == "mediaStreams" && MediaStreams?.SupportsReadiness == true ? 1 : name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
     {
@@ -114,11 +115,19 @@ public sealed class Broker : IAsyncDisposable
                 "invalid_request", "Invalid body chunk offset or size.");
             return HttpServers.BodyChunk(Contract.Text(parameters, "requestId", 64), (int)offset, (int)count);
         }
-        if (method == "playerFrames.read")
+        if (method is "playerFrames.read" or "playerAnalysis.read")
         {
             token.ThrowIfCancellationRequested();
             Contract.Require(!disposed, "owner_closed", "Addon instance has stopped.");
+            if (method == "playerAnalysis.read") grant.Demand("player.analysis");
             var snapshot = Observations().Read(observer!, Contract.Text(parameters, "subscriptionId", 64));
+            if (method == "playerAnalysis.read")
+            {
+                Contract.Require(snapshot is null || !snapshot.Mask.IsEmpty, "invalid_request", "Expected a character-mask subscription.");
+                byte[] payload = snapshot is null ? [] : new byte[snapshot.Pixels.Length + snapshot.Mask.Length];
+                if (snapshot is not null) { snapshot.Pixels.Span.CopyTo(payload); snapshot.Mask.Span.CopyTo(payload.AsSpan(snapshot.Pixels.Length)); }
+                return new(new JsonObject { ["frame"] = snapshot?.Metadata, ["byteLength"] = payload.Length }, payload);
+            }
             return new(new JsonObject { ["frame"] = snapshot?.Metadata, ["byteLength"] = snapshot?.Pixels.Length ?? 0 }, snapshot?.Pixels ?? default);
         }
         if (method == "network.result")
@@ -254,16 +263,37 @@ public sealed class Broker : IAsyncDisposable
                 HttpServers.Respond(Contract.Text(parameters, "requestId", 64), (int)responseStatus, responseHeaders.ToArray(), responseBody);
                 return null;
             case "playerFrames.list": return Observations().List(observer!);
+            case "playerAnalysis.list":
+                grant.Demand("player.analysis");
+                return Observations().List(observer!);
+            case "playerAnalysis.status":
+                grant.Demand("player.analysis");
+                return Observations().Status(observer!, Contract.Text(parameters, "subscriptionId", 64));
+            case "playerAnalysis.subscribe":
+                grant.Demand("player.analysis");
+                Contract.Require(playerFrames?.SupportsAnalysis == true && Contract.Text(parameters, "model", 64) == FrameRequest.Model &&
+                    Contract.Text(parameters, "stage", 32) == "source" && Contract.Text(parameters, "format", 32) == "bgra8+unorm16le",
+                    "analysis_unavailable", "This build offers source-stage skytnt.anime-seg.isnetis.v1 with paired BGRA8/unorm16le only.");
+                long aw = Contract.Number(parameters, "width"), ah = Contract.Number(parameters, "height"), afps = Contract.Number(parameters, "maxFps");
+                Contract.Require(aw is >= 1 and <= 320 && ah is >= 1 and <= 180 && afps is >= 1 and <= 30, "invalid_request", "Analysis requires 1..320 by 1..180 pixels and 1..30 Hz.");
+                var subscription = Observations().Subscribe(observer!, Contract.Text(parameters, "playerId", 64), new((int)aw, (int)ah, (int)afps, "source", true));
+                subscription["format"] = "bgra8+unorm16le"; subscription["model"] = FrameRequest.Model;
+                return subscription;
             case "playerFrames.subscribe":
                 var observed = Observations();
-                Contract.Require(Contract.Text(parameters, "stage", 32) == "processed" && Contract.Text(parameters, "format", 16) == "bgra8",
-                    "frame_format_unavailable", "Player observations offer processed BGRA8 samples.");
+                string stage = Contract.Text(parameters, "stage", 32);
+                Contract.Require(stage is "processed" or "source" && Contract.Text(parameters, "format", 16) == "bgra8",
+                    "frame_format_unavailable", "Player observations offer source/processed BGRA8 samples.");
                 long ow = Contract.Number(parameters, "width"), oh = Contract.Number(parameters, "height"), ofps = Contract.Number(parameters, "maxFps");
                 Contract.Require(ow is >= 1 and <= 320 && oh is >= 1 and <= 180 && ofps is >= 1 and <= 60, "invalid_request", "Unsupported sample dimensions or rate.");
-                return observed.Subscribe(observer!, Contract.Text(parameters, "playerId", 64), new((int)ow, (int)oh, (int)ofps));
+                return observed.Subscribe(observer!, Contract.Text(parameters, "playerId", 64), new((int)ow, (int)oh, (int)ofps, stage));
+            case "playerAnalysis.unsubscribe":
+                grant.Demand("player.analysis");
+                Observations().Unsubscribe(observer!, Contract.Text(parameters, "subscriptionId", 64)); return null;
             case "playerFrames.unsubscribe":
                 Observations().Unsubscribe(observer!, Contract.Text(parameters, "subscriptionId", 64)); return null;
             case "playerFrames.read": throw new AddonException("binary_transport_required", "Player samples require the binary response transport.");
+            case "playerAnalysis.read": throw new AddonException("binary_transport_required", "Analysis requires the binary response transport.");
             case "settings.get": return settings.Get();
             case "remoteSources.formats":
                 grant.Demand("media.input"); grant.Demand("sessions.manage");

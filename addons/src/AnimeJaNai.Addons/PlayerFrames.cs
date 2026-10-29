@@ -11,8 +11,9 @@ public interface IPlayerFrameSource : IDisposable
     IFrameSubscription Subscribe(FrameRequest request);
 }
 
-public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDisposable
+public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null, bool supportsAnalysis = false) : IDisposable
 {
+    public bool SupportsAnalysis { get; } = supportsAnalysis;
     private readonly object sync = new();
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly Dictionary<string, Player> players = new(StringComparer.Ordinal);
@@ -30,6 +31,10 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
     {
         internal readonly IPlayerFrameSource Source = source;
         internal bool Alive = true;
+        internal readonly Dictionary<string, Channel> Channels = new(StringComparer.Ordinal);
+    }
+    private sealed class Channel
+    {
         internal IFrameSubscription? Samples;
         internal FrameRequest? Request;
         internal string? Failure;
@@ -39,6 +44,7 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
         internal readonly Owner Owner = owner;
         internal readonly Player Player = player;
         internal readonly FrameRequest Request = request;
+        internal Channel Channel => Player.Channels[Request.Channel];
         internal long? Attempt;
         internal ulong LastId;
         internal string? Epoch;
@@ -61,8 +67,11 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
         lock (sync)
         {
             Check(owner);
-            return new(players.Keys.Select(id => (JsonNode)new JsonObject { ["playerId"] = id,
-                ["stage"] = "processed", ["format"] = "bgra8" }).ToArray());
+            return new(players.Keys.Select(id => {
+                var item = new JsonObject { ["playerId"] = id, ["stage"] = "processed", ["format"] = "bgra8" };
+                if (SupportsAnalysis) { item["sourceSamples"] = true; item["characterMask"] = true; }
+                return (JsonNode)item;
+            }).ToArray());
         }
     }
     public JsonObject Subscribe(Owner owner, string playerId, FrameRequest request)
@@ -71,17 +80,19 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
         lock (sync)
         {
             Check(owner);
+            Contract.Require(request.Stage == "processed" || SupportsAnalysis, "feature_unavailable", "This player build does not support source observations.");
             Contract.Require(players.TryGetValue(playerId, out var player), "player_not_found", "The player is no longer attached.");
             Contract.Require(readers.Values.Count(r => r.Owner == owner) < MaximumReadersPerOwner &&
                 readers.Values.Count(r => r.Player == player) < MaximumReadersPerPlayer,
                 "capacity_exceeded", "Player sample subscription capacity is full.");
             string id = Guid.NewGuid().ToString("N");
+            player.Channels.TryAdd(request.Channel, new());
             readers.Add(id, new(owner, player, request));
             try { Configure(player); }
             catch
             {
                 readers.Remove(id);
-                try { Configure(player); } catch (Exception) { player.Failure = "The player sample producer could not be configured."; }
+                ConfigureAfterRemoval(player);
                 throw;
             }
             var result = request.Describe(); result["subscriptionId"] = id;
@@ -94,11 +105,11 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
         {
             var reader = Find(owner, id);
             Contract.Require(reader.Player.Alive, "player_closed", "The observed player has closed.");
-            Contract.Require(reader.Player.Failure is null, "frame_unavailable", "The player sample producer is unavailable.");
+            Contract.Require(reader.Channel.Failure is null, "frame_unavailable", "The player sample producer is unavailable.");
             long now = clock.GetTimestamp();
             if (reader.Attempt is long previous && clock.GetElapsedTime(previous, now).TotalSeconds < 1.0 / reader.Request.MaxFps) return null;
             reader.Attempt = now;
-            var frame = reader.Player.Samples?.ReadLatest();
+            var frame = reader.Channel.Samples?.ReadLatest();
             if (frame is null) return null;
             var metadata = frame.Metadata;
             string epoch = Contract.Text(metadata, "epoch", 32);
@@ -106,6 +117,8 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
                 "invalid_frame", "Invalid player frame identity.");
             if (reader.Epoch == epoch && reader.LastId == frameId) return null;
             metadata["skippedSamples"] = reader.Epoch == epoch && reader.LastId > 0 && frameId > reader.LastId ? Math.Min(frameId - reader.LastId - 1, int.MaxValue) : 0;
+            metadata["subscriptionId"] = id;
+            metadata["playerId"] = players.Single(p => p.Value == reader.Player).Key;
             var packet = Resize(frame, metadata, reader.Request);
             reader.LastId = frameId; reader.Epoch = epoch;
             return packet;
@@ -118,6 +131,16 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
             var reader = Find(owner, id);
             readers.Remove(id);
             if (reader.Player.Alive) ConfigureAfterRemoval(reader.Player);
+        }
+    }
+    public JsonObject Status(Owner owner, string id)
+    {
+        lock (sync)
+        {
+            var reader = Find(owner, id);
+            if (!reader.Player.Alive) return new() { ["state"] = "closed" };
+            if (reader.Channel.Failure is not null) return new() { ["state"] = "failed", ["message"] = reader.Channel.Failure };
+            return reader.Channel.Samples?.Status() ?? new() { ["state"] = "idle" };
         }
     }
     public void ReleaseOwner(Owner owner)
@@ -134,28 +157,33 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
     private void ConfigureAfterRemoval(Player player)
     {
         try { Configure(player); }
-        catch (Exception) { player.Failure = "The player sample producer could not be reconfigured."; }
+        catch (Exception) { foreach (var channel in player.Channels.Values) channel.Failure = "The player sample producer could not be reconfigured."; }
     }
     private void Configure(Player player)
     {
-        var requests = readers.Values.Where(r => r.Player == player).Select(r => r.Request).ToArray();
-        FrameRequest? desired = requests.Length == 0 ? null : new(requests.Max(r => r.Width), requests.Max(r => r.Height), requests.Max(r => r.MaxFps));
-        if (desired == player.Request && player.Failure is null) return;
-        player.Samples?.Dispose(); player.Samples = null; player.Request = null;
-        try
+        foreach (var (key, channel) in player.Channels)
         {
-            if (desired is not null) player.Samples = player.Source.Subscribe(desired);
-            player.Request = desired; player.Failure = null;
+            var requests = readers.Values.Where(r => r.Player == player && r.Request.Channel == key).Select(r => r.Request).ToArray();
+            FrameRequest? desired = requests.Length == 0 ? null : requests[0] with {
+                Width = requests.Max(r => r.Width), Height = requests.Max(r => r.Height), MaxFps = requests.Max(r => r.MaxFps) };
+            if (desired == channel.Request && channel.Failure is null) continue;
+            channel.Samples?.Dispose(); channel.Samples = null; channel.Request = null;
+            try
+            {
+                if (desired is not null) channel.Samples = player.Source.Subscribe(desired);
+                channel.Request = desired; channel.Failure = null;
+            }
+            catch { channel.Failure = "The player sample producer could not be configured."; throw; }
         }
-        catch { player.Failure = "The player sample producer could not be configured."; throw; }
     }
     private static FramePacket Resize(FramePacket frame, JsonObject metadata, FrameRequest request)
     {
         int width = (int)Contract.Number(metadata, "width"), height = (int)Contract.Number(metadata, "height");
-        if (width == request.Width && height == request.Height) return new(metadata, frame.Pixels.Span);
+        if (width == request.Width && height == request.Height) return new(metadata, frame.Pixels.Span, frame.Mask.Span);
         Contract.Require(width >= request.Width && height >= request.Height, "invalid_frame", "Player samples must meet the negotiated dimensions.");
         var input = frame.Pixels.Span;
         byte[] output = new byte[request.Width * request.Height * 4];
+        byte[] mask = frame.Mask.IsEmpty ? [] : new byte[request.Width * request.Height * 2];
         for (int y = 0; y < request.Height; y++)
         {
             int sy = Math.Clamp((2 * y + 1) * height * 256 / (2 * request.Height) - 128, 0, (height - 1) * 256);
@@ -170,10 +198,19 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
                     int bottom = input[(y1 * width + x0) * 4 + c] * (256 - fx) + input[(y1 * width + x1) * 4 + c] * fx;
                     output[(y * request.Width + x) * 4 + c] = (byte)((top * (256 - fy) + bottom * fy + 32768) >> 16);
                 }
+                if (mask.Length > 0)
+                {
+                    int At(int px, int py) => System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(frame.Mask.Span[((py * width + px) * 2)..]);
+                    long top = At(x0, y0) * (256L - fx) + At(x1, y0) * (long)fx;
+                    long bottom = At(x0, y1) * (256L - fx) + At(x1, y1) * (long)fx;
+                    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(mask.AsSpan((y * request.Width + x) * 2),
+                        (ushort)((top * (256 - fy) + bottom * fy + 32768) >> 16));
+                }
             }
         }
         metadata["width"] = (long)request.Width; metadata["height"] = (long)request.Height; metadata["stride"] = request.Width * 4;
-        return new(metadata, output);
+        if (metadata["analysis"] is JsonObject analysis) { analysis["width"] = request.Width; analysis["height"] = request.Height; analysis["stride"] = request.Width * 2; }
+        return new(metadata, output, mask);
     }
     private Reader Find(Owner owner, string id)
     {
@@ -193,8 +230,8 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null) : IDi
         {
             if (!player.Alive) return;
             player.Alive = false; players.Remove(id);
-            try { player.Samples?.Dispose(); }
-            finally { player.Samples = null; player.Source.Dispose(); }
+            try { foreach (var channel in player.Channels.Values) channel.Samples?.Dispose(); }
+            finally { player.Channels.Clear(); player.Source.Dispose(); }
         }
     }
     public void Dispose()

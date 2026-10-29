@@ -31,6 +31,24 @@ local control = utils.join_path(data, 'player-control/' .. instance .. '.json')
 local label = 'ajn-player-sample'
 local revision, changed, mapping = nil, 0, nil
 local scene_mapping = nil
+local source_taps = {}
+local function update_source_tap(kind, name)
+    local tap = 'ajn-player-' .. kind
+    local prefix = 'Local\\AJN.PlayerFrames.'
+    if type(name) ~= 'string' or #name ~= #prefix + 32 or name:sub(1, #prefix) ~= prefix
+        or not name:sub(#prefix + 1):match('^[a-f0-9]+$') then name = nil end
+    local found = false
+    for _, item in ipairs(mp.get_property_native('vf') or {}) do
+        if item.label == tap then found = true end
+    end
+    if found and source_taps[kind] ~= name then mp.commandv('vf', 'remove', '@' .. tap); found = false end
+    source_taps[kind] = name
+    if name and not found then
+        -- Before all user upscaling/interpolation. Native CUDA decode is also
+        -- available with the AJN chain disabled; no second decoder is opened.
+        mp.commandv('vf', 'pre', '@' .. tap .. ':ajn-sample:name=%' .. #name .. '%' .. name)
+    end
+end
 local function update_scene(name)
     local prefix = 'Local\\AJN.Scene.'
     if type(name) ~= 'string' or #name ~= #prefix + 32 or name:sub(1, #prefix) ~= prefix
@@ -63,12 +81,14 @@ local function update_sample()
     local value = text and #text <= 4096 and utils.parse_json(text) or nil
     if type(value) ~= 'table' or value.schemaVersion ~= 1 or value.instance ~= instance
         or type(value.revision) ~= 'string' or #value.revision > 20
-        or not value.revision:match('^%d+$') then remove_tap(); update_scene(''); return end
+        or not value.revision:match('^%d+$') then remove_tap(); update_scene(''); update_source_tap('source'); update_source_tap('analysis'); return end
     if revision ~= value.revision then revision = value.revision; changed = mp.get_time() end
     if value.available ~= true or mp.get_time() - changed > 3 then
-        remove_tap(); update_scene(''); return
+        remove_tap(); update_scene(''); update_source_tap('source'); update_source_tap('analysis'); return
     end
     update_scene(value.sceneMapping)
+    update_source_tap('source', value.sourceMapping)
+    update_source_tap('analysis', value.analysisMapping)
     if value.enabled ~= true then remove_tap(); return end
     local prefix = 'Local\\AJN.PlayerFrames.'
     local name = value.mapping
@@ -80,6 +100,18 @@ local function update_sample()
     end
 end
 mp.add_periodic_timer(0.5, update_sample)
+
+local function invalidate_samples()
+    for _, item in ipairs(mp.get_property_native('vf') or {}) do
+        if item.label == label or item.label == 'ajn-player-source' or item.label == 'ajn-player-analysis' then
+            mp.commandv('vf-command', item.label, 'invalidate', '')
+        end
+    end
+end
+-- Only profile/filter events, never a per-frame watcher. The native reset path
+-- independently handles seeking and file changes.
+mp.register_script_message('aji-slot', invalidate_samples)
+mp.observe_property('vf', 'native', invalidate_samples)
 
 mp.command_native_async({
     name = 'subprocess',

@@ -58,7 +58,7 @@ const __ajnSdk = (() => {
         }
         const result = response.result;
         if (!frameResponse) return result;
-        if (!result || !Number.isInteger(result.byteLength) || result.byteLength < 0 || result.byteLength > 320 * 180 * 4)
+        if (!result || !Number.isInteger(result.byteLength) || result.byteLength < 0 || result.byteLength > 320 * 180 * (frameResponse === "analysis" ? 6 : 4))
             throw new Error("Invalid AJN binary response length");
         if (frameResponse === "network") {
             if (result.byteLength > 65536 || !["pending", "completed", "failed"].includes(result.state) ||
@@ -81,9 +81,18 @@ const __ajnSdk = (() => {
         }
         if (result.frame === null && result.byteLength === 0) return null;
         const frame = result.frame;
+        const analyzed = frameResponse === "analysis";
         if (!frame || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || frame.width < 1 || frame.width > 320 ||
-            frame.height < 1 || frame.height > 180 || frame.format !== "bgra8" || frame.stage !== "processed" || result.byteLength !== frame.width * frame.height * 4)
+            frame.height < 1 || frame.height > 180 || frame.format !== "bgra8" || !["processed", "source"].includes(frame.stage) ||
+            result.byteLength !== frame.width * frame.height * (analyzed ? 6 : 4))
             throw new Error("Invalid AJN sample metadata");
+        if (analyzed) {
+            if (frame.stage !== "source" || !frame.analysis || frame.analysis.model !== "skytnt.anime-seg.isnetis.v1" ||
+                frame.analysis.format !== "unorm16le" || frame.analysis.width !== frame.width || frame.analysis.height !== frame.height)
+                throw new Error("Invalid AJN character-mask metadata");
+            const bytes = readBytes(result.byteLength), colorBytes = frame.width * frame.height * 4;
+            return Object.assign({}, frame, { pixels: bytes.subarray(0, colorBytes), mask: bytes.subarray(colorBytes) });
+        }
         return Object.assign({}, frame, { pixels: readBytes(result.byteLength) });
     }
     function base64(bytes) {
@@ -251,6 +260,15 @@ const __ajnSdk = (() => {
             }, options, { playerId })),
             read: subscriptionId => request("playerFrames.read", { subscriptionId }, true),
             unsubscribe: subscriptionId => request("playerFrames.unsubscribe", { subscriptionId }),
+        }),
+        playerAnalysis: Object.freeze({
+            list: () => request("playerAnalysis.list"),
+            subscribe: (playerId, options = {}) => request("playerAnalysis.subscribe", Object.assign({
+                playerId, stage: "source", format: "bgra8+unorm16le", model: "skytnt.anime-seg.isnetis.v1", width: 160, height: 90, maxFps: 12,
+            }, options, { playerId })),
+            status: subscriptionId => request("playerAnalysis.status", { subscriptionId }),
+            read: subscriptionId => request("playerAnalysis.read", { subscriptionId }, "analysis"),
+            unsubscribe: subscriptionId => request("playerAnalysis.unsubscribe", { subscriptionId }),
         }),
         storage: Object.freeze({
             get: key => request("storage.get", { key }),

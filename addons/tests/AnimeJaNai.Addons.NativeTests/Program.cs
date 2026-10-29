@@ -37,6 +37,9 @@ bool subtitleFixturesOnly = args.Length == 5 && args[^1] == "--subtitle-fixtures
 bool outputsOnly = args.Length == 6 && args[^1] == "--outputs-only";
 bool remoteOnly = args.Length == 6 && args[^1] == "--remote-only";
 bool playerOnly = args.Length == 6 && args[^1] == "--player-frames-only";
+bool analysisOnly = args.Length == 7 && args[^1] is "--analysis-only" or "--analysis-pipeline-only" or "--source-color-only";
+bool analysisPipelineOnly = analysisOnly && args[^1] == "--analysis-pipeline-only";
+bool sourceColorOnly = analysisOnly && args[^1] == "--source-color-only";
 bool sceneOnly = args.Length == 6 && args[^1] == "--scene-only";
 bool capacityOnly = args.Length == 4 && args[^1] == "--capacity-only";
 bool lifecycleOnly = args.Length == 4 && args[^1] == "--lifecycle-only";
@@ -60,17 +63,24 @@ if (subtitlesOnly || subtitleFixturesOnly) args = args[..4];
 if (outputsOnly) args = args[..5];
 if (remoteOnly) args = args[..5];
 if (playerOnly) args = args[..5];
+if (analysisOnly) args = args[..6];
 if (sceneOnly) args = args[..5];
 if (capacityOnly) args = args[..3];
 if (lifecycleOnly) args = args[..3];
 if (lifecycleNetOnly) args = args[..3];
-if (args.Length is not (3 or 5) && !largeReadOnly && !streamingPolicyOnly && !installerOnly && !streamTimingOnly && !streamEnduranceOnly && !streamEpisodeOnly && !streamControlsOnly && !subtitlesOnly && !subtitleFixturesOnly) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
+if (args.Length is not (3 or 5) && !analysisOnly && !largeReadOnly && !streamingPolicyOnly && !installerOnly && !streamTimingOnly && !streamEnduranceOnly && !streamEpisodeOnly && !streamControlsOnly && !subtitlesOnly && !subtitleFixturesOnly) { Console.WriteLine("NativeTests <trusted-AJN-root> <new-output-directory> <dotnet.exe> [wasmtime.exe javy.exe] [--frames-only]"); return 2; }
 string root = Path.GetFullPath(args[0]), output = Path.GetFullPath(args[1]);
 if (Directory.Exists(output)) { Console.Error.WriteLine("Choose a new test output directory."); return 2; }
 Directory.CreateDirectory(output);
 var evidence = new List<JsonObject>();
 try
 {
+    if (analysisOnly)
+    {
+        await NativeAnalysisChecks.RunAsync(root, output, args[4], args[5], evidence, analysisPipelineOnly, sourceColorOnly);
+        File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
+        return 0;
+    }
     if (sceneOnly || rifeSettingsOnly)
     {
         await NativeSceneChecks.RunAsync(root, output, args[4], evidence, rifeSettingsOnly);

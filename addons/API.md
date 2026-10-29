@@ -1,4 +1,6 @@
-# Addon API 1.9 preview
+# Addon API 1.12 preview
+
+API 1.12 adds opt-in `playerAnalysis` 1.0 and `playerFrames` 1.1 source observations. CUDA source RGB and soft character masks are delivered as one completed pair. No analysis or model work runs without a subscription. See [PLAYER-ANALYSIS.md](PLAYER-ANALYSIS.md).
 
 API 1.9 adds `mediaStreams` 1.1: `check`, `prepare`, encoder/bit-depth selection and structured processing evidence. See [streaming readiness](STREAMING-READINESS.md) for the lifecycle and failure contract.
 
@@ -80,6 +82,11 @@ response and decision deadlines are specified in [SCENE-DETECTION.md](SCENE-DETE
 | `playerFrames.subscribe` | `{ playerId, stage, format, width, height, maxFps }` | `player.observe` + `frames.read` | Owned subscription ID and accepted options |
 | `playerFrames.read` | `{ subscriptionId }` | `player.observe` + `frames.read` | Latest unread sample and bounded binary bytes, or no new sample |
 | `playerFrames.unsubscribe` | `{ subscriptionId }` | `player.observe` + `frames.read` | `null`; releases only this observer |
+| `playerAnalysis.list` | `{}` | `player.observe` + `frames.read` + `player.analysis` | Attached players; playerAnalysis 1.0 |
+| `playerAnalysis.subscribe` | `{ playerId, model, stage, format, width, height, maxFps }` | All three analysis grants | Owned subscription; setup continues asynchronously |
+| `playerAnalysis.status` | `{ subscriptionId }` | All three analysis grants | Readiness, unsupported input or actionable failure |
+| `playerAnalysis.read` | `{ subscriptionId }` | All three analysis grants | Matched color/mask metadata and at most 345600 binary bytes, or null |
+| `playerAnalysis.unsubscribe` | `{ subscriptionId }` | All three analysis grants | Releases only this reader; last reader stops analysis |
 | `timers.set` | `{ timerId, intervalMs, repeat }` | None | `null`; creates/replaces a bounded timer; timers 1.0 |
 | `timers.clear` | `{ timerId }` | None | `null`; cancels the timer |
 | `network.selections` | `{}` | `network.connect` | Approved destination IDs and metadata; network 1.0 |

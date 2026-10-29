@@ -1,15 +1,15 @@
 # AnimeJaNai Addon Developer Guide
 
-**Development preview:** API 1.9 adds native streaming readiness, engine preparation, required AI processing and encoder selection. Use the matching build report for hardware qualification. Scene detection remains available from API 1.8.
+**Development preview:** API 1.12 adds optional source observations and matched GPU character masks. It includes streaming readiness and RIFE scene detection from earlier versions. Use the matching build report for hardware qualification; Appendix F contains the complete lighting observation contract and example.
 
-**Edition:** 2026-10-24 · **Addon API:** 1.9 preview · **Platform:** Windows x64
+**Edition:** 2026-10-29 · **Addon API:** 1.12 preview · **Platform:** Windows x64
 
 Create, build, install, test and distribute an AnimeJaNai (AJN) addon using this
 document and the matching release tools. No previous conversation, maintainer
 handoff or checkout of AJN's repositories is required. The complete JavaScript
-API declarations and ten feature examples are included in this file.
+API declarations and feature examples are included in this file.
 
-This guide targets the **AnimeJaNai 3.8.0 addon development preview**. API 1.9 remains a
+This guide targets the **AnimeJaNai 3.8.0 addon development preview**. API 1.12 remains a
 preview, so it is suitable for developing and testing addons but is not yet a
 frozen community compatibility promise. Use the guide shipped with your release.
 The addon API version, AJN application version and your addon's version are
@@ -353,6 +353,7 @@ local packages; catalog signing and automatic updates are future work.
 | Process independent videos | `sessions`; sessions 1.1 | `sessions.manage`, approved files/profiles |
 | Read small samples from an owned session | `frames`; frames 1.0 | `frames.read` + `sessions.manage` |
 | Observe normal AJN playback | `playerFrames`; playerFrames 1.0, API 1.6 | `player.observe` + `frames.read`; no playback controls |
+| Observe source RGB with character masks | `playerAnalysis`; 1.0, API 1.12 | `player.observe` + `frames.read` + `player.analysis`; see [PLAYER-ANALYSIS.md](PLAYER-ANALYSIS.md) and `examples/character-mask` |
 | Customize RIFE scene decisions | `sceneDetection`; 1.0, API 1.8 | `player.sceneDetection` + `frames.read`; see Appendix D |
 | Talk to a service/device | `network`; network 1.0 | `network.connect`, approved destination; optional `credentials.use` |
 | Process a remote video | `sessions.openRemote`; remoteSources 1.0, API 1.5 | `media.input` + `sessions.manage` + `network.connect`, approved service/profile |
@@ -2166,13 +2167,13 @@ to resurrect them after a restart.
 ## Appendix A. Complete JavaScript editor declarations
 
 Save the following block verbatim as `ajn.d.ts` beside `addon.js` if the scaffold
-has not already created it. These are the exact API 1.7 declarations from this
+has not already created it. These are the exact API 1.12 declarations from this
 edition. They describe signatures, not grants: every permission, ownership,
 capability and limit described above still applies. `sessions.status` deliberately
 uses an open record; inspect its documented state and optional fields defensively.
 
 ```typescript
-/** AJN addon API 1.9 development. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.12 development. Plain JavaScript, with optional editor type checking. */
 interface AjnScenePair {
     requestId: string; epoch: string;
     previousPtsSeconds: number; currentPtsSeconds: number;
@@ -2300,7 +2301,7 @@ interface AjnFrame {
     height: number;
     stride: number;
     format: "bgra8";
-    stage: "processed";
+    stage: "processed" | "source";
     /** Processing PTS, not measured display time. */
     ptsSeconds: number | null;
     producerTimeMs: number;
@@ -2321,6 +2322,30 @@ interface AjnSampleOptions {
     format?: "bgra8";
     width?: number;
     height?: number;
+    maxFps?: number;
+}
+interface AjnPlayerSampleOptions extends Omit<AjnSampleOptions, "stage"> {
+    /** source requires playerFrames capability 1.1 (API 1.12). */
+    stage?: "processed" | "source";
+}
+interface AjnCharacterObservation extends AjnFrame {
+    stage: "source";
+    playerId: string;
+    subscriptionId: string;
+    /** Same frame and epoch as pixels. Little-endian unsigned 16-bit / 65535;
+     * 1 means foreground character. Soft confidences, not a binary stencil. */
+    mask: Uint8Array;
+    analysis: { operation: "animeCharacterMask"; model: "skytnt.anime-seg.isnetis.v1";
+        modelSha256: string; backend: "TensorRT"; format: "unorm16le"; foreground: 1;
+        width: number; height: number; stride: number; inputWidth: 1024; inputHeight: 1024;
+        gpuTimeMs: number; sampleAgeMs: number };
+}
+interface AjnAnalysisOptions {
+    stage?: "source";
+    format?: "bgra8+unorm16le";
+    model?: "skytnt.anime-seg.isnetis.v1";
+    width?: number; height?: number;
+    /** 1..30, default 12. The producer skips work if busy. */
     maxFps?: number;
 }
 interface AjnHostInfo {
@@ -2358,17 +2383,25 @@ interface AjnApi {
      * One exclusive detector per player; callbacks remain inside the addon sandbox.
      * The host delivers scene.request events containing {detectorId}. */
     sceneDetection: {
-        list(): { playerId: string; inUse: boolean; format: "gray8"; stage: "beforeInterpolation" }[];
-        attach(playerId: string, options?: { width?: number; height?: number; deadlineMs?: number }): {
-            detectorId: string; width: number; height: number; deadlineMs: number; format: "gray8"; stage: "beforeInterpolation";
+        list(): { playerId: string; inUse: boolean; format: "gray8"; stage: "beforeInterpolation"; nativeMvtools: boolean; nativeEnhanced: boolean }[];
+        /** API 1.10 / sceneDetection 1.1: mvtools runs in the trusted player on
+         * full-resolution YUV. No scene.request events or binary samples are
+         * delivered for that mode; width/height/deadlineMs apply only to custom.
+         * API 1.11 / sceneDetection 1.2 adds enhanced and nativeEnhanced. */
+        attach(playerId: string, options?: { width?: number; height?: number; deadlineMs?: number;
+            algorithm?: "custom" | "mvtools" | "enhanced"; thscd1?: number; thscd2?: number }): {
+            detectorId: string; width: number; height: number; deadlineMs: number; format: "gray8"; stage: "beforeInterpolation"; algorithm: "custom" | "mvtools" | "enhanced";
         };
         /** Latest pending pair once, or null if consumed, expired, reset or unavailable. */
         read(detectorId: string): AjnScenePair | null;
         /** false means late, duplicate or stale. It never applies to a later pair. */
         submit(detectorId: string, requestId: string, decision: "cut" | "continuous" | "default"): { accepted: boolean };
         status(detectorId: string): {
-            state: "waitingForPlayer" | "pending" | "active" | "fallback" | "sampleUnavailable" | "backendUnavailable" | "suspended" | "unavailable";
+            state: "waitingForPlayer" | "pending" | "active" | "fallback" | "sampleUnavailable" | "backendUnavailable" | "suspended" | "detectorUnavailable" | "detectorError" | "unavailable";
             acceptedPairs: number; timedOutPairs: number;
+            algorithm: "custom" | "mvtools" | "enhanced"; cutPairs: number; changedBlocks: number; totalBlocks: number;
+            analysisMs: number; blockSadThreshold: number; sourceBits: number;
+            epoch: string; previousPtsSeconds: number; currentPtsSeconds: number; sourceWidth: number; sourceHeight: number;
         };
         detach(detectorId: string): void;
     };
@@ -2501,10 +2534,22 @@ interface AjnApi {
      * frames.read separately from owned-session permissions. No player controls
      * or filenames are exposed. Samples precede final display composition. */
     playerFrames: {
-        list(): { playerId: string; stage: "processed"; format: "bgra8" }[];
-        subscribe(playerId: string, options?: AjnSampleOptions): Required<AjnSampleOptions> & { subscriptionId: string };
+        list(): { playerId: string; stage: "processed"; format: "bgra8"; sourceSamples?: boolean; characterMask?: boolean }[];
+        subscribe(playerId: string, options?: AjnPlayerSampleOptions): Required<AjnPlayerSampleOptions> & { subscriptionId: string };
         /** Independent latest unread sample, or null. Slow readers skip frames. */
         read(subscriptionId: string): AjnFrame | null;
+        unsubscribe(subscriptionId: string): void;
+    };
+    /** API 1.12 / playerAnalysis 1.0. Requires player.observe, frames.read and
+     * player.analysis. No analysis runs until subscribe; no playback controls.
+     * GPU source input must be progressive mono SDR CUDA. */
+    playerAnalysis: {
+        list(): { playerId: string; characterMask?: boolean }[];
+        subscribe(playerId: string, options?: AjnAnalysisOptions): Required<AjnAnalysisOptions> & { subscriptionId: string };
+        status(subscriptionId: string): { state: "idle" | "provisioningModel" | "waitingForFrame" | "loading" | "buildingEngine" |
+            "processing" | "ready" | "unsupportedFormat" | "modelMissing" | "failed" | "closed";
+            message?: string | null; model?: string | null; producerDrops?: number; errorCode?: number };
+        read(subscriptionId: string): AjnCharacterObservation | null;
         unsubscribe(subscriptionId: string): void;
     };
     storage: {
@@ -4053,3 +4098,156 @@ dotnet, Wasmtime, Javy and FFmpeg paths, followed by `--streaming-policy-only`.
 The optional test environment variable `AJN_STREAM_TEST_BACKEND` selects
 `DirectML` or `TensorRT`; omission runs both. It intentionally corrupts and
 restores a model for its negative test, so use an isolated test installation.
+
+
+## Appendix F. Source observations and character masks
+
+This optional Windows capability observes the video already playing in AJN. It opens no second decoder and does not need upscaling or RIFE enabled. The addon chooses when to subscribe, its sample dimensions and analysis rate. No observation filter, GPU model, download or analysis work is started without that request. The optional `aji_analysis.dll` is not imported by the normal inference backend.
+
+## Grants and discovery
+
+Declare API `{ "major": 1, "minMinor": 12 }`, required capability `playerAnalysis` `{ "major": 1, "minMinor": 0 }`, and permissions `player.observe`, `frames.read`, `player.analysis`. Manager asks the user to approve GPU analysis and the first-use model download. Network destinations for light controllers still require their own existing grants; this capability grants no network access to the guest.
+
+`ajn.playerAnalysis.list()` returns attached players with opaque `playerId` values. No filenames, native handles, model paths or player commands are exposed. Select a player using your addon's settings/actions.
+
+```js
+const selected = ajn.playerAnalysis.subscribe(playerId, {
+    stage: "source", format: "bgra8+unorm16le",
+    model: "skytnt.anime-seg.isnetis.v1",
+    width: 160, height: 90, maxFps: 12
+});
+const status = ajn.playerAnalysis.status(selected.subscriptionId);
+const pair = ajn.playerAnalysis.read(selected.subscriptionId);
+if (pair) {
+    // Color: tightly packed BGRA8. Mask: paired soft foreground, uint16 LE.
+    const mask = new DataView(pair.mask.buffer, pair.mask.byteOffset, pair.mask.byteLength);
+    const firstPixelForeground = mask.getUint16(0, true) / 65535;
+    // Your estimator/smoothing/device policy goes here.
+}
+// On disable or when observation is no longer needed:
+ajn.playerAnalysis.unsubscribe(selected.subscriptionId);
+```
+
+Use existing addon timers to read samples. Limits: 1–320 by 1–180 pixels, 1–30 analyses/s, default 160×90 at 12/s. Readers of the same player's analysis share one native producer at the largest requested dimensions/rate. Each reader has independent sample identity and rate limiting; removing one reader does not stop another. Overload skips work instead of queuing unbounded frames or blocking playback. `producerDrops` and `skippedSamples` expose omissions.
+
+Color-only source observations use `playerFrames.subscribe(playerId, {stage:"source", ...})` and require playerFrames 1.1. Existing `stage:"processed"` remains unchanged. Color-only frames remain limited to 230400 binary bytes and 60 Hz; paired analysis allows 345600 bytes under the existing overall 16 MiB/s guest budget.
+
+## Readiness and failures
+
+Subscribe returns promptly. Poll status: `provisioningModel`, `loading`, `buildingEngine`, `waitingForFrame`, `processing`, `ready`, `unsupportedFormat`, `modelMissing`, `failed` or `closed`. First use downloads the approved 176 MB ONNX and builds a local TensorRT engine. This can take minutes. It is not a Wasm callback and holds no decoder image while setting up. Failed setup does not become an all-background mask. `read()` returns null for no new completed observation; unsupported input/native failure raises an explicit error. The inspection example returns that error in its action result.
+
+The host verifies SHA256 `f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99` for [SkyTNT's isnetis.onnx](https://huggingface.co/skytnt/anime-seg/blob/main/isnetis.onnx). It is provisioned under the installation's `animejanai/analysis` directory. The engine cache includes the model hash, TensorRT version, GPU UUID and driver version. Do not redistribute engine files between machines. Setup errors are exposed through status; native engine errors are also reported in the player log. Correct the missing runtime/model problem and unsubscribe/re-subscribe to retry.
+
+## Identity, preprocessing and color
+
+The native worker takes a source CUDA image before user upscaling/interpolation, subtitles and OSD. It preserves aspect ratio, bilinearly resizes native source pixels into a black-padded 1024 square, and passes float RGB `[0,1]` NCHW `img [1,3,1024,1024]` to IS-Net. `mask [1,1,1024,1024]` is cropped to remove padding and resized to the color sample. It never enlarges the small addon color sample as model input. Soft masks retain 16-bit precision; 0 is background and 1 is character confidence.
+
+One seqlock publication contains the color and mask for one source frame, `frameId`, `epoch`, player/subscription identities, `ptsSeconds`, `producerTimeMs`, geometry, crop, pixel aspect ratio, rotation and vertical flip. Source geometry/transforms remain metadata; the samples are not final screen capture. Seeking/rebuilding the filter invalidates the old epoch. Slow readers get the newest completed pair, never a mask borrowed from a different frame. RIFE-generated output frames do not require separate segmentation.
+
+Color is full-range encoded RGB with declared source SDR transfer and primaries. BGRA8 does **not** imply sRGB. Apply the reported transfer/primaries when computing linear-light or OKLab values. The native worker does not apply display tone mapping or claim projector color matching. Media PTS and producer timing are processing observations, not measured display timestamps. `analysis.gpuTimeMs` measures the optional GPU work and readback; `sampleAgeMs` measures time from submission to publication, not display latency.
+
+Character masks currently require progressive, mono, SDR CUDA frames and the matching NVIDIA/TensorRT component. D3D11 color sampling remains supported; D3D11 character segmentation, software source frames, HDR, stereoscopic and interlaced analysis are unsupported and reported explicitly. No lights, device discovery, arbitrary DLL/model loading, image estimator or smoothing policy are built into this capability.
+
+## Inspection example
+
+Install `character-mask.ajnaddon`, approve its three grants, start it in Manager, open visible anime footage, then choose **List players** and **Start character analysis**. **Show status and latest pair** reports identity, mask range/coverage and timing. **Capture pair for inspection** retains one matched pair in the guest. **Export next inspection chunk** returns successive 4096-byte hex chunks for diagnostics; concatenate in offset order, split at `width*height*4`, and interpret the remainder as little-endian mask values. This bounded action export is optional; live observations use binary transport. The example sends nothing to physical lights.
+
+An addon should hold its last calculated light color when no new sample is ready, handle unsupported input explicitly, and unsubscribe when it no longer needs analysis. The host independently cleans up on worker failure, permission revocation, player exit or lease expiry.
+
+### Complete character-mask inspector example
+
+Save these files in one addon folder, build it with the release tools, and install the resulting `.ajnaddon` in Manager.
+
+`manifest.json`
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.character-mask",
+  "name": "Character mask inspector",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 12 },
+  "moduleSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "permissions": ["player.observe", "frames.read", "player.analysis"],
+  "requiredCapabilities": { "playerAnalysis": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "playerNumber": { "type": "number", "label": "Player number", "default": 1, "minimum": 1, "maximum": 4 },
+    "fps": { "type": "number", "label": "Maximum analyses per second", "default": 12, "minimum": 1, "maximum": 30 },
+    "width": { "type": "number", "label": "Sample width", "default": 160, "minimum": 1, "maximum": 320 },
+    "height": { "type": "number", "label": "Sample height", "default": 90, "minimum": 1, "maximum": 180 }
+  },
+  "actions": {
+    "list": { "label": "List players" },
+    "subscribe": { "label": "Start character analysis" },
+    "latest": { "label": "Show status and latest pair" },
+    "capture": { "label": "Capture pair for inspection" },
+    "nextChunk": { "label": "Export next inspection chunk" },
+    "unsubscribe": { "label": "Stop character analysis" }
+  }
+}
+```
+
+`addon.js`
+
+```javascript
+// No network permissions or physical-light effects. GPU work exists only
+// between explicit subscribe and unsubscribe/stop. The host never runs the
+// color estimator or decides how/when a lighting product should update lights.
+let subscription = null, captured = null, exportOffset = 0;
+function describe(frame) {
+    const metadata = Object.assign({}, frame); delete metadata.pixels; delete metadata.mask;
+    let min = 65535, max = 0, sum = 0, foreground = 0;
+    for (let i = 0; i < frame.mask.length; i += 2) {
+        const value = frame.mask[i] | (frame.mask[i + 1] << 8);
+        min = Math.min(min, value); max = Math.max(max, value); sum += value;
+        if (value >= 32768) foreground++;
+    }
+    metadata.maskSummary = {min: min / 65535, max: max / 65535,
+        mean: sum / (frame.mask.length / 2) / 65535, foregroundFraction: foreground / (frame.mask.length / 2)};
+    return metadata;
+}
+function onEvent(event, ajn) {
+    if (event.name === "stop") {
+        if (subscription) ajn.playerAnalysis.unsubscribe(subscription);
+        subscription = null; captured = null; return;
+    }
+    if (event.name !== "action") return;
+    try {
+        const action = event.data.id;
+        if (action === "list") return ajn.playerAnalysis.list().map((p,i) => Object.assign({number:i+1},p));
+        if (action === "subscribe") {
+            if (subscription) ajn.playerAnalysis.unsubscribe(subscription);
+            subscription = null; captured = null;
+            const settings = ajn.settings.get(), player = ajn.playerAnalysis.list()[Math.floor(settings.playerNumber)-1];
+            if (!player) return {error:"Open an AJN player first, then select its number."};
+            const selected = ajn.playerAnalysis.subscribe(player.playerId,{width:Math.floor(settings.width),height:Math.floor(settings.height),maxFps:Math.floor(settings.fps)});
+            subscription = selected.subscriptionId; return selected;
+        }
+        if (action === "unsubscribe") {
+            if (subscription) ajn.playerAnalysis.unsubscribe(subscription);
+            subscription = null; captured = null; return {observing:false};
+        }
+        if (action === "latest" || action === "capture") {
+            if (!subscription) return {state:"idle",message:"Choose Start character analysis first."};
+            const status = ajn.playerAnalysis.status(subscription), frame = ajn.playerAnalysis.read(subscription);
+            if (!frame) return {status,frame:null};
+            if (action === "capture") { captured = frame; exportOffset = 0; }
+            return {status,frame:describe(frame)};
+        }
+        if (action === "nextChunk") {
+            if (!captured) return {error:"Capture a pair first."};
+            const total = captured.pixels.length + captured.mask.length;
+            const offset = exportOffset, end = Math.min(total,offset+4096);
+            let hex = "";
+            // Diagnostic export only: small chunks fit the existing action UI.
+            // The native-to-guest observation itself uses bounded binary data.
+            for (;exportOffset<end;exportOffset++) {
+                const value = exportOffset<captured.pixels.length?captured.pixels[exportOffset]:captured.mask[exportOffset-captured.pixels.length];
+                hex += value.toString(16).padStart(2,"0");
+            }
+            return {frameId:captured.frameId,epoch:captured.epoch,offset,total,hex,done:exportOffset===total};
+        }
+    } catch (error) { return {error:error.code||"analysis_unavailable",message:error.message}; }
+}
+```

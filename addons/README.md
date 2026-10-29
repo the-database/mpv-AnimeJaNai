@@ -2,7 +2,8 @@
 
 ## Start here
 
-This branch implements **API 1.10 preview**, including the optional
+This branch implements **API 1.12 preview**, including optional
+[source-frame observations and character masks](PLAYER-ANALYSIS.md), the
 [RIFE Settings / MVTools detector](rife-settings/README.md), plus
 [HTTP, proxy and credential APIs](HTTP-SERVER.md), reviewed HTTPS listeners and
 the [streaming API](STREAMING.md) and [readiness/preparation](STREAMING-READINESS.md). The native qualification and packaging checks
@@ -17,6 +18,7 @@ not contain these additions.
 | Make your first addon | [Creator tutorial](CREATOR-GUIDE.md) — build, permissions, saved data, settings, update and rollback |
 | Add video, image samples, service access or output | [Recipes and complete examples](CREATOR-RECIPES.md) |
 | Port a custom RIFE scene detector to WebAssembly | [Scene detection API and creator instructions](SCENE-DETECTION.md) |
+| Observe source colors and matched character masks for lighting | [Optional player analysis API and example](PLAYER-ANALYSIS.md) |
 | Look up protocol, limits and compatibility | [API reference](API.md) and [SDK types](sdk/ajn.d.ts) |
 | Resolve a specific error | [Troubleshooting](TROUBLESHOOTING.md) |
 | Build, package, update or recover a preview | [Release integration](RELEASE-INTEGRATION.md) |

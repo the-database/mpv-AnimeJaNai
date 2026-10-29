@@ -152,7 +152,7 @@ public sealed class AddonWorker : IAddonInstance
                     if (method == "network.result") Contract.Require(binaryBytes + NetworkAccess.MaxResponseBytes <= 16 * 1024 * 1024,
                         "bandwidth_exceeded", "Binary response budget is full. Read the network result after reducing sample traffic.");
                     var result = await Task.Run(() => broker.InvokeTransportAsync(method, (JsonObject)message["params"]!, token), token).WaitAsync(token);
-                    Contract.Require(result.Binary.Length <= FrameRequest.MaxBytes && binaryBytes + result.Binary.Length <= 16 * 1024 * 1024,
+                    Contract.Require(result.Binary.Length <= (method == "playerAnalysis.read" ? FrameRequest.MaxBytes * 3 / 2 : FrameRequest.MaxBytes) && binaryBytes + result.Binary.Length <= 16 * 1024 * 1024,
                         "bandwidth_exceeded", "Addon binary responses exceeded 16 MiB in this one-second window. Reduce the size or rate.");
                     binaryBytes += result.Binary.Length;
                     response = JsonRpc.Result(id, result.Result);
@@ -160,7 +160,7 @@ public sealed class AddonWorker : IAddonInstance
                 }
                 catch (AddonException error) { response = JsonRpc.Error(id, error.Code, error.Message); }
                 catch (IOException) { response = JsonRpc.Error(id, "storage_unavailable", "Addon storage could not be accessed."); }
-                await channel.WriteBinaryAsync(response, binary, token);
+                await channel.WriteBinaryAsync(response, binary, token, method == "playerAnalysis.read");
             }
         }
         catch (OperationCanceledException)

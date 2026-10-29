@@ -1,4 +1,4 @@
-/** AJN addon API 1.9 development. Plain JavaScript, with optional editor type checking. */
+/** AJN addon API 1.12 development. Plain JavaScript, with optional editor type checking. */
 interface AjnScenePair {
     requestId: string; epoch: string;
     previousPtsSeconds: number; currentPtsSeconds: number;
@@ -126,7 +126,7 @@ interface AjnFrame {
     height: number;
     stride: number;
     format: "bgra8";
-    stage: "processed";
+    stage: "processed" | "source";
     /** Processing PTS, not measured display time. */
     ptsSeconds: number | null;
     producerTimeMs: number;
@@ -147,6 +147,30 @@ interface AjnSampleOptions {
     format?: "bgra8";
     width?: number;
     height?: number;
+    maxFps?: number;
+}
+interface AjnPlayerSampleOptions extends Omit<AjnSampleOptions, "stage"> {
+    /** source requires playerFrames capability 1.1 (API 1.12). */
+    stage?: "processed" | "source";
+}
+interface AjnCharacterObservation extends AjnFrame {
+    stage: "source";
+    playerId: string;
+    subscriptionId: string;
+    /** Same frame and epoch as pixels. Little-endian unsigned 16-bit / 65535;
+     * 1 means foreground character. Soft confidences, not a binary stencil. */
+    mask: Uint8Array;
+    analysis: { operation: "animeCharacterMask"; model: "skytnt.anime-seg.isnetis.v1";
+        modelSha256: string; backend: "TensorRT"; format: "unorm16le"; foreground: 1;
+        width: number; height: number; stride: number; inputWidth: 1024; inputHeight: 1024;
+        gpuTimeMs: number; sampleAgeMs: number };
+}
+interface AjnAnalysisOptions {
+    stage?: "source";
+    format?: "bgra8+unorm16le";
+    model?: "skytnt.anime-seg.isnetis.v1";
+    width?: number; height?: number;
+    /** 1..30, default 12. The producer skips work if busy. */
     maxFps?: number;
 }
 interface AjnHostInfo {
@@ -335,10 +359,22 @@ interface AjnApi {
      * frames.read separately from owned-session permissions. No player controls
      * or filenames are exposed. Samples precede final display composition. */
     playerFrames: {
-        list(): { playerId: string; stage: "processed"; format: "bgra8" }[];
-        subscribe(playerId: string, options?: AjnSampleOptions): Required<AjnSampleOptions> & { subscriptionId: string };
+        list(): { playerId: string; stage: "processed"; format: "bgra8"; sourceSamples?: boolean; characterMask?: boolean }[];
+        subscribe(playerId: string, options?: AjnPlayerSampleOptions): Required<AjnPlayerSampleOptions> & { subscriptionId: string };
         /** Independent latest unread sample, or null. Slow readers skip frames. */
         read(subscriptionId: string): AjnFrame | null;
+        unsubscribe(subscriptionId: string): void;
+    };
+    /** API 1.12 / playerAnalysis 1.0. Requires player.observe, frames.read and
+     * player.analysis. No analysis runs until subscribe; no playback controls.
+     * GPU source input must be progressive mono SDR CUDA. */
+    playerAnalysis: {
+        list(): { playerId: string; characterMask?: boolean }[];
+        subscribe(playerId: string, options?: AjnAnalysisOptions): Required<AjnAnalysisOptions> & { subscriptionId: string };
+        status(subscriptionId: string): { state: "idle" | "provisioningModel" | "waitingForFrame" | "loading" | "buildingEngine" |
+            "processing" | "ready" | "unsupportedFormat" | "modelMissing" | "failed" | "closed";
+            message?: string | null; model?: string | null; producerDrops?: number; errorCode?: number };
+        read(subscriptionId: string): AjnCharacterObservation | null;
         unsubscribe(subscriptionId: string): void;
     };
     storage: {
