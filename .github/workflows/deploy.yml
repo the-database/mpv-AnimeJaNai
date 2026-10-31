@@ -41,6 +41,13 @@ jobs:
         dotnet publish AnimeJaNaiUpdater/AnimeJaNaiUpdater.csproj -c Release -o updater-publish
         Copy-Item updater-publish/AnimeJaNaiUpdater.exe "publish/mpv-upscale-2x_animejanai-v${{ github.event.inputs.release_version }}/AnimeJaNaiUpdater.exe" -Force
 
+    - name: Build benchmark tool (win-x64) into the tree
+      shell: pwsh
+      run: |
+        dotnet publish AnimeJaNaiBenchmark/AnimeJaNaiBenchmark.csproj -c Release `
+          -r win-x64 --self-contained -p:PublishSingleFile=true `
+          -o "publish/mpv-upscale-2x_animejanai-v${{ github.event.inputs.release_version }}/animejanai/benchmarks"
+
     - name: Install 7zip
       run: choco install 7zip -y
 

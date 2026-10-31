@@ -64,12 +64,15 @@
 </head>
 <body>
   <h1>mpv-AnimeJaNai community benchmarks</h1>
-  <p class="lede">Real playback fps of the AnimeJaNai upscaler across hardware.</p>
+  <p class="lede">AnimeJaNai throughput across hardware, measured during mpv playback.</p>
   <input class="search" id="q" placeholder="Filter by GPU, CPU, or OS..." />
   <div class="controls">
+    <label>Measurement: <select id="measurement"><option value="native-display">Native-display rendering (v2)</option><option value="pipeline">Decode + upscale (v2)</option><option value="legacy">Legacy / unversioned</option></select></label>
+    <label id="outputLabel">Render resolution: <select id="outputResolution"></select></label>
     <label>Sort: <select id="sort"><option value="perf">Fastest first</option><option value="name">GPU name (A&ndash;Z)</option></select></label>
     <button id="expandAll" type="button">Expand all</button>
   </div>
+  <p class="meta" id="measurementNote"></p>
   <div class="legend">Headroom vs ~24 fps realtime:<span class="gs"></span>comfortable<span class="as"></span>borderline<span class="rs"></span>below realtime</div>
 
   <div id="out"></div>
@@ -83,7 +86,8 @@
     Project: <a href="https://github.com/the-database/mpv-upscale-2x_animejanai">mpv-upscale-2x_animejanai</a>.
   </p>
 
-  <script>
+  <script type="module">
+    import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel } from "./measurement.mjs";
     const TEMPLATE_ORDER = ["Quality", "Balanced", "Performance"];
 
     const cleanCpu = (s) => (s || "").replace(/\((R|TM|tm)\)/g, "").replace(/\s{2,}/g, " ").trim();
@@ -138,7 +142,7 @@
     }
 
     function specLine(s) {
-      const bits = [];
+      const bits = [`<b>${esc(measurementLabel(s))}</b>`];
       if (s.cpu) bits.push(`<b>${esc(cpuFull(s))}</b>`);
       if (ramText(s)) bits.push(esc(ramText(s)));
       if (s.os) bits.push(esc(osShort(s.os)));
@@ -186,6 +190,12 @@
 
         const q = document.getElementById("q");
         const sortSel = document.getElementById("sort");
+        const measurementSel = document.getElementById("measurement");
+        const outputSel = document.getElementById("outputResolution");
+        const outputs = outputResolutions(subs);
+        outputSel.innerHTML = outputs.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
+        measurementSel.value = subs.some((s) => measurementKind(s) === "native-display") ? "native-display" :
+          subs.some((s) => measurementKind(s) === "pipeline") ? "pipeline" : "legacy";
         const expandBtn = document.getElementById("expandAll");
         let expandAll = false;
 
@@ -199,8 +209,16 @@
 
         function render() {
           const f = q.value.toLowerCase();
+          const mode = measurementSel.value;
+          document.getElementById("outputLabel").hidden = mode !== "native-display";
+          document.getElementById("measurementNote").textContent = mode === "native-display"
+            ? "Maximum decode + 2× AI upscale + fullscreen rendering throughput, with presentation sync, audio, and subtitles disabled. Columns are input resolutions; the selected render resolution is the final screen size. Renderer settings can also affect FPS."
+            : mode === "pipeline"
+            ? "Maximum decode + 2× AI upscale throughput, without display rendering. Compare separately from native-display scores. Columns are input resolutions."
+            : "Historical results use an unversioned measurement method and may contain timing artifacts. Their rendering resolution is unknown; they are not comparable to v2 scores.";
           const groups = {};
           for (const s of subs) {
+            if (!matchesMeasurement(s, mode, outputSel.value)) continue;
             if (f && !`${s.gpu} ${s.cpu} ${osShort(s.os)}`.toLowerCase().includes(f)) continue;
             (groups[s.gpu] = groups[s.gpu] || []).push(s);
           }
@@ -226,7 +244,7 @@
             for (const s of sys) {
               // Same fixed columns/rows for every system (see ALL_RES/ALL_TPL).
               html += `<div class="sys"><div class="specs">${specLine(s)}</div>`;
-              html += `<table class="mini"><tr><th>fps</th>${ALL_RES.map((r) => `<th>${resShort(r)}</th>`).join("")}</tr>`;
+              html += `<table class="mini"><tr><th>Input / fps</th>${ALL_RES.map((r) => `<th title="Input ${esc(r)}">${resShort(r)}</th>`).join("")}</tr>`;
               for (const t of ALL_TPL) {
                 const row = s.results[t] || {};
                 html += `<tr><td>${esc(t)}</td>${ALL_RES.map((r) => fpsCell(row[r])).join("")}</tr>`;
@@ -240,6 +258,8 @@
         render();
         q.addEventListener("input", render);
         sortSel.addEventListener("change", render);
+        measurementSel.addEventListener("change", render);
+        outputSel.addEventListener("change", render);
         expandBtn.addEventListener("click", () => {
           expandAll = !expandAll;
           expandBtn.textContent = expandAll ? "Collapse all" : "Expand all";

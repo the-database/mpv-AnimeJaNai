@@ -5,6 +5,7 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { measurementError, normalizeMeasurement } from "../benchmark-proxy/src/measurement.mjs";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,7 +45,7 @@ function knownGpuSpec(gpu) {
 
 function valid(s) {
   if (!s || typeof s !== "object") return false;
-  if (s.schema !== 1) return false;
+  if (measurementError(s.schema, s.measurement)) return false;
   if (!ALLOWED_BACKENDS.has(s.backend)) return false;
   if (!s.results || typeof s.results !== "object") return false;
   let measured = 0;
@@ -83,6 +84,8 @@ for (const file of files.sort()) {
   }
   const fallbackSpec = knownGpuSpec(parsed.gpu);
   submissions.push({
+    schema: parsed.schema,
+    measurement: normalizeMeasurement(parsed.measurement),
     id: parsed.id ?? path.basename(file, ".json"),
     submitted_at: parsed.submitted_at ?? null,
     app_version: parsed.app_version ?? "",

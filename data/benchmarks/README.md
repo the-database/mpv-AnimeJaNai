@@ -1,6 +1,6 @@
 # Community benchmark submissions
 
-Each file in `submissions/` is one hardware benchmark result (schema 1) submitted
+Each file in `submissions/` is one hardware benchmark result submitted
 from the **AnimeJaNai Manager**. They arrive as pull requests opened by the
 [submit proxy](../../benchmark-proxy/); merging a PR publishes that result to the
 [catalog](https://benchmarks.animejan.ai) via
@@ -16,7 +16,13 @@ which is kept as an archive of pre-3.4.0 (VapourSynth-baseline) results.
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "2560x1440",
+    "display_hz": 144
+  },
   "id": "<uuid, set by the proxy>",
   "submitted_at": "<ISO timestamp, set by the proxy>",
   "app_version": "3.4.0",
@@ -33,7 +39,24 @@ which is kept as an archive of pre-3.4.0 (VapourSynth-baseline) results.
 }
 ```
 
+Schema 2 requires `measurement.method` and `measurement.mode`. Native-display
+measurements also require `output_resolution`, the actual fullscreen renderer
+size recorded during the run; `display_hz` is optional. This is distinct from
+the input resolutions in `results` and the model's 2× output. Pipeline-only
+measurements use `mode: "pipeline"` and omit both display fields.
+
+Schema 1 remains accepted for old benchmark files and contains no `measurement`.
+The catalog lists legacy results separately; it does not infer an output screen
+or upgrade their timing method. Native-display comparisons are filtered to one
+render resolution at a time. See the [measurement method](../../AnimeJaNaiBenchmark/README.md).
+
 ## Maintainer notes
+
+- Deploy the updated submission proxy and catalog before releasing the new
+  runner. Publish the companion AnimeJaNaiManager metadata parser as **0.10.4**
+  (Windows and Linux assets), matching `ManagerVersion` in the assembler, before
+  packaging the app. Older Managers ignore the new header and would submit a
+  legacy record. If a different Manager tag is chosen, update the pin together.
 
 - To reject a submission, just close its PR.
 - To remove a published result, delete its JSON file — the next catalog build
