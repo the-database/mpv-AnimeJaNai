@@ -32,8 +32,8 @@ Values below are the current ones; read the file for truth.
 
 | Constant | Current | Source of the value |
 |---|---|---|
-| `AjiVersion` | `v0.17.1` | `the-database/animejanai-inference` release tag |
-| `RifeModelsVersion` | `models-rife-fp16-1` | an animejanai-inference release tag (fp16 conversions) |
+| `AjiVersion` | `v0.19.0` | `the-database/animejanai-inference` release tag |
+| `RifeModelsVersion` | `models-rife-fp16-2` | an animejanai-inference release tag (fp16 conversions) |
 | `MpvForkVersion` | `2026-10-24-b4f9f5bfed` | `the-database/mpv-winbuild` release tag |
 | `MpvForkBuildDate` | `20261024` | the date **inside the archive filename** |
 | `MpvForkGitHash` | `b4f9f5bfed` | the short hash **inside the archive filename** |
