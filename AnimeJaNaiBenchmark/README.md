@@ -23,8 +23,12 @@ renderer then fits that image to the screen. A 2560×1440 display and a
 lists this target and compares native-display results at the same resolution.
 Refresh rate is recorded when mpv reports it; it is not the FPS cap.
 
-`--mode pipeline` measures decode + upscale with `vo=null`, omitting display
-rendering. These scores have no output display and are listed separately.
+`--mode pipeline` measures decode + upscale with
+`vo=null --vo-null-accept-hwframes=yes`, omitting display rendering and keeping
+the output on the GPU. The bundled player must support this option. The runner
+rejects a downloaded CPU output frame; ordinary `vo=null` can otherwise copy
+every output plane to RAM before discarding it. These scores have no output
+display and are listed separately.
 Renderer settings, backend, power limits, and hardware still affect results
 within either category. These bundled synthetic clips provide a repeatable
 workload; they do not represent every real video.
