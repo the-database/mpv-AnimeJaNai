@@ -1,0 +1,31 @@
+name: Benchmark regression checks
+on:
+  pull_request:
+    paths:
+      - "AnimeJaNaiBenchmark/**"
+      - "BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/benchmarks/**"
+      - "benchmark-proxy/**"
+      - "scripts/build-benchmarks.mjs"
+      - "site/**"
+      - "tests/BenchmarkTiming/**"
+      - "tests/benchmark-catalog.test.mjs"
+      - ".github/workflows/benchmark-tests.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: dotnet run --project tests/BenchmarkTiming -c Release
+      - run: node --test tests/benchmark-catalog.test.mjs
