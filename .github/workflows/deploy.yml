@@ -77,7 +77,7 @@ jobs:
     - name: Build setup installer
       shell: pwsh
       run: |
-        choco install innosetup --version=6.7.3 -y
+        choco install innosetup -y
         $ver = "${{ github.event.inputs.release_version }}"
         $addonFlags = @()
         if ('${{ inputs.addons }}' -eq 'true') { $addonFlags += '/DEnableAddons' }

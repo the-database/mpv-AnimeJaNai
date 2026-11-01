@@ -7,6 +7,31 @@ internal static partial class Checks
 {
     private static async Task UpdateChecks()
     {
+        await Test("Normal updates remove addon support, retain user data, and can roll back an interruption", async () =>
+        {
+            string source = Area(), target = Area();
+            Directory.CreateDirectory(Path.Combine(target, "addon-host/runtime"));
+            Directory.CreateDirectory(Path.Combine(target, "animejanai/addons"));
+            string data = Path.Combine(target, "animejanai/addons/saved.json");
+            File.WriteAllText(data, "keep");
+            File.WriteAllText(Path.Combine(target, "addon-host/runtime/wasmtime.exe"), "runtime");
+            File.WriteAllText(Path.Combine(target, "addon-package.json"), "old inventory");
+            File.WriteAllText(Path.Combine(target, "player.bin"), "old");
+            File.WriteAllText(Path.Combine(source, "player.bin"), "new");
+            File.WriteAllText(Path.Combine(target, "unchanged.bin"), "same");
+            File.WriteAllText(Path.Combine(source, "unchanged.bin"), "same");
+            File.SetLastWriteTimeUtc(Path.Combine(target, "unchanged.bin"), new DateTime(2020, 1, 1));
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), afterPublish: n =>
+                { if (n == 2) throw new IOException("Interrupted downgrade"); }); }
+            catch (IOException error) when (error.Message == "Interrupted downgrade") { }
+            True(InstallationActivity.Pending(target));
+            await AddonUpdateTransaction.RecoverAsync(target);
+            True(File.Exists(Path.Combine(target, "addon-host/runtime/wasmtime.exe")) && File.ReadAllText(Path.Combine(target, "player.bin")) == "old");
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(!Directory.Exists(Path.Combine(target, "addon-host")) && !File.Exists(Path.Combine(target, "addon-package.json")));
+            True(File.ReadAllText(data) == "keep" && File.ReadAllText(Path.Combine(target, "player.bin")) == "new");
+            True(File.GetLastWriteTimeUtc(Path.Combine(target, "unchanged.bin")).Year == 2020);
+        });
         await Test("Component removal recovers its files and installed-state record together", async () =>
         {
             string source = Area(), target = Area();

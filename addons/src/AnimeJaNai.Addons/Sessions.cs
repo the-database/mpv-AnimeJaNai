@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using System.Threading.Channels;
 
 namespace AnimeJaNai.Addons;
 
@@ -348,26 +347,3 @@ public sealed class SessionRegistry(IProcessingSessionProvider provider, int tot
     }
 }
 
-// Queue behavior for a future native frame producer. This is not a GPU capture
-// implementation. It owns immutable copies and never waits for a slow consumer.
-public sealed record FrameSample(string SessionId, long PresentationMicroseconds, int Width, int Height, ReadOnlyMemory<byte> Rgba8);
-
-public sealed class LatestFrameQueue
-{
-    private readonly Channel<FrameSample> channel = Channel.CreateBounded<FrameSample>(new BoundedChannelOptions(1)
-    {
-        FullMode = BoundedChannelFullMode.DropOldest,
-        SingleWriter = false,
-        SingleReader = true,
-        AllowSynchronousContinuations = false,
-    });
-
-    public bool Publish(string sessionId, long presentationMicroseconds, int width, int height, ReadOnlySpan<byte> rgba)
-    {
-        Contract.Require(width > 0 && height > 0 && width <= 320 && height <= 180 && rgba.Length == width * height * 4,
-            "invalid_frame", "Invalid sample dimensions or payload.");
-        return channel.Writer.TryWrite(new(sessionId, presentationMicroseconds, width, height, rgba.ToArray()));
-    }
-    public ValueTask<FrameSample> ReadAsync(CancellationToken cancellationToken) => channel.Reader.ReadAsync(cancellationToken);
-    public void Complete() => channel.Writer.TryComplete();
-}

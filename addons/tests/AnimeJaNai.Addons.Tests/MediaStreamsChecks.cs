@@ -84,8 +84,10 @@ internal static partial class Checks
             StreamCache.Recover(area); True(!Directory.Exists(orphan) && Directory.Exists(live.Directory));
             Directory.CreateDirectory(orphan); File.WriteAllText(Path.Combine(orphan, ".owner"), "");
             string unexpected = Path.Combine(orphan, "personal.txt"); File.WriteAllText(unexpected, "keep");
-            await Error("invalid_stream_cache", () => StreamCache.Recover(area));
-            True(File.ReadAllText(unexpected) == "keep" && File.Exists(Path.Combine(orphan, ".owner")));
+            StreamCache.Recover(area);
+            string quarantine = Directory.GetDirectories(Path.Combine(area, "stream-cache"), "quarantine-*").Single();
+            True(!Directory.Exists(orphan) && File.ReadAllText(Path.Combine(quarantine, "personal.txt")) == "keep");
+            await using var next = StreamCache.Create(area, 0);
         });
     }
     private sealed class StreamFixtureProvider : IProcessingSessionProvider, IMediaStreamProvider, IProcessingSelectionProvider

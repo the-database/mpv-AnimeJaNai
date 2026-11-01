@@ -19,6 +19,13 @@ try
     {
         case "serve" when args.Length is >= 3 and <= 5:
         {
+            // This process outlives Manager. Own its log instead of writing to
+            // pipes whose readers disappear when Manager closes.
+            string logPath = Path.Combine(SafeFiles.DirectoryPath(Path.GetFullPath(args[1]), "diagnostics"), "host.log");
+            SafeFiles.CheckParents(logPath);
+            var hostLog = new StreamWriter(new FileStream(logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
+            Console.SetError(TextWriter.Synchronized(hostLog));
+            Console.SetOut(TextWriter.Null);
             WorkerBridge.VerifyRuntime(args[2]);
             MediaSelections? media = args.Length >= 4 ? new(args[1]) : null;
             int capacity = 2;

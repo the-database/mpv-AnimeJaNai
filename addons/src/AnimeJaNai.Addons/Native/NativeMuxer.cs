@@ -43,9 +43,12 @@ internal sealed class NativeMuxer : IDisposable
         try
         {
             token.ThrowIfCancellationRequested();
+            if (url.StartsWith("ajn-cache:", StringComparison.Ordinal)) url = url[10..];
             string full = Path.GetFullPath(url, directory), name = Path.GetFileName(full);
             Contract.Require(Path.GetDirectoryName(full)!.Equals(directory, StringComparison.OrdinalIgnoreCase) && AllowedFile(name) && files.Count < 16,
                 "invalid_stream_resource", "Native muxer requested an unexpected output object.");
+            SafeFiles.CheckParents(full);
+            if (name == "index.m3u8") full += ".tmp";
             SafeFiles.CheckParents(full);
             Contract.Require(!files.Values.Any(f => f.Name.Equals(full, StringComparison.OrdinalIgnoreCase)), "native_mux_failed", "Output object already has a writer.");
             Measure();
@@ -143,6 +146,8 @@ internal sealed class NativeMuxer : IDisposable
             if (files.Remove(handle, out var file))
             {
                 string path = file.Name; file.Dispose();
+                if (Path.GetFileName(path) == "index.m3u8.tmp" && failure is null && !token.IsCancellationRequested)
+                    File.Move(path, Path.Combine(directory, "index.m3u8"), overwrite: true);
                 if (runtimeRoot is not null && failure is null && !token.IsCancellationRequested &&
                     (Regex.IsMatch(Path.GetFileName(path), @"\Apart_[0-9]{8}\.(?:mkv|m4s|ts)(?:\.tmp)?\z") || Path.GetFileName(path) is "continuous.mkv" or "continuous.mp4" or "continuous.ts"))
                     InspectCompleted(path);

@@ -136,6 +136,7 @@ public sealed class ManagementServer(string root, AddonService service, string? 
                         }
                     }
                     catch (AddonException error) { response = JsonRpc.Error(id, error.Code, error.Message); }
+                    catch (System.Text.Json.JsonException) { response = JsonRpc.Error(id, "invalid_request", "Management parameters have an invalid JSON type or value."); }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or OperationCanceledException)
                     { response = JsonRpc.Error(id, "host_error", "The host could not complete this operation: " + error.Message[..Math.Min(error.Message.Length, 1024)]); }
                     try { await channel.WriteAsync(response, cancellationToken); }

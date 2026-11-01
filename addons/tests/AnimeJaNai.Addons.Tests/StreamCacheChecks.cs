@@ -12,6 +12,20 @@ internal static partial class Checks
     }
     private static async Task StreamCacheChecks()
     {
+        await Test("Stream cache deletion failure releases capacity and recovery quarantines unexpected files", async () =>
+        {
+            string area = Area();
+            var cache = StreamCache.Create(area, 0);
+            string unexpected = Path.Combine(cache.Directory, "driver.log");
+            File.WriteAllText(unexpected, "keep");
+            await Error("invalid_stream_cache", async () => await cache.DisposeAsync());
+            StreamCache.Recover(area);
+            string quarantine = Directory.GetDirectories(Path.Combine(area, "stream-cache"), "quarantine-*").Single();
+            True(File.ReadAllText(Path.Combine(quarantine, "driver.log")) == "keep");
+            var available = new List<StreamCache>();
+            try { for (int i = 0; i < 4; i++) available.Add(StreamCache.Create(area, 0)); }
+            finally { foreach (var item in available) await item.DisposeAsync(); }
+        });
         await Test("Stream metadata gates publication, reports encoded timestamps and expires with its object", async () =>
         {
             await using var cache = StreamCache.Create(Area(), 12);

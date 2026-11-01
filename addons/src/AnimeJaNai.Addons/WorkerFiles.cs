@@ -11,6 +11,19 @@ internal static class WorkerFiles
         // Relocated workers use a stable directory specific to this data root.
         // The same exclusive host lease therefore protects both locations.
         if (OperatingSystem.IsWindows()) RecoverRoot(WorkerBridge.ShortWorkRoot(root));
+        string media = Path.Combine(Path.GetFullPath(dataRoot), "media-workers");
+        foreach (string mediaRoot in new[] { media, WorkerBridge.ShortWorkRoot(media) }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            SafeFiles.CheckParents(mediaRoot);
+            if (!Directory.Exists(mediaRoot)) continue;
+            foreach (string directory in Directory.EnumerateDirectories(mediaRoot, "media-*").Take(256))
+            {
+                if (!Guid.TryParseExact(Path.GetFileName(directory)[6..], "N", out _)) continue;
+                try { Native.MediaProcess.RemoveFilesAsync(mediaRoot, directory).GetAwaiter().GetResult(); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or AddonException)
+                { Console.Error.WriteLine($"Media worker recovery deferred: {error}"); }
+            }
+        }
     }
 
     private static void RecoverRoot(string root)
