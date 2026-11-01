@@ -86,6 +86,8 @@ Copy-Item -LiteralPath (Join-Path $addonRoot 'PLAYER-ANALYSIS.md') -Destination 
 Copy-Item -LiteralPath (Join-Path $addonRoot 'PLAYER-ANALYSIS-VALIDATION.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING-READINESS.md') -Destination $outputRoot
 Copy-Item -LiteralPath (Join-Path $addonRoot 'STREAMING-VALIDATION.md') -Destination $outputRoot
+Copy-Item -LiteralPath (Join-Path $addonRoot 'REVIEW-GUIDE.md') -Destination $outputRoot
+Copy-Item -LiteralPath (Join-Path $addonRoot 'review') -Destination $outputRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/run-example.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/test-tutorial.ps1') -Destination (Join-Path $outputRoot 'tools')
 Copy-Item -LiteralPath (Join-Path $addonRoot 'tools/render-docs.ps1') -Destination (Join-Path $outputRoot 'tools')

@@ -13,6 +13,7 @@ not contain these additions.
 
 | Your goal | Guide |
 | --- | --- |
+| Review the complete implementation across repositories | [Maintainer review guide](REVIEW-GUIDE.md) — code map, dependencies, trust boundaries, overhead and qualification |
 | Develop an addon using one self-contained release document | [Complete addon developer guide](DEVELOPER-GUIDE.md) — setup, tutorial, contracts, SDK declarations and complete examples |
 | Install, use or troubleshoot an addon | [User guide](USER-GUIDE.md) |
 | Make your first addon | [Creator tutorial](CREATOR-GUIDE.md) — build, permissions, saved data, settings, update and rollback |
@@ -29,7 +30,7 @@ local support automatically; there is no manual connection step.
 
 ## Implementation status
 
-This working preview combines lifecycle, declarative settings/actions, JSON-RPC and developer replay with an enforced Wasm sandbox. The coordinated `integration/addons` branches build on current upstream, including the merged 3.6.1 fixes. The original feature branches and sealed previews remain historical snapshots.
+This API 1.12 preview combines lifecycle, declarative settings/actions, JSON-RPC and developer replay with an enforced Wasm sandbox. The tested integrated package is based on AJN 3.9.0. The review branches and their dependencies are identified in the [maintainer guide](REVIEW-GUIDE.md); original feature branches and sealed previews remain historical snapshots.
 
 **Working now:** compile a JavaScript addon, inspect/install an unsigned development package with explicit permissions, run it in an isolated worker, save private addon data, change typed settings, invoke declared actions, replay events, restore the previous package, and disable its registration. A persistent per-user host and the companion Manager Addons tab share one activation controller per addon. Tests cover library behavior, real Windows workers, the private management connection, and rendered Manager controls.
 
@@ -47,9 +48,9 @@ This working preview combines lifecycle, declarative settings/actions, JSON-RPC 
 
 **Normal-player samples now work:** separately approved observers can read small processed SDR images from ordinary mpv and mpv.net playback. Multiple addons share one producer per player, with independent sample sizes and rates. Tests cover actual Wasm, two players, seeking, independent unsubscribe and host termination while playback continues. See [PLAYER-FRAMES.md](PLAYER-FRAMES.md) and the generic player inspector.
 
-**Remaining integration:** API 1.7 native qualification and release packaging, discovery, unrestricted transport APIs, final-display/HDR/TensorRT samples, website catalog/signatures, automatic updates, and Linux enforcement. Neither the Plex addon nor the lighting addon is implemented here.
+**Remaining integration:** broader hardware and client qualification, device discovery, final-display/HDR samples, website catalog/signatures, automatic community-addon updates, and Linux enforcement. CUDA source colors and character masks are implemented in API 1.12; see their exact limits in [PLAYER-ANALYSIS.md](PLAYER-ANALYSIS.md). Neither the Plex addon nor the lighting addon is implemented here.
 
-API 1.8 is a **preview contract**, not a frozen public compatibility promise. Existing 1.0–1.7 calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
+API 1.12 is a **preview contract**, not a frozen public compatibility promise. Earlier API 1.x calls remain supported. See [API.md](API.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [ROADMAP.md](ROADMAP.md).
 
 ## Try it on Windows x64
 
