@@ -4,7 +4,7 @@ This is the entry point for reviewing the complete Windows addon implementation 
 
 ## Repository map and review order
 
-The companion pull requests and their source branches are linked from the main PR description. Review the complete set before publishing an addon-enabled package. The mpv submission uses a single linear commit with the same source tree as the reviewed integration, to satisfy that repository's commit-history checks.
+The companion pull requests and their source branches are linked from the main PR description. Review the complete set before publishing an addon-enabled package. The mpv submission squashes the integration into linear history to satisfy that repository's commit-history checks. Its subsequent vendor comment/whitespace cleanup does not change runtime behavior.
 
 | Repository | Responsibility | Start reading |
 | --- | --- | --- |
