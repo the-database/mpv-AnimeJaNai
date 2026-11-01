@@ -123,7 +123,7 @@ internal static class NativeSceneChecks
                 int count = reattached["acceptedPairs"]!.GetValue<int>();
                 await player.CommandAsync("vf-command", "aji", "slot", slot.ToString());
                 reattached = await State(s => s["acceptedPairs"]!.GetValue<int>() >= count + 8 &&
-                    Pair(s)["sourceWidth"]?.GetValue<int>() == (slot == 2 ? 960 : slot == 4 ? 240 : 480));
+                    Pair(s)["sourceWidth"]?.GetValue<int>() == 480);
                 evidence.Add(new() { ["rifeBeforeUpscale"] = slot != 2,
                     ["resizeBeforeUpscalePercent"] = slot == 4 ? 50 : 100, ["status"] = reattached.DeepClone() });
             }

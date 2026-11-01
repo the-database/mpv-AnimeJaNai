@@ -16,7 +16,7 @@ new discontinuity from sustained effects or a fade. Weak cut candidates also
 require distinct moving image features, so a pan or zoom is not mistaken for
 an edit. Appearance samples are bounded to 240x135 and feature thumbnails to
 120x68, normalized across integer bit depths. The existing readback is reused;
-no lookahead or fixed quiet-shot warmup is added. History resets on seeks,
+the classifier adds no extra lookahead beyond the bridge's bounded source queue and no fixed quiet-shot warmup. History resets on seeks,
 discontinuities and format changes. This heuristic does not guarantee correct
 classification on every video. The separate `mvtools` algorithm is unchanged.
 
@@ -32,7 +32,7 @@ player and optional detector library. Attach with
 analysis core. Thresholds are integers in 0..16320 and 0..255 respectively.
 The original `custom` algorithm remains the default for existing callers.
 
-Native mode operates on full-resolution planar YUV/gray in the trusted player.
+Native mode operates on the original decoded resolution as planar YUV/gray in the trusted player's optional worker, before upscale or RIFE resizing.
 It does not deliver `scene.request` events or samples to the addon; `read` returns
 null and `submit` is not accepted for this mode. Sample dimensions and the guest
 deadline apply only to `custom`. Ownership, leases, revocation and fallback to
@@ -146,13 +146,20 @@ Missing/invalid decisions use AJN's detector. Three consecutive missed deadlines
 suspend the attachment until detach/attach. An independent three-second host
 lease expires if the player's lifecycle connection stops renewing it.
 
-Without a detector there is no scene sampling/wait. With one, the implementation
-downloads each new hardware frame, reduces it on the CPU, copies a pair to Wasm
-and waits for its answer. This is not zero-copy; the deadline does **not** bound
-GPU download/resize time. Benchmark the intended GPU, source FPS, resolution
-and RIFE order. Reduce sample size/work before increasing deadlines, which can
-cause stutter. Small samples may not preserve every cue a full-resolution
-MVTools algorithm uses; detector accuracy requires separate evaluation.
+Without a detector there is no scene sampling, additional look-ahead or worker.
+With one, a bounded background worker analyzes original decoded source frames,
+up to two frames ahead of interpolation. Native MVTools uses source-resolution
+planes; custom Wasm uses the reduced samples. Upscaling and RIFE order do not
+change this analysis stage. Only completed results with the exact pair timestamps,
+configuration and seek epoch are consumed. A missing or late result uses AJN's
+built-in detector immediately; playback never waits for the guest deadline.
+
+Downloads, reduction, native analysis and guest waits occur on this optional
+worker. These are not zero-copy operations and can use GPU bandwidth and CPU.
+The queue retains at most three pending pairs and never grows for a slow addon.
+The first pair after startup/seek and any overloaded pairs can use the built-in
+detector. `deadlineMs` limits guest response validity, not player waiting time.
+Benchmark accuracy and accepted-pair coverage on the intended hardware.
 
 Existing worker limits apply: 500 broker calls/second, 128/event, 16 MiB/second
 of binary frame transport, a two-second outer event deadline, and Wasm memory

@@ -4,7 +4,7 @@ This is the entry point for reviewing the complete Windows addon implementation 
 
 ## Repository map and review order
 
-The companion pull requests and their source branches are linked from the main PR description. Review the complete set before publishing an addon-enabled package. The mpv submission squashes the integration into linear history to satisfy that repository's commit-history checks. Its subsequent vendor comment/whitespace cleanup does not change runtime behavior.
+The companion pull requests and their source branches are linked from the main PR description. Review the complete set before publishing an addon-enabled package. The mpv submission uses linear history and includes current upstream changes. Review follow-ups change runtime behavior; use the source-specific validation linked from the PRs.
 
 | Repository | Responsibility | Start reading |
 | --- | --- | --- |
@@ -64,19 +64,19 @@ The public addon API, application release, per-capability version and private na
 
 Keep `addons/tests/fixtures/counter-api-1.0.ajnaddon` unchanged when testing old binaries. Native DLL additions are additive to AJI ABI 9 and discovered separately. Private native maps/callbacks are implementation contracts, not addon-facing pointer or DLL access.
 
-Installations retain current/previous package and grant state independently from saved settings/data. Permission expansion requires review. The updater validates a coherent addon inventory, drains the installation's owned work, and journals replacement/recovery. It rejects updates that silently drop addon support. Preview component downloads are pinned to the corresponding public component release; do not reuse that pin if runtime/model dependencies change.
+Installations retain current/previous package and grant state independently from saved settings/data. Permission expansion requires review. The updater validates a coherent addon inventory, drains the installation's owned work, and journals replacement/recovery. A normal non-addon release is allowed: it preserves `animejanai/addons`, removes addon host/bridge files, and leaves addons inactive until an addon-enabled build is installed again. Only changed files are staged/backed up, after a free-space check. Preview component downloads are pinned to the corresponding public component release; replaced native/Manager/inference components record their actual source revisions.
 
 ## What the evidence establishes
 
-The tested 3.9.0 package SHA256 is `d9115714bd61fde974e0c92a9ad5d619b1a88c9068e7fee99deda6ee80b90608`. Its sources and published build links are recorded in [review/qualification-3.9.0.json](review/qualification-3.9.0.json). The review branches add documentation and reconcile inference with newer upstream source; the frozen package is not silently relabeled as a build of the PR heads.
+Use the validation record linked from the coordinated PR descriptions. Each record
+identifies its exact source commits, runtime, hardware and limitations; a previous
+preview pass is not a test of a newer PR head. Dated GPU-machine results are kept
+as review/build artifacts rather than maintained source files.
 
-The 3.9.0 qualification passed real mpv/mpv.net source analysis, seeks, shared observers and cleanup; Manager configuration, diagnostics and UI; RIFE addon decisions; continuous/segmented native output; and known-pixel stacked temporal inference on DirectML and classic TensorRT. The inactive sample had no analysis DLL/filter and no extra dropped frames. These are bounded Windows/RTX 5090 checks, not all-hardware or sustained-performance certification.
-
-The earlier 195 host checks, API 1.0 binary compatibility and long-path engine creation/reuse are retained baseline evidence, not claimed as rerun for this PR. The long-path check used a 359-character lock path and two fresh mpv.net processes. Older streaming reports are historical and identify their own revisions and limitations.
-
-The [November 1 focused verification](review/verification-2026-11-01.json) records the current-upstream inference build and real-player source-analysis pass. Both DirectML and classic TensorRT produced eight independently decoded 4K segments. **One failure remains:** the intentionally broken-model case reached `ai_filter_failed` with no encoded output and released native capacity, but stayed at `cleanupFailed` instead of finishing cleanup. Its cause is unresolved. The full streaming-policy suite is therefore not green; review and resolve that failure before release. This does not relabel the frozen October 29 checks as results for the new runtime.
-
-The inference PR additionally resolves current upstream's TensorRT-RTX dispatcher/async-builder changes. Ordinary playback keeps upstream's fallback behavior. Cached-only addon requests verify policy support before backend creation and do not fall back to another backend. TensorRT-RTX reports this policy unsupported pending separate qualification. The inference PR description records the new build and focused tests; these do not replace the broader frozen-package record.
+The Windows addon host is the first implementation. Linux keeps ordinary AJN
+playback and builds without the optional observation module. Manager hides the
+Addons tab there. A future Linux host must implement equivalent isolation before
+enabling these capabilities.
 
 ## Reproducing the relevant checks
 

@@ -887,12 +887,26 @@ void WriteVersionAndManifest()
     var version = args[0];
     File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
     string? addonMpvRevision = null;
+    string? addonManagerRevision = null, addonAjiRevision = null;
     if (includeAddons)
     {
         using var native = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-host", "native-capabilities.json")));
         addonMpvRevision = native.RootElement.GetProperty("sources").GetProperty("mpv").GetString();
         if (addonMpvRevision is null || !System.Text.RegularExpressions.Regex.IsMatch(addonMpvRevision, "^[0-9a-f]{40}$"))
             throw new InvalidDataException("The addon bundle does not identify its native player revision.");
+        using var inventory = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-package.json")));
+        var sources = inventory.RootElement.GetProperty("sources");
+        string Revision(string name)
+        {
+            string? value = sources.GetProperty(name).GetString();
+            if (value is null || !System.Text.RegularExpressions.Regex.IsMatch(value, "^[0-9a-f]{40}$"))
+                throw new InvalidDataException("The addon bundle lacks a source revision for " + name);
+            return value;
+        }
+        if (Revision("mpv") != addonMpvRevision) throw new InvalidDataException("Addon native source inventories disagree.");
+        addonManagerRevision = Revision("manager");
+        if (inventory.RootElement.GetProperty("files").EnumerateObject().Any(p => p.Name.StartsWith("animejanai/inference/", StringComparison.Ordinal)))
+            addonAjiRevision = Revision("inference");
     }
 
     // Platform-specific managed program files for the overlay update. aji and
@@ -938,6 +952,8 @@ void WriteVersionAndManifest()
             mpvfork = includeAddons ? "source:" + addonMpvRevision : plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
                                      : $"{MpvForkLinuxVersion}",
             inference_runtime = $"trt-{TrtVersion}",
+            aji = addonAjiRevision is null ? AjiVersion : "source:" + addonAjiRevision,
+            manager = addonManagerRevision is null ? ManagerVersion : "source:" + addonManagerRevision,
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,
             sevenzip = SevenZipVersion,
             rife = RifeModelsVersion,

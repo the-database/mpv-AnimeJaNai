@@ -88,6 +88,9 @@ internal sealed class StreamCache : IAsyncDisposable
                         // the stream-* recovery set; never delete unknown files.
                         string quarantine = Path.Combine(candidateRoot, "quarantine-" + Guid.NewGuid().ToString("N"));
                         SafeFiles.CheckParents(quarantine);
+                        // Windows refuses directory rename while a descendant
+                        // handle is open, even when that file shares deletion.
+                        owner.Dispose();
                         System.IO.Directory.Move(path, quarantine);
                         Console.Error.WriteLine($"Quarantined unexpected stream cache: {quarantine}");
                     }

@@ -1413,7 +1413,11 @@ automatic public reachability test in this preview.
 
 Review CORS explicitly if a browser client needs it. Use exact allowed origins;
 credentialed wildcard CORS is not supported. CORS controls browser access and
-does not authenticate native clients. Sensitive header/query names are reviewed
+does not authenticate clients. Every listener addon must authenticate and authorize
+requests before exposing private data or performing actions, including loopback
+listeners. A request without an Origin header is not trusted: ordinary browser
+navigation or image requests can omit it. Host allowlists and CORS do not replace
+caller authentication. Sensitive header/query names are reviewed
 with the listener and redacted before request metadata reaches the guest.
 
 ### HTTP request lifecycle
@@ -1635,7 +1639,7 @@ updated demand lets that packet fit within the window. `pause(id,
 true)` is a separate user pause; `pause(id, false)` resumes the same generation.
 Periodic demand/pause ownership updates are needed during a long intentional pause.
 
-Limits: four retained caches per addon and host, 2 GiB each (8 GiB reserved total),
+Limits: two retained caches per addon, four per host, 2 GiB each (8 GiB reserved total),
 16 readers per stream, two-minute segment-reader lifetime, 15-second I/O deadline,
 24-hour absolute lifetime. Segments more than 30 seconds behind demand expire
 only when no reader holds them. Continuous output retains its beginning and can
@@ -1738,7 +1742,7 @@ serving already-extracted protected text.
 
 Use the generic `http-inspector`, `http-bridge`, and `media-stream` examples as
 starting points. The media example deliberately accepts local clients only; a
-public service addon must add client authentication, authorization, session policy,
+service addon must authenticate and authorize every client request, including loopback and no-Origin requests, and add session policy,
 protocol-specific manifests and deployment instructions. Those are addon decisions.
 Never put tokens, full media paths, signed URLs or incoming headers in diagnostic
 messages. The host's default diagnostics avoid those values.
@@ -3668,13 +3672,20 @@ Missing/invalid decisions use AJN's detector. Three consecutive missed deadlines
 suspend the attachment until detach/attach. An independent three-second host
 lease expires if the player's lifecycle connection stops renewing it.
 
-Without a detector there is no scene sampling/wait. With one, the implementation
-downloads each new hardware frame, reduces it on the CPU, copies a pair to Wasm
-and waits for its answer. This is not zero-copy; the deadline does **not** bound
-GPU download/resize time. Benchmark the intended GPU, source FPS, resolution
-and RIFE order. Reduce sample size/work before increasing deadlines, which can
-cause stutter. Small samples may not preserve every cue a full-resolution
-MVTools algorithm uses; detector accuracy requires separate evaluation.
+Without a detector there is no scene sampling, additional look-ahead or worker.
+With one, a bounded background worker analyzes original decoded source frames,
+up to two frames ahead of interpolation. Native MVTools uses source-resolution
+planes; custom Wasm uses the reduced samples. Upscaling and RIFE order do not
+change this analysis stage. Only completed results with the exact pair timestamps,
+configuration and seek epoch are consumed. A missing or late result uses AJN's
+built-in detector immediately; playback never waits for the guest deadline.
+
+Downloads, reduction, native analysis and guest waits occur on this optional
+worker. These are not zero-copy operations and can use GPU bandwidth and CPU.
+The queue retains at most three pending pairs and never grows for a slow addon.
+The first pair after startup/seek and any overloaded pairs can use the built-in
+detector. `deadlineMs` limits guest response validity, not player waiting time.
+Benchmark accuracy and accepted-pair coverage on the intended hardware.
 
 Existing worker limits apply: 500 broker calls/second, 128/event, 16 MiB/second
 of binary frame transport, a two-second outer event deadline, and Wasm memory
@@ -3927,7 +3938,7 @@ function pollCheck(ajn) {
 // and then open the stream. The same requestClose cancels a running build.
 ```
 
-Check/preparation handles count toward the existing four retained handles. They
+Check/preparation handles count toward the two retained handles per addon and four across the host. They
 release native admission on completion but must still be closed. Preparation is
 bounded to 20 minutes. Only one TensorRT preparation can own the host's engine
 cache at a time; TensorRT sessions and preparation cannot overlap in that host.
@@ -4142,7 +4153,7 @@ Color-only source observations use `playerFrames.subscribe(playerId, {stage:"sou
 
 Subscribe returns promptly. Poll status: `provisioningModel`, `loading`, `buildingEngine`, `waitingForFrame`, `processing`, `ready`, `unsupportedFormat`, `modelMissing`, `failed` or `closed`. First use downloads the approved 176 MB ONNX and builds a local TensorRT engine. This can take minutes. It is not a Wasm callback and holds no decoder image while setting up. Failed setup does not become an all-background mask. `read()` returns null for no new completed observation; unsupported input/native failure raises an explicit error. The inspection example returns that error in its action result.
 
-The host verifies SHA256 `f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99` for [SkyTNT's isnetis.onnx](https://huggingface.co/skytnt/anime-seg/blob/main/isnetis.onnx). It is provisioned under the installation's `animejanai/analysis` directory. The engine cache includes the model hash, TensorRT version, GPU UUID and driver version. Do not redistribute engine files between machines. Setup errors are exposed through status; native engine errors are also reported in the player log. Correct the missing runtime/model problem and unsubscribe/re-subscribe to retry.
+The host verifies SHA256 `f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99` for [SkyTNT's isnetis.onnx](https://huggingface.co/skytnt/anime-seg/blob/main/isnetis.onnx). It is provisioned under the installation's `animejanai/analysis` directory. The `.analysisengine` cache includes the hash of the actual model bytes, TensorRT version, GPU UUID and driver version. It is separate from upscaler `.engine` cleanup. Cache-lock acquisition is cancellable and stops after ten minutes if another builder does not release it. Do not redistribute engine files between machines. Setup errors are exposed through status; native engine errors are also reported in the player log. Correct the missing runtime/model problem and unsubscribe/re-subscribe to retry.
 
 ## Identity, preprocessing and color
 

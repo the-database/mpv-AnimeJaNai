@@ -291,7 +291,7 @@ public static class AddonUpdateTransaction
                 foreach (var entry in journal.Files.Reverse())
                 {
                     string destination = Child(root, entry.Path);
-                    if (!entry.Existed) { File.Delete(destination); continue; }
+                    if (!entry.Existed) { if (File.Exists(destination)) File.Delete(destination); continue; }
                     string replacement = destination + ".ajn-restore";
                     File.Copy(Child(transaction, "backup/" + entry.Path), replacement, true);
                     if (destination.Equals(Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) && File.Exists(destination))

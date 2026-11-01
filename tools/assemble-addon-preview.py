@@ -287,6 +287,7 @@ def assemble(args):
         manifest.setdefault("overlay_paths", []).extend(["addon-host", "addon-development", "addon-package.json", "build-info"])
         manifest.setdefault("deps", {})["addon_native"] = sha(output / "addon-host/native-capabilities.json")
         manifest["deps"]["mpvfork"] = "source:" + sources["mpv"]
+        manifest["deps"]["manager"] = "source:" + sources["manager"]
         if inference_record is not None:
             manifest["deps"]["aji"] = "source:" + sources["inference"]
         write(output / "manifest.json", manifest)

@@ -559,6 +559,30 @@ internal static partial class Checks
 
     private static async Task ManagementChecks()
     {
+        await Test("Malformed listener arrays return invalid_request without disconnecting manager activations", async () =>
+        {
+            string directory = Area();
+            var package = AddonPackage.Create(SettingsManifest() with { Permissions = ["network.listen"] }, EmptyModule);
+            new AddonRegistry(directory).Install(package, ["network.listen"]);
+            var service = new AddonService(directory, (_, _, _, _) => Task.FromResult<IAddonInstance>(new FakeAddon()));
+            using var stop = new CancellationTokenSource();
+            var server = new ManagementServer(directory, service).RunAsync(stop.Token, exitWhenIdle: false);
+            try
+            {
+                await using var client = await ManagementClient.ConnectAsync(directory);
+                foreach (string key in new[] { "allowedHosts", "cors" })
+                {
+                    var request = new JsonObject { ["id"] = package.Manifest.Id, ["expectedHash"] = package.Hash,
+                        ["address"] = "127.0.0.1", ["port"] = 45000, ["sensitiveHeaders"] = new JsonArray(), ["sensitiveQuery"] = new JsonArray(),
+                        [key] = new JsonArray(42) };
+                    bool rejected = false;
+                    try { await client.CallAsync("listeners.inspect", request); }
+                    catch (ManagementException error) when (error.Code == "invalid_request") { rejected = true; }
+                    True(rejected && client.IsConnected && (await client.ListAsync())[0]!["running"]!.GetValue<bool>());
+                }
+            }
+            finally { stop.Cancel(); await server.WaitAsync(TimeSpan.FromSeconds(10)); }
+        });
         await Test("Restart cleans interrupted worker modules only under an exclusive lease", () =>
         {
             string directory = Area();

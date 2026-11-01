@@ -6,6 +6,20 @@ internal static partial class Checks
 {
     private static async Task MediaStreamsChecks()
     {
+        await Test("Stream per-addon admission leaves capacity for another addon", async () =>
+        {
+            var package = Package(permissions: ["sessions.manage", "media.input", "media.output"]);
+            var grant = new PermissionGrant(package, package.Manifest.Permissions);
+            var options = new StreamRequest(new("h264", "matroska", 1000), new(), true, 1);
+            await using var first = new Broker(package, grant, Area(), sessions: new SessionRegistry(new StreamFixtureProvider { SlowStart = true }));
+            await using var second = new Broker(package, grant, Area(), sessions: new SessionRegistry(new StreamFixtureProvider { SlowStart = true }));
+            True(first.MediaStreams!.Formats()["maximumStreams"]!.GetValue<int>() == 2);
+            True(first.MediaStreams.Formats()["maximumHostStreams"]!.GetValue<int>() == 4);
+            first.MediaStreams.Open(new("fixture", null), null, options);
+            first.MediaStreams.Open(new("fixture", null), null, options);
+            await Error("capacity_exceeded", () => first.MediaStreams.Open(new("fixture", null), null, options));
+            True(second.MediaStreams!.Open(new("fixture", null), null, options)["streamId"] is not null);
+        });
         await Test("Stream permissions are independent and handles remain private across workers and failure cleanup", async () =>
         {
             string[] permissions = ["sessions.manage", "media.input", "media.output"];

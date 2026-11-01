@@ -6,6 +6,17 @@ internal static partial class Checks
     private static async Task StartupPathChecks()
     {
         if (!OperatingSystem.IsWindows()) return;
+        await Test("Restart removes abandoned media profiles under the exclusive data lease", () =>
+        {
+            string data = Area();
+            string work = WorkerBridge.CreateWorkDirectory(Path.Combine(data, "media-workers"), "media");
+            string profile = Directory.CreateDirectory(Path.Combine(work, "profile/AppData/Local/driver")).FullName;
+            File.WriteAllText(Path.Combine(profile, "cache.bin"), "discard");
+            string diagnostic = Directory.CreateDirectory(Path.Combine(data, "media-workers/diagnostics")).FullName;
+            File.WriteAllText(Path.Combine(diagnostic, "keep.log"), "keep");
+            using var lease = new HostLease(data);
+            True(!Directory.Exists(work) && File.ReadAllText(Path.Combine(diagnostic, "keep.log")) == "keep");
+        });
         await Test("Restart recovers relocated worker modules without touching another data root", () =>
         {
             string deep = Area();

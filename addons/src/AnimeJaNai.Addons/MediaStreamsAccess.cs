@@ -7,6 +7,7 @@ namespace AnimeJaNai.Addons;
 internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProvider provider, string dataRoot,
     HttpServerAccess servers, RequestCredentials credentials) : IAsyncDisposable
 {
+    private const int MaximumStreams = 2;
     private readonly object sync = new();
     private readonly Dictionary<string, Item> streams = new(StringComparer.Ordinal);
     private bool disposed;
@@ -37,7 +38,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
         Demand(); return new()
         {
             ["modes"] = new JsonArray("segments", "continuous"), ["containers"] = new JsonArray("matroska", "mpegts", "fragmentedMp4"),
-            ["maximumStreams"] = 4, ["maximumHostStreams"] = 4, ["maximumCacheBytes"] = NativeMuxer.MaximumBytes,
+            ["maximumStreams"] = MaximumStreams, ["maximumHostStreams"] = 4, ["maximumCacheBytes"] = NativeMuxer.MaximumBytes,
             ["maximumHostCacheBytes"] = 8L << 30, ["maximumReaders"] = 16, ["segmentReaderSeconds"] = 120,
             ["ioTimeoutSeconds"] = 15, ["minimumSegmentSeconds"] = .5, ["maximumSegmentSeconds"] = 6,
             ["storagePressureSeconds"] = 15,
@@ -59,7 +60,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
             if (source.Remote is not null) grant.Demand("network.connect");
             Contract.Require((source.SourceId is null) != (source.Remote is null), "invalid_source", "Choose one approved stream source.");
             options.Validate();
-            Contract.Require(streams.Values.Count(i => !i.Closed) < 2, "capacity_exceeded", "Each addon can retain two streams. Close a stream before opening another.");
+            Contract.Require(streams.Values.Count(i => !i.Closed) < MaximumStreams, "capacity_exceeded", "Each addon can retain two streams. Close a stream before opening another.");
             RequestCredentials.Lease? credential = source.Remote?.CredentialId is string id ? credentials.Acquire(id, source.Remote.DestinationId) : null;
             RequestCredentials.Lease? subtitleCredential = null;
             StreamCache cache;
