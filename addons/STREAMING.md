@@ -63,7 +63,11 @@ automatic public reachability test in this preview.
 
 Review CORS explicitly if a browser client needs it. Use exact allowed origins;
 credentialed wildcard CORS is not supported. CORS controls browser access and
-does not authenticate native clients. Sensitive header/query names are reviewed
+does not authenticate clients. Every listener addon must authenticate and authorize
+requests before exposing private data or performing actions, including loopback
+listeners. A request without an Origin header is not trusted: ordinary browser
+navigation or image requests can omit it. Host allowlists and CORS do not replace
+caller authentication. Sensitive header/query names are reviewed
 with the listener and redacted before request metadata reaches the guest.
 
 ## HTTP request lifecycle
@@ -284,7 +288,7 @@ updated demand lets that packet fit within the window. `pause(id,
 true)` is a separate user pause; `pause(id, false)` resumes the same generation.
 Periodic demand/pause ownership updates are needed during a long intentional pause.
 
-Limits: four retained caches per addon and host, 2 GiB each (8 GiB reserved total),
+Limits: two retained caches per addon, four per host, 2 GiB each (8 GiB reserved total),
 16 readers per stream, two-minute segment-reader lifetime, 15-second I/O deadline,
 24-hour absolute lifetime. Segments more than 30 seconds behind demand expire
 only when no reader holds them. Continuous output retains its beginning and can
@@ -387,7 +391,7 @@ serving already-extracted protected text.
 
 Use the generic `http-inspector`, `http-bridge`, and `media-stream` examples as
 starting points. The media example deliberately accepts local clients only; a
-public service addon must add client authentication, authorization, session policy,
+service addon must authenticate and authorize every client request, including loopback and no-Origin requests, and add session policy,
 protocol-specific manifests and deployment instructions. Those are addon decisions.
 Never put tokens, full media paths, signed URLs or incoming headers in diagnostic
 messages. The host's default diagnostics avoid those values.

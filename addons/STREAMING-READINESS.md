@@ -126,7 +126,7 @@ function pollCheck(ajn) {
 // and then open the stream. The same requestClose cancels a running build.
 ```
 
-Check/preparation handles count toward the existing four retained handles. They
+Check/preparation handles count toward the two retained handles per addon and four across the host. They
 release native admission on completion but must still be closed. Preparation is
 bounded to 20 minutes. Only one TensorRT preparation can own the host's engine
 cache at a time; TensorRT sessions and preparation cannot overlap in that host.
