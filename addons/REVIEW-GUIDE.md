@@ -8,11 +8,11 @@ The companion pull requests and their source branches are linked from the main P
 
 | Repository | Responsibility | Start reading |
 | --- | --- | --- |
-| `mpv-AnimeJaNai` | Wasm host, SDK, grants, lifecycle, media services, updater/installer integration and documentation | This guide, [architecture](ARCHITECTURE.md), `addons/src/AnimeJaNai.Addons/Broker.cs`, `shared/AddonUpdateTransaction.cs` |
-| `AnimeJaNaiManager` | Addons UI, installation review, typed settings/actions, access selection, host startup and shutdown | `ADDONS.md`, `ADDON-API-REVIEW.md`, `AnimeJaNaiConfEditor/Views/AddonsView*`, `addon-sdk-source.json` |
-| `animejanai-inference` | Optional scene override, cached-engine streaming policy and separate CUDA analysis module | `docs/ADDON-API.md`, `include/aji.h`, `include/aji_analysis.h`, `src/aji_analysis.cpp` |
-| `mpv` | Trusted sampling/scene hooks and isolated media probe, encode, mux and subtitle plumbing | `DOCS/ajn-addon-integration.md`, `DOCS/ajn-sample-worker.md`, `etc/ajn-native-capabilities.json` |
-| `mpv-winbuild` | Native feature checks, optional addon artifact metadata, dependencies and reproducible source records | `test-build/README.md`, `test-build/ADDON-API-REVIEW.md`, native producer/staging tests |
+| [mpv-AnimeJaNai #227](https://github.com/the-database/mpv-AnimeJaNai/pull/227) | Wasm host, SDK, grants, lifecycle, media services, updater/installer integration and documentation | This guide, [architecture](ARCHITECTURE.md), `addons/src/AnimeJaNai.Addons/Broker.cs`, `shared/AddonUpdateTransaction.cs` |
+| [AnimeJaNaiManager #20](https://github.com/the-database/AnimeJaNaiManager/pull/20) | Addons UI, installation review, typed settings/actions, access selection, host startup and shutdown | `ADDONS.md`, `ADDON-API-REVIEW.md`, `AnimeJaNaiConfEditor/Views/AddonsView*`, `addon-sdk-source.json` |
+| [animejanai-inference #40](https://github.com/the-database/animejanai-inference/pull/40) | Optional scene override, cached-engine streaming policy and separate CUDA analysis module | `docs/ADDON-API.md`, `include/aji.h`, `include/aji_analysis.h`, `src/aji_analysis.cpp` |
+| [mpv #69](https://github.com/the-database/mpv/pull/69) | Trusted sampling/scene hooks and isolated media probe, encode, mux and subtitle plumbing | `DOCS/ajn-addon-integration.md`, `DOCS/ajn-sample-worker.md`, `etc/ajn-native-capabilities.json` |
+| [mpv-winbuild #8](https://github.com/the-database/mpv-winbuild/pull/8) | Native feature checks, optional addon artifact metadata, dependencies and reproducible source records | `test-build/README.md`, `test-build/ADDON-API-REVIEW.md`, native producer/staging tests |
 
 There is no new libass change in this set. The existing AJN libass features remain build requirements. Camera-pan smoothing, custom presentation synchronization, the separate refresh-scan fix and unrelated inference optimization PRs are not part of these addon diffs.
 
