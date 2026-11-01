@@ -129,7 +129,7 @@ try
                 if (windows) playerArgs.AddRange(new[] { "--process-instance=multi", "--auto-load-folder=no" });
                 // Match animejanai_backend.lua, disabled along with the other playback scripts.
                 if (d3d) playerArgs.Add("--gpu-api=d3d11");
-                if (mode == "pipeline") playerArgs.AddRange(new[] { "--vo=null", "--force-window=no" });
+                if (mode == "pipeline") playerArgs.AddRange(new[] { "--vo=null", "--vo-null-accept-hwframes=yes", "--force-window=no" });
                 else playerArgs.AddRange(new[] { "--vo=gpu-next", "--force-render=yes", "--fullscreen=yes",
                     "--window-minimized=no", "--hidpi-window-scale=no",
                     "--vulkan-swap-mode=immediate", "--opengl-swapinterval=0", "--d3d11-sync-interval=0" }
@@ -141,6 +141,8 @@ try
                 JsonElement report = json.RootElement;
                 if (report.GetProperty("status").GetString() != "ok")
                     throw new InvalidDataException($"Rejected {tag}: {report.GetProperty("error")}");
+                if (mode == "pipeline" && report.GetProperty("output").GetProperty("pixelformat").GetString() != (d3d ? "d3d11" : "cuda"))
+                    throw new InvalidDataException($"Rejected {tag}: pipeline output must remain on the GPU; update the bundled player.");
                 var measurement = FrameTrace.Measure(File.ReadLines(trace),
                     report.GetProperty("start_seconds").GetDouble(), report.GetProperty("end_seconds").GetDouble());
                 if (measurement.Seconds < seconds * 0.8)
