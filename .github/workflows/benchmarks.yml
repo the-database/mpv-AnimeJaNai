@@ -12,6 +12,7 @@ on:
       - "data/benchmarks/submissions/**"
       - "site/**"
       - "scripts/build-benchmarks.mjs"
+      - "benchmark-proxy/src/measurement.mjs"
       - ".github/workflows/benchmarks.yml"
   workflow_dispatch:
 

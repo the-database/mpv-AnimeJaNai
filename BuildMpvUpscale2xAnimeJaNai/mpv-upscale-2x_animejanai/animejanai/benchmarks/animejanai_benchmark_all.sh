@@ -6,5 +6,8 @@ ROOT="$(cd "$HERE/../.." && pwd)"       # install root
 # bundled mpv + inference libs on the loader path
 export LD_LIBRARY_PATH="$ROOT/mpv:$ROOT/animejanai/inference:${LD_LIBRARY_PATH}"
 "$HERE/AnimeJaNaiBenchmark" --install-root "$ROOT" "$@"
+status=$?
 echo
-read -p "Press Enter to close..." _
+printf 'Press Enter to close...'
+read -r _
+exit "$status"

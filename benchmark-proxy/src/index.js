@@ -22,6 +22,8 @@
 //   GITHUB_REPO    e.g. "the-database/mpv-upscale-2x_animejanai"
 //   GITHUB_BASE    base branch for PRs, e.g. "main"
 
+import { measurementError, normalizeMeasurement } from "./measurement.mjs";
+
 const ROUTE = "/api/benchmarks";
 const MAX_BODY = 16 * 1024; // 16 KB
 const FPS_MIN = 0;
@@ -70,7 +72,8 @@ export default {
 
 function validate(b) {
   if (b == null || typeof b !== "object") return "body must be an object";
-  if (b.schema !== 1) return "unsupported schema";
+  const metadataError = measurementError(b.schema, b.measurement);
+  if (metadataError) return metadataError;
   if (typeof b.backend !== "string" || !ALLOWED_BACKENDS.has(b.backend)) return "invalid backend";
   for (const k of ["app_version", "gpu", "cpu", "os", "driver", "submitted_by"]) {
     if (b[k] != null && (typeof b[k] !== "string" || b[k].length > STR_MAX)) return `invalid ${k}`;
@@ -140,7 +143,8 @@ function normalize(b) {
     results[sanitize(t, 40)] = row;
   }
   return {
-    schema: 1,
+    schema: b.schema,
+    measurement: normalizeMeasurement(b.measurement),
     id: crypto.randomUUID(),
     submitted_at: new Date().toISOString(),
     app_version: sanitize(b.app_version, STR_MAX),
@@ -188,6 +192,9 @@ async function fileSubmission(env, record) {
       "Automated community benchmark submission.\n\n" +
       `- GPU: ${record.gpu || "(unknown)"}\n` +
       `- Backend: ${record.backend}\n` +
+      (record.measurement ? `- Measurement: ${record.measurement.mode}` +
+        (record.measurement.output_resolution ? ` at ${record.measurement.output_resolution}` : "") + " (v2)\n" :
+        "- Measurement: legacy / unversioned\n") +
       `- App: ${record.app_version || "(unknown)"}\n` +
       `- OS: ${record.os || "(unknown)"}\n` +
       `- Submitted by: ${record.submitted_by || "(anonymous)"}\n\n` +

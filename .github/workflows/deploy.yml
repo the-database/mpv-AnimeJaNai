@@ -68,6 +68,13 @@ jobs:
         dotnet publish AnimeJaNaiUpdater/AnimeJaNaiUpdater.csproj -c Release -o updater-publish
         Copy-Item updater-publish/AnimeJaNaiUpdater.exe "publish/mpv-upscale-2x_animejanai-v${{ github.event.inputs.release_version }}/AnimeJaNaiUpdater.exe" -Force
 
+    - name: Build benchmark tool (win-x64) into the tree
+      shell: pwsh
+      run: |
+        dotnet publish AnimeJaNaiBenchmark/AnimeJaNaiBenchmark.csproj -c Release `
+          -r win-x64 --self-contained -p:PublishSingleFile=true `
+          -o "publish/mpv-upscale-2x_animejanai-v${{ github.event.inputs.release_version }}/animejanai/benchmarks"
+
     - name: Install 7zip
       run: choco install 7zip -y
 
@@ -116,6 +123,11 @@ jobs:
         draft: true
         prerelease: false
         allowUpdates: true
+        # A rerun on an existing release (e.g. rebuilding a draft, or windows_only)
+        # only replaces the assets: keep its notes, name and draft/published state.
+        omitDraftDuringUpdate: true
+        omitNameDuringUpdate: true
+        omitBodyDuringUpdate: true
         artifacts: "mpv-AnimeJaNai-Setup-${{ github.event.inputs.release_version }}.exe,mpv-upscale-2x_animejanai-full-package-${{ github.event.inputs.release_version }}.7z.*,mpv-upscale-2x_animejanai-overlay-${{ github.event.inputs.release_version }}.7z,manifest.json,publish/packs-v${{ github.event.inputs.release_version }}/component-*.7z,publish/packs-v${{ github.event.inputs.release_version }}/packs.json"
         token: ${{ secrets.GITHUB_TOKEN }}
 

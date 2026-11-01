@@ -48,6 +48,13 @@ Responses: `201 {ok,id,pr_url}` on success, `400` invalid, `403` bad/absent
 
 ## Deploy
 
+The proxy accepts legacy schema 1 and the new schema 2 with structured
+measurement metadata. The [submission format](../data/benchmarks/README.md)
+defines native-display output resolution and pipeline-only results. Validation
+is shared with the catalog aggregator; neither drops or guesses display context.
+Deploy this version before releasing the new runner and companion Manager, so
+schema 2 submissions are accepted. Old Managers still submit schema 1.
+
 ```sh
 cd benchmark-proxy
 npm install

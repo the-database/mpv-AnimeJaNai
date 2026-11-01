@@ -69,11 +69,11 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.17.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; chain_N_upscale / chain_N_temporal_fix_model / _before_upscale keys)
+const string AjiVersion           = "v0.19.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; DirectML pins named input dims)
 
 const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
 const string MpvNetVersion        = "v7.1.2.0";
-const string ManagerVersion       = "0.10.3";       // github.com/the-database/AnimeJaNaiManager release tag (AnimeJaNai Manager; UI refresh, upscale toggle, temporal fix key; Linux updater path and TensorRT detection; Linux backend, temporal fix before upscaling)
+const string ManagerVersion       = "0.10.4";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -81,7 +81,8 @@ const string ManagerVersion       = "0.10.3";       // github.com/the-database/A
 // Windows-only; not installed on Linux.
 const string OrtDmlVersion        = "1.24.4";       // Microsoft.ML.OnnxRuntime.DirectML (NuGet)
 const string DirectMLVersion      = "1.15.4";       // Microsoft.AI.DirectML (NuGet)
-const string RifeModelsVersion    = "models-rife-fp16-1"; // animejanai-inference release tag (fp16 conversions)
+const string RifeModelsVersion    = "models-rife-fp16-2"; // animejanai-inference release tag (fp16 conversions; set 2 names the H/W dims for DirectML)
+const string RifeModelsAsset      = "rife-fp16-2.7z";     // that release's archive; its name carries the set number too
 
 // Custom libmpv fork build. On Windows from the github.com/the-database/
 // mpv-winbuild release; on Linux from a github.com/the-database/mpv release
@@ -546,7 +547,7 @@ async Task InstallRife()
     // heavy, deps-versioned models stay out of the overlay archive.
     Console.WriteLine("Downloading RIFE fp16 models...");
     var downloadUrl = "https://github.com/the-database/animejanai-inference/" +
-                      $"releases/download/{RifeModelsVersion}/rife-fp16-1.7z";
+                      $"releases/download/{RifeModelsVersion}/{RifeModelsAsset}";
     var targetPath = Path.GetFullPath("rife-fp16.7z");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
