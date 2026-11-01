@@ -154,7 +154,9 @@ internal static class MediaWorker
         using var remuxWriter = remuxPipe is null ? null : new NativeEncodedWriter(remuxHandle);
         var demandGate = served is null ? null : new MuxDemandGate(playback!.StartSeconds);
         using var muxer = served is null ? null : new NativeMuxer(served.Directory, remuxPipe!.Reader, remuxLifetime.Token) { Demand = demandGate };
-        if (served is not null) Environment.CurrentDirectory = served.Directory;
+        // Keep driver/runtime files in the disposable media work directory.
+        // Mux output paths are resolved explicitly against the owned cache.
+        Environment.CurrentDirectory = Contract.Text(launch, "work", 4096);
         var processingEncoding = served is null ? encoding : encoding! with { Container = "matroska", KeyframeFrames = 600, KeyframeSeconds = served.SegmentSeconds };
         using var player = new NativePlayback(installRoot, source is null ? localPath : null,
             Contract.Text(launch, "configuration", 4096), Contract.Text(launch, "work", 4096),

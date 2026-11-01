@@ -69,6 +69,8 @@ internal sealed class StreamCache : IAsyncDisposable
             {
                 string name = Path.GetFileName(path);
                 if (!Guid.TryParseExact(name[7..], "N", out _)) continue;
+                try
+                {
                 SafeFiles.CheckParents(path);
                 string marker = Path.Combine(path, ".owner");
                 if (!File.Exists(marker)) continue; // A different host can still be creating its ownership marker.
@@ -76,12 +78,24 @@ internal sealed class StreamCache : IAsyncDisposable
                 FileStream owner;
                 try { owner = new(marker, FileMode.Open, FileAccess.ReadWrite, FileShare.Delete); }
                 catch (IOException error) when ((error.HResult & 0xffff) is 32 or 33) { continue; } // Live owner.
-                catch (IOException) { throw new AddonException("cache_recovery_failed", "An old stream cache needs cleanup before allocating more storage."); }
+
                 using (owner)
                 {
                     try { DeleteOwnedDirectory(path); }
-                    catch (IOException) { throw new AddonException("cache_recovery_failed", "An old stream cache needs cleanup before allocating more storage."); }
+                    catch (AddonException error) when (error.Code == "invalid_stream_cache")
+                    {
+                        // Preserve unexpected contents for inspection, outside
+                        // the stream-* recovery set; never delete unknown files.
+                        string quarantine = Path.Combine(candidateRoot, "quarantine-" + Guid.NewGuid().ToString("N"));
+                        SafeFiles.CheckParents(quarantine);
+                        System.IO.Directory.Move(path, quarantine);
+                        Console.Error.WriteLine($"Quarantined unexpected stream cache: {quarantine}");
+                    }
+                    catch (IOException error) { Console.Error.WriteLine($"Stream cache recovery deferred: {error}"); }
                 }
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or AddonException)
+                { Console.Error.WriteLine($"Stream cache recovery deferred: {error}"); }
             }
         }
     }
@@ -246,15 +260,18 @@ internal sealed class StreamCache : IAsyncDisposable
     {
         await Task.Yield();
         Task[] pending;
-        lock (sync) { if (released) return; closed = true; lifetime.Cancel(); pending = readers.Select(r => r.Done.Task).ToArray(); }
+        lock (sync) { if (!closed) { closed = true; lifetime.Cancel(); } pending = readers.Select(r => r.Done.Task).ToArray(); }
         await Task.WhenAll(pending);
-        DeleteOwnedDirectory(Directory);
-        ownership.Dispose();
-        lifetime.Dispose();
-        lock (sync)
+        try { DeleteOwnedDirectory(Directory); }
+        finally
         {
-            resources.Clear(); segments.Clear();
-            if (!released) { released = true; Capacity.Release(); }
+            ownership.Dispose();
+            lifetime.Dispose();
+            lock (sync)
+            {
+                resources.Clear(); segments.Clear();
+                if (!released) { released = true; Capacity.Release(); }
+            }
         }
     }
     private static void DeleteOwnedDirectory(string directory)

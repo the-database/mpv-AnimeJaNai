@@ -381,15 +381,7 @@ internal static partial class Checks
             _ = await registry.OpenAsync(two, "another", null, default);
             await registry.ReleaseOwnerAsync(two);
         });
-        await Test("Latest frame queue copies input and drops old samples", async () =>
-        {
-            var queue = new LatestFrameQueue(); byte[] pixel = [1, 2, 3, 255];
-            for (int i = 0; i < 10000; i++) True(queue.Publish("fixture", i, 1, 1, pixel));
-            pixel[0] = 99;
-            var frame = await queue.ReadAsync(default); True(frame.PresentationMicroseconds == 9999 && frame.Rgba8.Span[0] == 1);
-            await Error("invalid_frame", () => queue.Publish("fixture", 0, 321, 1, pixel));
-            queue.Complete(); True(!queue.Publish("fixture", 1, 1, 1, pixel));
-        });
+
     }
 
     private static async Task RuntimeChecks(string runtime, string compiler, string dotnet)

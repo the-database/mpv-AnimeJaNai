@@ -63,8 +63,8 @@ public static class AddonUpdateTransaction
         string manifest = Child(source, PackageManifest);
         if (!File.Exists(manifest))
         {
-            if (File.Exists(Child(target, PackageManifest)))
-                throw new IOException("This update does not include addon support. Use an addon-enabled AnimeJaNai build.");
+            // ApplyAsync drains the old host and journals removal of its
+            // installed files. Addon settings/data are always preserved.
             return;
         }
         if (new FileInfo(manifest).Length > 1024 * 1024) throw new IOException("Addon package inventory is too large.");
@@ -154,32 +154,62 @@ public static class AddonUpdateTransaction
         Intent(target);
         using var drained = await DrainAsync(target, token);
         RecoverCore(target);
-        Intent(target);
-        string transaction = Child(target, InstallationActivity.DirectoryName);
-        string staged = Child(transaction, "staged"), backup = Child(transaction, "backup");
-        var entries = new List<Entry>();
+        bool removeAddons = !component && File.Exists(Child(target, PackageManifest)) &&
+            !File.Exists(Child(source, PackageManifest));
+        if (!component && removals is not null) throw new IOException("Only component transactions accept explicit removal lists.");
+        var removePaths = (removals ?? []).ToList();
+        if (removeAddons)
+        {
+            string host = Child(target, "addon-host");
+            if (Directory.Exists(host))
+                removePaths.AddRange(FilesIn(host).Select(f => Path.GetRelativePath(target, f).Replace('\\', '/')));
+            removePaths.Add(PackageManifest);
+            removePaths.Add("portable_config/scripts/animejanai_addons.lua");
+        }
+        var changed = new List<(string File, string Relative, string Hash)>();
+        long requiredBytes = 16L * 1024 * 1024;
         foreach (string file in FilesIn(source))
         {
             token.ThrowIfCancellationRequested();
             string relative = Path.GetRelativePath(source, file).Replace('\\', '/');
             if (component) RequireComponentPath(relative);
-            if (relative.StartsWith(".ajn-", StringComparison.OrdinalIgnoreCase)) continue;
-            if (relative.StartsWith("animejanai/addons/", StringComparison.OrdinalIgnoreCase)) continue;
-            if (preserve.Any(p => (relative.Equals(p, StringComparison.OrdinalIgnoreCase) || relative.StartsWith(p.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))) &&
-                File.Exists(Child(target, relative))) continue;
+            if (relative.StartsWith(".ajn-", StringComparison.OrdinalIgnoreCase) ||
+                relative.StartsWith("animejanai/addons/", StringComparison.OrdinalIgnoreCase)) continue;
+            string destination = Child(target, relative);
+            if (preserve.Any(p => relative.Equals(p, StringComparison.OrdinalIgnoreCase) ||
+                relative.StartsWith(p.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase)) && File.Exists(destination)) continue;
+            string hash = Hash(file);
+            if (File.Exists(destination) && Hash(destination) == hash) continue;
+            changed.Add((file, relative, hash));
+            requiredBytes = checked(requiredBytes + new FileInfo(file).Length + (File.Exists(destination) ? new FileInfo(destination).Length : 0));
+        }
+        foreach (string relative in removePaths)
+        {
+            if (component) RequireComponentPath(relative);
+            string destination = Child(target, relative);
+            if (File.Exists(destination)) requiredBytes = checked(requiredBytes + new FileInfo(destination).Length);
+        }
+        if (new DriveInfo(Path.GetPathRoot(target)!).AvailableFreeSpace < requiredBytes)
+            throw new IOException($"This update needs {requiredBytes / (1024 * 1024)} MiB of free space for changed files and rollback backups.");
+        Intent(target);
+        string transaction = Child(target, InstallationActivity.DirectoryName);
+        string staged = Child(transaction, "staged"), backup = Child(transaction, "backup");
+        var entries = new List<Entry>();
+        foreach (var candidate in changed)
+        {
+            token.ThrowIfCancellationRequested();
+            string file = candidate.File, relative = candidate.Relative;
             string destination = Child(target, relative), prepared = Child(staged, relative), old = Child(backup, relative);
             _ = Child(source, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(prepared)!); CopyDurable(file, prepared);
             string hash = Hash(prepared);
-            if (Hash(file) != hash) throw new IOException("Update source changed during staging.");
+            if (candidate.Hash != hash) throw new IOException("Update source changed during staging.");
             bool existed = File.Exists(destination);
             if (existed) { Directory.CreateDirectory(Path.GetDirectoryName(old)!); CopyDurable(destination, old); }
             entries.Add(new(relative, existed, existed ? Hash(old) : null));
         }
-        foreach (string relative in removals ?? [])
+        foreach (string relative in removePaths)
         {
-            if (!component) throw new IOException("Only component transactions can remove listed component files.");
-            RequireComponentPath(relative);
             string destination = Child(target, relative), old = Child(backup, relative);
             if (entries.Any(e => e.Path.Equals(relative, StringComparison.OrdinalIgnoreCase))) throw new IOException("Duplicate component path.");
             bool existed = File.Exists(destination);
@@ -204,6 +234,18 @@ public static class AddonUpdateTransaction
         Write(Child(transaction, "journal.json"), new Journal(1, "committed", entries.ToArray()));
         File.Delete(Child(transaction, "pending"));
         Cleanup(transaction); // A running updater image may remain until the next run.
+        if (removeAddons)
+        {
+            string host = Child(target, "addon-host");
+            if (Directory.Exists(host))
+            {
+                foreach (string directory in Directory.EnumerateDirectories(host, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length).Append(host))
+                {
+                    _ = Child(target, Path.GetRelativePath(target, directory));
+                    if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
+                }
+            }
+        }
     }
     private static void RequireComponentPath(string path)
     {

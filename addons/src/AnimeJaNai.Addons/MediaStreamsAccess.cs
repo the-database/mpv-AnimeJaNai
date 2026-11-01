@@ -27,6 +27,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
         internal JsonObject Metrics = new();
         internal readonly StreamMetrics Measurements = new();
         internal string? Error;
+        internal string? CleanupError;
         internal IProcessingSession? Producer;
         internal Task Work = Task.CompletedTask;
         internal Task? Cleanup;
@@ -58,7 +59,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
             if (source.Remote is not null) grant.Demand("network.connect");
             Contract.Require((source.SourceId is null) != (source.Remote is null), "invalid_source", "Choose one approved stream source.");
             options.Validate();
-            Contract.Require(streams.Values.Count(i => !i.Closed) < 4, "capacity_exceeded", "Close a retained stream before opening another.");
+            Contract.Require(streams.Values.Count(i => !i.Closed) < 2, "capacity_exceeded", "Each addon can retain two streams. Close a stream before opening another.");
             RequestCredentials.Lease? credential = source.Remote?.CredentialId is string id ? credentials.Acquire(id, source.Remote.DestinationId) : null;
             RequestCredentials.Lease? subtitleCredential = null;
             StreamCache cache;
@@ -140,7 +141,16 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
         {
             item.Lifetime.Cancel();
             try { await CleanupAsync(item); }
-            catch { lock (sync) { item.State = "cleanupFailed"; item.Error ??= "cleanup_failed"; } }
+            catch (Exception error)
+            {
+                Console.Error.WriteLine($"Stream {item.Id} cleanup failed: {error}");
+                lock (sync)
+                {
+                    item.State = "cleanupFailed";
+                    item.CleanupError = error is AddonException addon ? addon.Code : "cleanup_failed";
+                    item.Error ??= item.CleanupError;
+                }
+            }
         }
     }
     private async Task CleanupAsync(Item item)
@@ -154,7 +164,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
             // Closed status entries can outlive their credential context. Release
             // its linked registrations now, including entries later evicted from
             // the bounded history, rather than retaining them until addon stop.
-            item.Lifetime.Dispose(); item.Closed = true;
+            item.Lifetime.Dispose(); item.Closed = true; item.CleanupError = null;
             item.State = item.Error is null ? "closed" : "failed"; item.Counters = new();
         }
     }
@@ -171,6 +181,7 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
                 ["native"] = item.NativeStatus.DeepClone(), ["transfer"] = item.Counters.DeepClone(),
                 ["measurements"] = item.Metrics.DeepClone(),
                 ["encodedMedia"] = item.Cache.EncodedMetadata(),
+                ["cleanupError"] = item.CleanupError,
                 ["error"] = item.Error is null ? null : new JsonObject { ["code"] = item.Error, ["message"] = "Stream stopped or needs cleanup. Inspect its state before retrying." } };
         }
     }

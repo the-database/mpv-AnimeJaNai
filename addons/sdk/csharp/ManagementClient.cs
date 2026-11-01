@@ -66,21 +66,19 @@ public sealed class ManagementClient : IAsyncDisposable
     public static async Task<ManagementClient> ConnectOrStartAsync(string root, string hostPath, string runtimePath,
         string? nativeRoot = null, string? kind = null, CancellationToken cancellationToken = default)
     {
+        if (!File.Exists(hostPath) || !File.Exists(runtimePath)) throw new IOException("The addon host or runtime is missing from this AJN build.");
         string installation = nativeRoot ?? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(hostPath)!, ".."));
         using var startup = InstallationActivity.Acquire(installation);
         Task<ManagementClient> Connect(CancellationToken token) => kind is null ? ConnectAsync(root, token) : ConnectLifecycleAsync(root, kind, token);
         try { return await Connect(cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is TimeoutException or IOException) { }
         cancellationToken.ThrowIfCancellationRequested();
-        if (!File.Exists(hostPath) || !File.Exists(runtimePath)) throw new IOException("The addon host or runtime is missing from this AJN build.");
         var info = new ProcessStartInfo(Path.GetFullPath(hostPath)) {
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(hostPath))!,
-            RedirectStandardOutput = true, RedirectStandardError = true,
         };
         foreach (string argument in new[] { "serve", Path.GetFullPath(root), Path.GetFullPath(runtimePath) }) info.ArgumentList.Add(argument);
         if (nativeRoot is not null) info.ArgumentList.Add(Path.GetFullPath(nativeRoot));
         using var started = Process.Start(info) ?? throw new IOException("Could not start the addon host.");
-        _ = DrainAsync(started.StandardOutput); _ = DrainAsync(started.StandardError);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
         try
@@ -96,12 +94,6 @@ public sealed class ManagementClient : IAsyncDisposable
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         { throw new IOException("The addon host did not become available. Check its runtime and saved host settings."); }
-    }
-
-    private static async Task DrainAsync(StreamReader reader)
-    {
-        try { char[] bytes = new char[1024]; while (await reader.ReadAsync(bytes).ConfigureAwait(false) != 0) { } }
-        catch (Exception error) when (error is IOException or ObjectDisposedException) { }
     }
 
     public async Task<JsonNode?> CallAsync(string method, JsonObject? parameters = null, CancellationToken cancellationToken = default)
