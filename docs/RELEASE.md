@@ -84,6 +84,28 @@ the CUDA apt repo (including `trtexec` via `libnvinfer-bin`).
 
 ## Order of operations
 
+### Pending native fix: refresh-scan timeout
+
+[mpv PR #68](https://github.com/the-database/mpv/pull/68) fixes a recorded startup
+where an incomplete five-second cadence scan changed a 23.976 Hz projector to
+60 Hz. Its Matroska probe skips compressed payloads, and unverified timing leaves
+the current display rate unchanged. The startup budget stays at five seconds.
+The [review patch](native-fixes/display-refresh-scan-timeout.patch) applies to the
+**mpv repository**, based on `8350d0b0b6122ce22a104991d06f2cdaafe86816`.
+
+This integration remains pending until that native fix is merged and a matching
+Windows `mpv-winbuild` release publishes both player and development archives.
+Then update `MpvForkVersion`, `MpvForkBuildDate`, and `MpvForkGitHash` together.
+Do not substitute an unpublished tag or mix `mpv.exe` and `libmpv-2.dll` builds.
+This documentation/patch alone does not change the binaries assembled here.
+
+The native fix passed 47 local native checks, including the timeout regression.
+Real-file checks retain King Gainer E04's 36,590 timestamps/two cadence sections
+and Texhnolyze E02's 34,224 timestamps/282 VFR sections. Before shipping the new
+pin, verify a fresh 23.976-fps startup with RIFE off and verify the timeout path
+leaves the existing display rate unchanged. The reported E01/projector combination
+still needs a retest; the separate sustained-mistiming report remains unconfirmed.
+
 ### 1. libass (only if the subtitle work changed)
 
 Nothing to dispatch — `the-database/libass` publishes no artifact and its CI is unmodified
