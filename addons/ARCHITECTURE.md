@@ -1,6 +1,6 @@
-# Combined addon architecture
+# Addon API 1.12 architecture
 
-The June proposals provide useful product structure: a host independent of Manager's window, isolated addon lifetimes, declarative UI, activation sources, package metadata, and developer replay. The implementation adopts those ideas and replaces unrestricted addon service executables with portable Wasm workers. JavaScript is the first SDK; JSON-RPC and capability semantics remain language-independent.
+The host operates independently of Manager's window, with isolated addon lifetimes, declarative UI, activation sources, package metadata and developer replay. Addons run as portable Wasm workers. JavaScript is the first SDK; JSON-RPC and capability semantics remain language-independent. This document describes the implemented API 1.12 preview. See the [review guide](REVIEW-GUIDE.md) for repository responsibilities, source pins and qualification limits.
 
 ```mermaid
 flowchart LR
@@ -43,7 +43,7 @@ The private output adapter retains the upstream hardware frame pool and sends en
 
 The first real producer negotiates processed BGRA8 SDR samples up to 320x180 and 60 Hz. Its private D3D11 filter preserves the original frame, retains at most one sample source through GPU completion, and skips when busy. An unnamed mapping connects only the trusted native worker and host; validated binary copies reach Wasm. Subscription ownership follows session ownership, seeks invalidate old epochs, and unsubscribe/close disables capture. Host timers serialize periodic callbacks and coalesce missed ticks. Post-filter frames are not automatically the final tone-mapped, subtitle-composited display image. [FRAMES.md](FRAMES.md) records the exact semantics and remaining format limits.
 
-Network permissions use user-selected destinations, protocols and limits. HTTP/UDP adapters pin reviewed addresses and enforce ownership, cancellation and bounded payloads. HTTP header credentials use Windows DPAPI and their approved service. Wasm remains without general network access. Other transports and listening/discovery need separate capabilities and consent. See [NETWORK.md](NETWORK.md). Earlier proposals' fixed localhost ports, single Plex stream and external configuration executables are not platform requirements.
+Network permissions use user-selected destinations, protocols and limits. HTTP/UDP adapters pin reviewed addresses and enforce ownership, cancellation and bounded payloads. HTTP header credentials use Windows DPAPI and their approved service. Wasm remains without general network access. Reviewed HTTP(S) listeners and bounded native HTTP/WebSocket proxying use separate capabilities and consent; device discovery remains future work. See [NETWORK.md](NETWORK.md) and [HTTP-SERVER.md](HTTP-SERVER.md). Fixed localhost ports, a single Plex stream and external configuration executables are not platform requirements.
 
 ## Sources used for runtime design
 
@@ -63,3 +63,9 @@ revocation prevent missing addons from holding playback indefinitely. Both
 cut and continuous decisions reach the optional inference ABI; older backends
 retain their default detector. No DLL-loading or raw player-command capability
 is exposed. See [SCENE-DETECTION.md](SCENE-DETECTION.md) for limits and sampling cost.
+
+## Optional source analysis (API 1.12)
+
+Separately approved source observations run before upscaling/RIFE and display transforms. The CUDA producer reduces source colors and can run a fixed, hash-verified IS-Net character model on an optional worker. Only reduced color and mask data reaches the CPU; the original GPU frame continues through playback. One producer serves independent readers with bounded size/rate, PTS and epoch metadata. Busy analysis skips samples instead of queuing full frames.
+
+No subscription means no analysis filter, model, optional inference DLL or analysis worker. The last unsubscribe or expired lease releases those resources. Lighting estimation, calibration and device protocols belong to the addon. The current character-mask path supports progressive mono SDR CUDA input; HDR, software input and D3D11 segmentation are unsupported. See [PLAYER-ANALYSIS.md](PLAYER-ANALYSIS.md) for exact formats, opt-in downloads and timing semantics.
