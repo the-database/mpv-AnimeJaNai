@@ -887,7 +887,6 @@ void WriteVersionAndManifest()
     var version = args[0];
     File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
     string? addonMpvRevision = null;
-    string? addonManagerRevision = null, addonAjiRevision = null;
     if (includeAddons)
     {
         using var native = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-host", "native-capabilities.json")));
@@ -904,9 +903,9 @@ void WriteVersionAndManifest()
             return value;
         }
         if (Revision("mpv") != addonMpvRevision) throw new InvalidDataException("Addon native source inventories disagree.");
-        addonManagerRevision = Revision("manager");
+        _ = Revision("manager");
         if (inventory.RootElement.GetProperty("files").EnumerateObject().Any(p => p.Name.StartsWith("animejanai/inference/", StringComparison.Ordinal)))
-            addonAjiRevision = Revision("inference");
+            _ = Revision("inference");
     }
 
     // Platform-specific managed program files for the overlay update. aji and
@@ -952,13 +951,9 @@ void WriteVersionAndManifest()
             mpvfork = includeAddons ? "source:" + addonMpvRevision : plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
                                      : $"{MpvForkLinuxVersion}",
             inference_runtime = $"trt-{TrtVersion}",
-            aji = addonAjiRevision is null ? AjiVersion : "source:" + addonAjiRevision,
-            manager = addonManagerRevision is null ? ManagerVersion : "source:" + addonManagerRevision,
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,
             sevenzip = SevenZipVersion,
             rife = RifeModelsVersion,
-            addon_native = includeAddons ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
-                File.ReadAllBytes(Path.Combine(installDirectory, "addon-host", "native-capabilities.json")))) : null,
         },
         overlay_paths = overlayPaths.ToArray(),
         // User data never overwritten by an update (full updates preserve these explicitly).

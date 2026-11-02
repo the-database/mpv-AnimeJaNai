@@ -89,6 +89,24 @@ internal static partial class Checks
             provider.Last.FailClose = false;
             await broker.MediaStreams.CloseAsync(id, default); True(provider.Active == 0 && !Directory.Exists(provider.Last.Directory));
         });
+        await Test("Stream cache deletion failure releases the addon slot and keeps diagnostics", async () =>
+        {
+            var package = Package(permissions: ["sessions.manage", "media.input", "media.output"]);
+            var grant = new PermissionGrant(package, package.Manifest.Permissions);
+            var provider = new StreamFixtureProvider();
+            await using var broker = new Broker(package, grant, Area(), sessions: new SessionRegistry(provider));
+            string Open() => broker.MediaStreams!.Open(new("fixture", null), null, new(new("h264", "matroska", 1000), new(), true, 1))["streamId"]!.GetValue<string>();
+            string id = Open();
+            await Until(() => broker.MediaStreams!.Status(id)["state"]!.GetValue<string>() == "running");
+            File.WriteAllText(Path.Combine(provider.Last!.Directory, "driver.log"), "unexpected scratch");
+            broker.MediaStreams!.RequestClose(id);
+            await Until(() => broker.MediaStreams.Status(id)["state"]!.GetValue<string>() == "cleanupFailed");
+            True(broker.MediaStreams.Status(id)["nativeCapacityReleased"]!.GetValue<bool>());
+            await broker.MediaStreams.CloseAsync(id, default);
+            string first = Open(), second = Open();
+            await broker.MediaStreams.CloseAsync(first, default);
+            await broker.MediaStreams.CloseAsync(second, default);
+        });
         await Test("Stream orphan recovery removes only unlocked owned caches and preserves live streams", async () =>
         {
             string area = Area(); await using var live = StreamCache.Create(area, 0);

@@ -1646,6 +1646,10 @@ only when no reader holds them. Continuous output retains its beginning and can
 reach the 2 GiB cap. Storage pressure pauses writes for at most 15 seconds while
 eligible objects are reclaimed, then fails with `buffer_limit_reached`.
 
+Recovery prunes previously quarantined scratch directories before scanning for
+new orphans. A newly quarantined directory survives until the next recovery for
+inspection. Failed deletions are reported and retried on later recovery.
+
 No requests/demand updates for ten minutes expires the stream. A deliberately
 paused stream can last two hours with ownership updates. The absolute 24-hour
 limit still applies. Client disconnect cancels its response, not every response
@@ -1654,9 +1658,10 @@ or the whole logical playback. Your addon decides when playback is abandoned.
 `producerCompleted` means encoding finished and native capacity was released;
 cached objects remain available. `requestClose` is asynchronous and idempotent for
 the retained stream handle. Wait for `closed`/`failed` and
-`nativeCapacityReleased` before replacing it. `cleanupFailed` retains ownership
-and capacity that could not be cleaned; retry close instead of starting an
-unbounded replacement loop.
+`nativeCapacityReleased` before replacing it. `cleanupFailed` retains native
+capacity if producer teardown failed; retry close in that case. If only scratch
+file deletion failed, native, global-cache and per-addon slots are released;
+the cleanup error remains visible and disk cleanup is retried during recovery.
 
 Status separates requested encoding (`native.encoding`) from observed output.
 `encodedMedia` is measured from a completed encoded object, null before one is
@@ -1737,7 +1742,7 @@ serving already-extracted protected text.
 | `stale_generation`, `segment_expired` | Reject stale client work; use current manifests or replace the stream |
 | `capacity_exceeded` | Close unused resources or wait for an existing owner to release them |
 | `buffer_limit_reached` | Close and explain stalled playback/storage pressure; choose suitable client demand policy |
-| `cleanupFailed` | Retry owned close; do not claim capacity or files were released |
+| `cleanupFailed` | Check `nativeCapacityReleased`; retry failed producer teardown, and report remaining scratch-file cleanup |
 | `subtitle_styling_loss` | Deliberately opt into text conversion or choose burn-in |
 
 Use the generic `http-inspector`, `http-bridge`, and `media-stream` examples as
