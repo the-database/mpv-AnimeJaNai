@@ -20,8 +20,12 @@ internal static partial class Checks
             File.WriteAllText(unexpected, "keep");
             await Error("invalid_stream_cache", async () => await cache.DisposeAsync());
             StreamCache.Recover(area);
-            string quarantine = Directory.GetDirectories(Path.Combine(area, "stream-cache"), "quarantine-*").Single();
+            string quarantine = Directory.GetDirectories(Path.GetDirectoryName(cache.Directory)!, "quarantine-*").Single();
             True(File.ReadAllText(Path.Combine(quarantine, "driver.log")) == "keep");
+            Directory.CreateDirectory(Path.Combine(quarantine, "driver-cache"));
+            File.WriteAllText(Path.Combine(quarantine, "driver-cache/cache.bin"), "scratch");
+            StreamCache.Recover(area);
+            True(!Directory.Exists(quarantine), "Quarantine grew across recovery passes");
             var available = new List<StreamCache>();
             try { for (int i = 0; i < 4; i++) available.Add(StreamCache.Create(area, 0)); }
             finally { foreach (var item in available) await item.DisposeAsync(); }

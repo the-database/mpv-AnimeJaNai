@@ -159,13 +159,17 @@ internal sealed class MediaStreamsAccess(PermissionGrant grant, IMediaStreamProv
         lock (sync) item.State = "closing";
         if (item.Producer is not null) { await item.Producer.DisposeAsync(); item.Producer = null; }
         lock (sync) item.NativeReleased = true;
-        await item.Cache.DisposeAsync(); item.Credential?.Dispose(); item.SubtitleCredential?.Dispose();
+        try { await item.Cache.DisposeAsync(); }
+        finally
+        {
+            // Cache disposal releases its global reservation even if deleting
+            // scratch files fails. The matching addon slot must also be free.
+            item.Credential?.Dispose(); item.SubtitleCredential?.Dispose();
+            lock (sync) { item.Lifetime.Dispose(); item.Closed = true; }
+        }
         lock (sync)
         {
-            // Closed status entries can outlive their credential context. Release
-            // its linked registrations now, including entries later evicted from
-            // the bounded history, rather than retaining them until addon stop.
-            item.Lifetime.Dispose(); item.Closed = true; item.CleanupError = null;
+            item.CleanupError = null;
             item.State = item.Error is null ? "closed" : "failed"; item.Counters = new();
         }
     }

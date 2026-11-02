@@ -285,11 +285,11 @@ def assemble(args):
         manifest["package_version"] = args.version
         manifest.setdefault("user_preserve", []).append("animejanai/addons")
         manifest.setdefault("overlay_paths", []).extend(["addon-host", "addon-development", "addon-package.json", "build-info"])
-        manifest.setdefault("deps", {})["addon_native"] = sha(output / "addon-host/native-capabilities.json")
+        # Source identities already live in addon-package.json/build-info.
+        # aji/Manager are overlay components, not full-download dependencies.
+        for name in ("addon_native", "aji", "manager"):
+            manifest.setdefault("deps", {}).pop(name, None)
         manifest["deps"]["mpvfork"] = "source:" + sources["mpv"]
-        manifest["deps"]["manager"] = "source:" + sources["manager"]
-        if inference_record is not None:
-            manifest["deps"]["aji"] = "source:" + sources["inference"]
         write(output / "manifest.json", manifest)
         (output / "version.txt").write_text(args.version + "\n", encoding="utf-8")
         (output / "TEST-BUILD.txt").write_text(

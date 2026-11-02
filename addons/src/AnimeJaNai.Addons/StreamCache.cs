@@ -65,6 +65,15 @@ internal sealed class StreamCache : IAsyncDisposable
         {
             SafeFiles.CheckParents(candidateRoot);
             if (!System.IO.Directory.Exists(candidateRoot)) continue;
+            // Quarantine is temporary scratch recovery, not an archive. Prune
+            // the prior pass before admitting more streams; never follow links.
+            foreach (string path in System.IO.Directory.EnumerateDirectories(candidateRoot, "quarantine-*"))
+            {
+                if (!Guid.TryParseExact(Path.GetFileName(path)[11..], "N", out _)) continue;
+                try { PruneQuarantine(path); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or AddonException)
+                { Console.Error.WriteLine($"Stream quarantine cleanup deferred: {error}"); }
+            }
             foreach (string path in System.IO.Directory.EnumerateDirectories(candidateRoot, "stream-*"))
             {
                 string name = Path.GetFileName(path);
@@ -84,8 +93,8 @@ internal sealed class StreamCache : IAsyncDisposable
                     try { DeleteOwnedDirectory(path); }
                     catch (AddonException error) when (error.Code == "invalid_stream_cache")
                     {
-                        // Preserve unexpected contents for inspection, outside
-                        // the stream-* recovery set; never delete unknown files.
+                        // Keep unexpected scratch contents for inspection until
+                        // the next recovery pass prunes this quarantine.
                         string quarantine = Path.Combine(candidateRoot, "quarantine-" + Guid.NewGuid().ToString("N"));
                         SafeFiles.CheckParents(quarantine);
                         // Windows refuses directory rename while a descendant
@@ -276,6 +285,17 @@ internal sealed class StreamCache : IAsyncDisposable
                 if (!released) { released = true; Capacity.Release(); }
             }
         }
+    }
+    private static void PruneQuarantine(string directory)
+    {
+        SafeFiles.CheckParents(directory);
+        foreach (string entry in System.IO.Directory.EnumerateFileSystemEntries(directory))
+        {
+            SafeFiles.CheckParents(entry);
+            if (System.IO.Directory.Exists(entry)) PruneQuarantine(entry);
+            else File.Delete(entry);
+        }
+        System.IO.Directory.Delete(directory, recursive: false);
     }
     private static void DeleteOwnedDirectory(string directory)
     {

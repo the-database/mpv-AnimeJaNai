@@ -15,7 +15,16 @@ internal static partial class Checks
             string data = Path.Combine(target, "animejanai/addons/saved.json");
             File.WriteAllText(data, "keep");
             File.WriteAllText(Path.Combine(target, "addon-host/runtime/wasmtime.exe"), "runtime");
-            File.WriteAllText(Path.Combine(target, "addon-package.json"), "old inventory");
+            File.WriteAllText(Path.Combine(target, "extra-native.dll"), "addon native");
+            string nativeHash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(target, "extra-native.dll"))));
+            File.WriteAllText(Path.Combine(target, "addon-package.json"), new JsonObject { ["files"] = new JsonObject { ["extra-native.dll"] = nativeHash } }.ToJsonString());
+            foreach (string folder in new[] { "addon-development", "build-info", "portable_config/scripts" })
+                Directory.CreateDirectory(Path.Combine(target, folder));
+            File.WriteAllText(Path.Combine(target, "addon-development/guide.html"), "old guide");
+            File.WriteAllText(Path.Combine(target, "build-info/old.json"), "old metadata");
+            File.WriteAllText(Path.Combine(target, "portable_config/scripts/animejanai_addons.lua"), "old bridge");
+            Directory.CreateDirectory(Path.Combine(source, "portable_config/scripts"));
+            File.WriteAllText(Path.Combine(source, "portable_config/scripts/animejanai_addons.lua"), "normal release bridge");
             File.WriteAllText(Path.Combine(target, "player.bin"), "old");
             File.WriteAllText(Path.Combine(source, "player.bin"), "new");
             File.WriteAllText(Path.Combine(target, "unchanged.bin"), "same");
@@ -31,6 +40,20 @@ internal static partial class Checks
             True(!Directory.Exists(Path.Combine(target, "addon-host")) && !File.Exists(Path.Combine(target, "addon-package.json")));
             True(File.ReadAllText(data) == "keep" && File.ReadAllText(Path.Combine(target, "player.bin")) == "new");
             True(File.GetLastWriteTimeUtc(Path.Combine(target, "unchanged.bin")).Year == 2020);
+            True(File.ReadAllText(Path.Combine(target, "portable_config/scripts/animejanai_addons.lua")) == "normal release bridge");
+            True(!Directory.Exists(Path.Combine(target, "addon-development")) && !Directory.Exists(Path.Combine(target, "build-info")) && !File.Exists(Path.Combine(target, "extra-native.dll")));
+        });
+        await Test("Normal downgrade preserves an unchanged bridge supplied by the incoming release", async () =>
+        {
+            string source = Area(), target = Area();
+            File.WriteAllText(Path.Combine(target, "addon-package.json"), "{\"files\":{}}");
+            foreach (string root in new[] { source, target })
+            {
+                Directory.CreateDirectory(Path.Combine(root, "portable_config/scripts"));
+                File.WriteAllText(Path.Combine(root, "portable_config/scripts/animejanai_addons.lua"), "same bridge");
+            }
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "portable_config/scripts/animejanai_addons.lua")) == "same bridge");
         });
         await Test("Component removal recovers its files and installed-state record together", async () =>
         {

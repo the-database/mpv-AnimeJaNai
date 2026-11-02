@@ -160,11 +160,26 @@ public static class AddonUpdateTransaction
         var removePaths = (removals ?? []).ToList();
         if (removeAddons)
         {
-            string host = Child(target, "addon-host");
-            if (Directory.Exists(host))
-                removePaths.AddRange(FilesIn(host).Select(f => Path.GetRelativePath(target, f).Replace('\\', '/')));
+            foreach (string folder in new[] { "addon-host", "addon-development", "build-info" })
+            {
+                string directory = Child(target, folder);
+                if (Directory.Exists(directory))
+                    removePaths.AddRange(FilesIn(directory).Select(f => Path.GetRelativePath(target, f).Replace('\\', '/')));
+            }
+            using var inventory = JsonDocument.Parse(File.ReadAllBytes(Child(target, PackageManifest)));
+            foreach (var file in inventory.RootElement.GetProperty("files").EnumerateObject())
+            {
+                // Remove only unmodified extra native libraries recorded by the
+                // addon package. Incoming release files always win below.
+                if (!file.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                    (file.Name.Contains('/') && !file.Name.StartsWith("animejanai/inference/", StringComparison.OrdinalIgnoreCase))) continue;
+                string path = Child(target, file.Name);
+                if (File.Exists(path) && Hash(path) == file.Value.GetString()) removePaths.Add(file.Name);
+            }
             removePaths.Add(PackageManifest);
             removePaths.Add("portable_config/scripts/animejanai_addons.lua");
+            removePaths = removePaths.Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(path => !File.Exists(Child(source, path))).ToList();
         }
         var changed = new List<(string File, string Relative, string Hash)>();
         long requiredBytes = 16L * 1024 * 1024;
@@ -236,10 +251,11 @@ public static class AddonUpdateTransaction
         Cleanup(transaction); // A running updater image may remain until the next run.
         if (removeAddons)
         {
-            string host = Child(target, "addon-host");
-            if (Directory.Exists(host))
+            foreach (string folder in new[] { "addon-host", "addon-development", "build-info" })
             {
-                foreach (string directory in Directory.EnumerateDirectories(host, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length).Append(host))
+                string root = Child(target, folder);
+                if (!Directory.Exists(root)) continue;
+                foreach (string directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length).Append(root))
                 {
                     _ = Child(target, Path.GetRelativePath(target, directory));
                     if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
