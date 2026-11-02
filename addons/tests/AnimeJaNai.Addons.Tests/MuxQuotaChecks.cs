@@ -5,6 +5,27 @@ internal static partial class Checks
 {
     private static async Task MuxQuotaChecks()
     {
+        await Test("Native mux publishes CSV and HLS indexes only after closing their writer", () =>
+        {
+            foreach (string name in new[] { "index.csv", "index.m3u8" })
+            {
+                string area = Area(); using var mux = new NativeMuxer(area, Stream.Null, default);
+                string target = Path.Combine(area, name);
+                File.WriteAllText(target, "previous complete index");
+                IntPtr bytes = Marshal.AllocHGlobal(3);
+                try
+                {
+                    Marshal.Copy(new byte[] { 1, 2, 3 }, 0, bytes, 3);
+                    long writer = mux.Open(IntPtr.Zero, "ajn-cache:" + name); True(writer > 0);
+                    True(mux.Write(IntPtr.Zero, writer, bytes, 3) == 3);
+                    True(File.ReadAllText(target) == "previous complete index");
+                    True(mux.Close(IntPtr.Zero, writer) == 0);
+                    True(File.ReadAllBytes(target).SequenceEqual(new byte[] { 1, 2, 3 }));
+                    True(!File.Exists(target + ".tmp"));
+                }
+                finally { Marshal.FreeHGlobal(bytes); }
+            }
+        });
         await Test("Native mux storage pressure waits for eligible media to expire without exceeding quota", async () =>
         {
             string area = Area(); var gate = new MuxDemandGate(0);
