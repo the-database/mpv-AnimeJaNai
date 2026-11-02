@@ -122,6 +122,20 @@ TargetOs SelectTarget(string[] a)
 var target = SelectTarget(args);
 var plat = target == TargetOs.Windows ? Platform.Win : Platform.Linux;
 Console.WriteLine($"Target: {plat.Rid}");
+bool includeAddons = args.Contains("--addons");
+string? addonBundle = Environment.GetEnvironmentVariable("AJN_ADDON_BUNDLE");
+if (includeAddons && !plat.IsWindows)
+{
+    Console.Error.WriteLine("Addon support is Windows only in this preview. The Linux package excludes the addon runtime.");
+    Environment.ExitCode = 2;
+    return;
+}
+if (includeAddons && (string.IsNullOrWhiteSpace(addonBundle) || !File.Exists(Path.Combine(addonBundle, "addon-package.json"))))
+{
+    Console.Error.WriteLine("--addons requires AJN_ADDON_BUNDLE pointing to a verified addon support bundle.");
+    Environment.ExitCode = 2;
+    return;
+}
 
 if (args.Length < 1 || args[0].StartsWith("--"))
 {
@@ -872,6 +886,27 @@ void WriteVersionAndManifest()
 {
     var version = args[0];
     File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
+    string? addonMpvRevision = null;
+    if (includeAddons)
+    {
+        using var native = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-host", "native-capabilities.json")));
+        addonMpvRevision = native.RootElement.GetProperty("sources").GetProperty("mpv").GetString();
+        if (addonMpvRevision is null || !System.Text.RegularExpressions.Regex.IsMatch(addonMpvRevision, "^[0-9a-f]{40}$"))
+            throw new InvalidDataException("The addon bundle does not identify its native player revision.");
+        using var inventory = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-package.json")));
+        var sources = inventory.RootElement.GetProperty("sources");
+        string Revision(string name)
+        {
+            string? value = sources.GetProperty(name).GetString();
+            if (value is null || !System.Text.RegularExpressions.Regex.IsMatch(value, "^[0-9a-f]{40}$"))
+                throw new InvalidDataException("The addon bundle lacks a source revision for " + name);
+            return value;
+        }
+        if (Revision("mpv") != addonMpvRevision) throw new InvalidDataException("Addon native source inventories disagree.");
+        _ = Revision("manager");
+        if (inventory.RootElement.GetProperty("files").EnumerateObject().Any(p => p.Name.StartsWith("animejanai/inference/", StringComparison.Ordinal)))
+            _ = Revision("inference");
+    }
 
     // Platform-specific managed program files for the overlay update. aji and
     // its tools are small and update often, so they ride the overlay; the
@@ -888,6 +923,7 @@ void WriteVersionAndManifest()
     overlayPaths.AddRange(plat.AjiLibs.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.AjiTools.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.ManagerOverlay);
+    if (includeAddons) overlayPaths.AddRange(new[] { "addon-host", "addon-development", "addon-package.json", "build-info" });
     overlayPaths.Add("portable_config/scripts");
     overlayPaths.Add("portable_config/shaders");
     // Managed defaults files, overwritten on update. The user-facing
@@ -912,7 +948,7 @@ void WriteVersionAndManifest()
         deps = new
         {
             mpvnet = plat.IsWindows ? MpvNetVersion : (string?)null,
-            mpvfork = plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
+            mpvfork = includeAddons ? "source:" + addonMpvRevision : plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
                                      : $"{MpvForkLinuxVersion}",
             inference_runtime = $"trt-{TrtVersion}",
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,
@@ -924,6 +960,7 @@ void WriteVersionAndManifest()
         user_preserve = new[]
         {
             "animejanai/animejanai.conf",
+            "animejanai/addons",
             "animejanai/currentanimejanai.log",
             "animejanai/manager-ui.json",
             "portable_config/mpv.conf",
@@ -1103,6 +1140,13 @@ async Task Main()
     PortConfigsForTarget();
     GenerateInputConf();
     await InstallAnimeJaNaiManager();
+    if (includeAddons)
+    {
+        AnimeJaNai.Updates.AddonUpdateTransaction.ValidatePackage(addonBundle!, installDirectory);
+        CopyDirectory(addonBundle!, installDirectory);
+    }
+    if (!plat.IsWindows)
+        File.Delete(Path.Combine(installDirectory, "portable_config", "scripts", "animejanai_addons.lua"));
     WriteThirdPartyNotices();
     WriteLinuxLauncher();
     WriteVersionAndManifest();

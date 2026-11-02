@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.session-controller",
+  "name": "Session controller example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 1 },
+  "permissions": ["sessions.manage"],
+  "requiredCapabilities": { "sessions": { "major": 1, "minMinor": 1 } },
+  "activation": ["manual"],
+  "settings": {
+    "sessionCount": { "type": "number", "label": "Sessions to open", "description": "Uses the first approved file and saved profile. The host may have less free capacity.", "default": 1, "minimum": 1, "maximum": 16 },
+    "controlledSession": { "type": "number", "label": "Session to control", "description": "1 selects the first session, 2 the second, and so on.", "default": 1, "minimum": 1, "maximum": 16 }
+  },
+  "actions": {
+    "resources": { "label": "Show approved media" },
+    "open": { "label": "Open sessions", "description": "Start this addon first so its sessions remain active between actions." },
+    "status": { "label": "Show session status" },
+    "pause": { "label": "Pause selected session" },
+    "resume": { "label": "Resume selected session" },
+    "seek": { "label": "Seek selected session to start" },
+    "close": { "label": "Close sessions" }
+  }
+}

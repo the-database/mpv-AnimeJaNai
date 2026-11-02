@@ -12,6 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../addons/sdk/csharp/ManagementClient.cs" Link="ManagementClient.cs" />
+    <Compile Include="../shared/AddonUpdateTransaction.cs" Link="AddonUpdateTransaction.cs" />
     <!-- Shared with the builder; reused for streamed downloads with progress. -->
     <Compile Include="..\BuildMpvUpscale2xAnimeJaNai\Downloader.cs" Link="Downloader.cs" />
   </ItemGroup>

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.remote-inspector",
+  "name": "Remote media inspector example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 5 },
+  "permissions": ["sessions.manage", "media.input", "media.output", "network.connect", "credentials.use"],
+  "requiredCapabilities": { "sessions": { "major": 1, "minMinor": 1 }, "remoteSources": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "sourceIndex": { "type": "number", "label": "Approved source service number", "default": 1, "minimum": 1, "maximum": 8 },
+    "profileIndex": { "type": "number", "label": "Approved profile number", "default": 1, "minimum": 1, "maximum": 8 },
+    "sourcePath": { "type": "string", "label": "Media path on source service", "description": "A single media resource, such as /videos/sample.mp4. Playlists and redirects are not supported.", "default": "/media", "maxLength": 2048 },
+    "useSourceCredential": { "type": "boolean", "label": "Use source service's saved credential", "default": false },
+    "sessionCount": { "type": "number", "label": "Number of independent sessions", "description": "Each session processes the source separately. Host capacity and hardware limit admission.", "default": 1, "minimum": 1, "maximum": 16 },
+    "seekSeconds": { "type": "number", "label": "Seek position (seconds)", "default": 10, "minimum": 0, "maximum": 86400 },
+    "destinationIndex": { "type": "number", "label": "Approved output service number", "description": "Used only for Send processed media. Numbers follow List approved resources.", "default": 1, "minimum": 1, "maximum": 8 },
+    "destinationPath": { "type": "string", "label": "Output upload path", "default": "/upload", "maxLength": 2048 },
+    "useDestinationCredential": { "type": "boolean", "label": "Use output service's saved credential", "default": false },
+    "lengthSeconds": { "type": "number", "label": "Encoded output duration (seconds)", "description": "Used only for Send processed media. Zero runs to source EOF within host limits.", "default": 2, "minimum": 0, "maximum": 86400 }
+  },
+  "actions": {
+    "resources": { "label": "List approved resources" },
+    "formats": { "label": "Show remote media limits" },
+    "open": { "label": "Process remote media", "description": "Reads media from the selected service into independent AJN processing sessions." },
+    "send": { "label": "Send processed media", "description": "Also requires media output permission and a supported NVIDIA GPU. Sends H.264/AAC Matroska to the selected receiver." },
+    "status": { "label": "Show session status" },
+    "pause": { "label": "Pause sessions" },
+    "resume": { "label": "Resume sessions" },
+    "seek": { "label": "Seek sessions" },
+    "close": { "label": "Close sessions" }
+  }
+}

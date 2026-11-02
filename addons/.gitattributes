@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.ajnaddon binary
+*.wasm binary
+# Preserve upstream license text verbatim, including its whitespace.
+licenses/* -whitespace

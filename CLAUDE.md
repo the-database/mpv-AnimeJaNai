@@ -12,6 +12,11 @@ conventions. The step-by-step procedures live next to it:
   instead of downloading it, and the repo's gotchas.
 - **[`docs/RELEASE.md`](docs/RELEASE.md)** — the cross-repo release runbook: which sibling
   workflow to dispatch in which order, which constant consumes each tag, and the full asset map.
+- **[`addons/README.md`](addons/README.md)** — addon host/SDK, creator and user guides.
+- **[`addons/RELEASE-INTEGRATION.md`](addons/RELEASE-INTEGRATION.md)** — optional Windows
+  addon assembly, producer metadata, updater transaction, recovery and uninstall.
+  `shared/AddonUpdateTransaction.cs` is compiled by the updater and host tests;
+  `addons/sdk/csharp/ManagementClient.cs` is copied into Manager under a checked source pin.
 
 Sibling components are documented in their own repos: `the-database/mpv` (`CLAUDE.md` +
 `DOCS/animejanai-build-local.md` + `DOCS/animejanai-build-ci.md`), `the-database/libass`, `the-database/mpv-winbuild`,

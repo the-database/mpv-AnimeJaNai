@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.counter",
+  "name": "Counter example",
+  "version": "0.2.0",
+  "api": { "major": 1, "minMinor": 0 },
+  "permissions": ["log.write", "storage.read", "storage.write"],
+  "requiredCapabilities": { "settings": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual", "on_manager", "on_player"],
+  "settings": {
+    "greeting": { "type": "string", "label": "Greeting", "default": "Hello", "maxLength": 100 }
+  },
+  "actions": {
+    "status": { "label": "Show counter", "description": "Read the saved start count." }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.media-stream-example",
+  "name": "Local streaming developer example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 7 },
+  "permissions": ["sessions.manage", "media.input", "media.output", "network.listen", "network.connect", "credentials.use"],
+  "requiredCapabilities": { "mediaStreams": { "major": 1, "minMinor": 0 }, "httpServer": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "sourceIndex": { "type": "number", "label": "Approved source number", "default": 1, "minimum": 1, "maximum": 16 },
+    "profileIndex": { "type": "number", "label": "Approved profile number", "default": 1, "minimum": 1, "maximum": 8 },
+    "remote": { "type": "boolean", "label": "Read from first approved HTTP service", "default": false },
+    "path": { "type": "string", "label": "Remote media path", "default": "/media", "maxLength": 2048 },
+    "useCredential": { "type": "boolean", "label": "Use the service's saved credential", "default": false },
+    "container": { "type": "choice", "label": "Output container", "choices": ["mpegts", "fragmentedMp4", "matroska"], "default": "mpegts" },
+    "mode": { "type": "choice", "label": "Delivery mode", "choices": ["segments", "continuous"], "default": "segments" },
+    "segmentSeconds": { "type": "number", "label": "Target segment duration in seconds", "default": 1, "minimum": 0.5, "maximum": 6 },
+    "startSeconds": { "type": "number", "label": "Start position in source seconds", "default": 0, "minimum": 0, "maximum": 86400 },
+    "lengthSeconds": { "type": "number", "label": "Output duration (zero means to end)", "default": 10, "minimum": 0, "maximum": 86400 },
+    "audioTrackId": { "type": "string", "label": "Probe audio track ID (empty means default)", "default": "", "maxLength": 68 },
+    "subtitleTrackId": { "type": "string", "label": "Probe subtitle track ID to burn (empty means none)", "default": "", "maxLength": 68 }
+  },
+  "actions": {
+    "resources": { "label": "Show approved resources" },
+    "open": { "label": "Open loopback listener" },
+    "probe": { "label": "Probe selected source" },
+    "probeStatus": { "label": "Show probe and track IDs" },
+    "play": { "label": "Start selected stream" },
+    "replace": { "label": "Replace playback with current settings" },
+    "pause": { "label": "Pause stream" },
+    "resume": { "label": "Resume stream" },
+    "status": { "label": "Show playback and listener status" },
+    "close": { "label": "Close stream and listener" }
+  }
+}

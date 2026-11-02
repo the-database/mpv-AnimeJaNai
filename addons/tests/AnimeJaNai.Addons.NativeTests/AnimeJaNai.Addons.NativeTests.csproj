@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>AnimeJaNai.Addons.NativeTests</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AnimeJaNai.Addons/AnimeJaNai.Addons.csproj" />
+    <None Include="../../examples/sample-inspector/**" Link="sample-inspector/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup><Compile Include="../HttpFixture.cs" Link="HttpFixture.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../../shared/AddonUpdateTransaction.cs" Link="AddonUpdateTransaction.cs" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/output-inspector/*" Link="output-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/remote-inspector/*" Link="remote-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/player-inspector/*" Link="player-inspector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/character-mask/*" Link="character-mask/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/media-stream/*" Link="media-stream/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><None Update="fixtures/*" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../examples/scene-detector/*" Link="scene-detector/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="../../rife-settings/*" Link="rife-settings/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+</Project>
