@@ -167,7 +167,13 @@ internal static class NativeAnalysisChecks
                 await Action(1,"unsubscribe");
                 await Until(async()=>!Loaded(player.Id) && (await Filters(player)).Count==0);
                 evidence.Add(new(){["lastObserverUnloadedGpuModule"]=true,["afterStop"]=await Measure(player,false)});
-                await Call(1,"addons.stop"); await Call(0,"addons.stop"); await player.QuitAsync();
+                await Call(1,"addons.stop");
+                await Action(0,"subscribe"); await Sample(0);
+                // Leave CUDA sampling attached while VO teardown releases its
+                // device reference. A retiring worker must retain the context.
+                await player.QuitAsync();
+                evidence.Add(new(){["quitWithActiveCudaObserver"]=true});
+                await Call(0,"addons.stop");
             }
             await using(var player = new NativeLifecycleChecks.TestPlayer(root,data,output,"analysis-net","mpvnet.exe",settings,source))
             {
