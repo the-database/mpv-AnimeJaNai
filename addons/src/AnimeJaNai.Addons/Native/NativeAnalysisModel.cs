@@ -21,8 +21,9 @@ internal sealed class NativeAnalysisModel(string installRoot) : IDisposable
     {
         lock (sync)
         {
-            if (++owners == 1 && state != "ready")
+            if (++owners == 1 && state is "idle" or "failed")
             {
+                cancellation?.Dispose();
                 cancellation = new();
                 state = "provisioningModel"; failure = null;
                 int run = ++generation;
@@ -48,20 +49,7 @@ internal sealed class NativeAnalysisModel(string installRoot) : IDisposable
             }
             else
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-                using var response = await client.GetAsync("https://huggingface.co/skytnt/anime-seg/resolve/main/isnetis.onnx", HttpCompletionOption.ResponseHeadersRead, token);
-                response.EnsureSuccessStatusCode();
-                await using (var source = await response.Content.ReadAsStreamAsync(token))
-                await using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
-                {
-                    byte[] buffer = new byte[65536]; long length = 0; int count;
-                    while ((count = await source.ReadAsync(buffer, token)) != 0)
-                    {
-                        length += count;
-                        if (length > 200 * 1024 * 1024) throw new IOException("Character-mask model exceeds its approved download size.");
-                        await file.WriteAsync(buffer.AsMemory(0, count), token);
-                    }
-                }
+                await DownloadAsync(temporary, token);
                 await using (var file = File.OpenRead(temporary))
                     if (Convert.ToHexStringLower(await SHA256.HashDataAsync(file, token)) != Sha256)
                         throw new IOException("Character-mask model download failed checksum verification.");
@@ -75,9 +63,44 @@ internal sealed class NativeAnalysisModel(string installRoot) : IDisposable
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
+    private static async Task DownloadAsync(string temporary, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromMinutes(10));
+        token = deadline.Token;
+        var uri = new Uri("https://huggingface.co/skytnt/anime-seg/resolve/main/isnetis.onnx");
+        // HF redirects to its model CDN. Resolve and pin each connection, with
+        // no proxy, cookies or credentials; the content hash remains mandatory.
+        for (int redirects = 0; redirects < 6; ++redirects)
+        {
+            if (uri.Scheme != "https" || uri.UserInfo.Length != 0)
+                throw new IOException("Character-mask download redirected outside HTTPS.");
+            var destination = await NetworkDestination.InspectAsync(uri.GetLeftPart(UriPartial.Authority), token);
+            using var client = new HttpClient(NetworkAccess.CreateHandler(destination)) { Timeout = Timeout.InfiniteTimeSpan };
+            using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token);
+            if ((int)response.StatusCode is 301 or 302 or 303 or 307 or 308 && response.Headers.Location is { } location)
+            { uri = new Uri(uri, location); continue; }
+            response.EnsureSuccessStatusCode();
+            await using var source = await response.Content.ReadAsStreamAsync(token);
+            await using var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true);
+            byte[] buffer = new byte[65536]; long length = 0; int count;
+            while ((count = await source.ReadAsync(buffer, token)) != 0)
+            {
+                length += count;
+                if (length > 200 * 1024 * 1024) throw new IOException("Character-mask model exceeds its approved download size.");
+                await file.WriteAsync(buffer.AsMemory(0, count), token);
+            }
+            return;
+        }
+        throw new IOException("Character-mask download exceeded its redirect limit.");
+    }
+
     private void Release()
     {
-        lock (sync) if (--owners == 0) { ++generation; cancellation?.Cancel(); cancellation?.Dispose(); cancellation = null; if (state != "ready") state = "idle"; }
+        // Provision the approved, checksum-pinned model once per host. Rapid
+        // subscription changes reuse the in-flight download, not a new 200 MB
+        // request. Host shutdown still cancels it through Dispose.
+        lock (sync) --owners;
     }
     public void Dispose() { lock (sync) { ++generation; cancellation?.Cancel(); cancellation?.Dispose(); cancellation = null; } }
     private sealed class Lease(NativeAnalysisModel owner) : IDisposable

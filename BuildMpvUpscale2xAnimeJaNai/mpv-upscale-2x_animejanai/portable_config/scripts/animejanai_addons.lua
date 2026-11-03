@@ -32,6 +32,7 @@ local label = 'ajn-player-sample'
 local revision, changed, mapping = nil, 0, nil
 local scene_mapping = nil
 local source_taps = {}
+local desired_taps, desired_since = nil, 0
 local function update_source_tap(kind, name)
     local tap = 'ajn-player-' .. kind
     local prefix = 'Local\\AJN.PlayerFrames.'
@@ -86,6 +87,13 @@ local function update_sample()
     if value.available ~= true or mp.get_time() - changed > 3 then
         remove_tap(); update_scene(''); update_source_tap('source'); update_source_tap('analysis'); return
     end
+    -- Guests may rapidly change subscriptions. The host disables retired
+    -- mappings immediately; wait for a stable request before rebuilding vf.
+    -- Heartbeat revisions do not reset this timer.
+    local desired = table.concat({ tostring(value.sceneMapping), tostring(value.sourceMapping),
+        tostring(value.analysisMapping), tostring(value.enabled), tostring(value.mapping) }, '|')
+    if desired ~= desired_taps then desired_taps = desired; desired_since = mp.get_time() end
+    if mp.get_time() - desired_since < 1 then return end
     update_scene(value.sceneMapping)
     update_source_tap('source', value.sourceMapping)
     update_source_tap('analysis', value.analysisMapping)

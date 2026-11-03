@@ -112,7 +112,7 @@ public sealed record AddonManifest
     {
         Contract.Require(SchemaVersion == 1, "unsupported_manifest", "Manifest schema must be 1.");
         Contract.Require(Id is not null && Contract.ValidId(Id), "invalid_manifest", "Use a lowercase reverse-domain addon id.");
-        Contract.Require(Name is { Length: > 0 and <= 100 } && !Name.Any(char.IsControl), "invalid_manifest", "Invalid addon name.");
+        Contract.Require(Name is { Length: > 0 and <= 100 } && !Name.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format), "invalid_manifest", "Invalid addon name.");
         Contract.Require(Version is { Length: > 0 and <= 80 } && Regex.IsMatch(Version,
             @"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?\z"),
             "invalid_manifest", "Use a major.minor.patch version, optionally with a prerelease suffix.");

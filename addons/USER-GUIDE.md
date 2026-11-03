@@ -26,6 +26,10 @@ Local packages currently have no verified publisher identity. A package's name
 alone does not prove who made it. Permission review applies to the exact file
 you selected.
 
+A different package with the same addon ID must ask before using existing saved settings or data, including data retained after removal. **Keep** gives it access, which can include saved account information; choose it only if you trust this package as an update. **Reset** permanently deletes that addon's saved settings and private storage. Neither choice is selected for you.
+
+**Start eligible addons when I sign in** is off by default. Enabling it registers an entry in your Windows account's `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Uninstall removes an entry only when its quoted launcher and `login` command still point to that installation. Entries for another installation remain untouched.
+
 ## Understand permissions and access
 
 Only checked permissions are allowed. An addon may still install with a

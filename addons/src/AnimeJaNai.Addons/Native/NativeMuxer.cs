@@ -17,6 +17,7 @@ internal sealed class NativeMuxer : IDisposable
     private readonly long maximumBytes;
     private readonly TimeSpan pressureTimeout;
     private readonly Dictionary<long, FileStream> files = [];
+    internal int OpenFileCount => files.Count;
     private readonly byte[] writeBuffer = new byte[32768];
     private readonly NativeReadBuffer reader;
     private long nextHandle, accountedBytes, lastMeasured;

@@ -20,6 +20,11 @@ Do not overwrite the frozen fixture. Recompiling the original sources produces
 the same module size and code, but some initialized runtime data differs between
 builds, so the rebuilt module and ZIP have different hashes. The committed
 fixture remains the exact old binary used by the compatibility regression.
+It is a repository/CI fixture only and is excluded from release/developer
+packages; the fixture sources and rebuild script remain available there.
+To run the frozen-binary compatibility test, use a Git checkout containing the
+unchanged fixture. Source packages can build without it, but do not provide that
+test's input; the test still requires the original hash and never silently skips.
 
 The runtime test checks old handshake, storage, settings/actions, reconnect and
 saved-state behavior against the new host. Keep this fixture unchanged as the API

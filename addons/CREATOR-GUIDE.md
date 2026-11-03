@@ -189,7 +189,7 @@ new filename. Do not replace a package while someone is reviewing it.
 
 ```powershell
 Invoke-Ajn build ./addon-work/my-greeting $tools.javy.path ./addon-work/greeting-0.2.0.ajnaddon
-Invoke-Ajn install-dev ./addon-work/greeting-0.2.0.ajnaddon ./addon-work/test-data 'storage.read,storage.write'
+Invoke-Ajn install-dev ./addon-work/greeting-0.2.0.ajnaddon ./addon-work/test-data 'storage.read,storage.write' --keep-data
 Invoke-Ajn action org.example.greeting ./addon-work/test-data $runtime remember
 Invoke-Ajn rollback org.example.greeting ./addon-work/test-data
 Invoke-Ajn action org.example.greeting ./addon-work/test-data $runtime greet
@@ -295,3 +295,7 @@ its output for invented Node/browser APIs and undocumented native shortcuts.
 See [Troubleshooting](TROUBLESHOOTING.md) for error codes and recovery. API 1.7 is
 still a preview contract; public stability and deprecation policy must be frozen
 before a community release.
+
+## Existing private data during development updates
+
+Package IDs are not verified publisher identities. Installing a different package hash over saved data requires the user's explicit Keep/Reset choice in Manager. The CLI equivalent is `install-dev <package> <data-directory> [permissions] --keep-data` or `--reset-data`. Reusing the identical package does not ask again. Removing an addon preserves private data, so a later different package must also ask. Reset deletes settings and private storage permanently; rollback restores code and grants, not deleted data.

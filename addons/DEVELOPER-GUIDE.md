@@ -325,7 +325,7 @@ new filename. Do not replace a package while someone is reviewing it.
 
 ```powershell
 Invoke-Ajn build ./addon-work/my-greeting $tools.javy.path ./addon-work/greeting-0.2.0.ajnaddon
-Invoke-Ajn install-dev ./addon-work/greeting-0.2.0.ajnaddon ./addon-work/test-data 'storage.read,storage.write'
+Invoke-Ajn install-dev ./addon-work/greeting-0.2.0.ajnaddon ./addon-work/test-data 'storage.read,storage.write' --keep-data
 Invoke-Ajn action org.example.greeting ./addon-work/test-data $runtime remember
 Invoke-Ajn rollback org.example.greeting ./addon-work/test-data
 Invoke-Ajn action org.example.greeting ./addon-work/test-data $runtime greet
@@ -515,12 +515,18 @@ This limit is separate from ordinary player observations and worker limits.
 addons that support sign-in activation to start when you sign in. Turning it off
 ends sign-in activation; addons started manually or in use by a player can remain
 running. The setting applies to your Windows account and this AJN installation.
+It creates an entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+for this installation's quoted launcher and `login` argument. Disabling it or
+uninstalling removes only an entry that still matches that exact command.
 
 ### Update, restore or remove
 
 Install the newer `.ajnaddon` file to update an addon. It should use the same
-addon ID. Review the new package and permissions; settings and private data are
-retained. Check the access sections too: resource approvals are tied to the exact
+addon ID. Review the new package and permissions. When a different package would
+inherit saved settings or private storage, explicitly choose **Keep saved data**
+or **Reset saved data**. There is no default choice: addon IDs are not proof of
+authorship, and saved data may contain secrets. Reset removes stored settings
+and private storage before installation. Check the access sections too: resource approvals are tied to the exact
 package version and may need review again.
 
 **Previous version** asks before restoring the last installed package and its
@@ -614,7 +620,9 @@ no delete/list/transaction method in the public storage API. Save related state
 in one value for an atomic write. In-memory variables survive events in one
 worker, but disappear on restart. Do not store active handles for later reuse.
 
-Updates, rollback and removal retain settings/private data. Resource approvals
+Updates and reinstallation ask whether to keep or reset existing settings/private
+data when the package differs from the previous owner. Rollback and removal
+retain settings/private data. Resource approvals
 are tied to the exact package and need separate review. Changing your addon ID
 creates a different identity and does not migrate old state. Use a version field
 inside persistent values and design readers to tolerate rollback; AJN executes
@@ -1937,7 +1945,7 @@ are placeholders to replace, not literal PowerShell syntax.
 new <new-source-directory> <addon-id>
 build <source-directory> <javy.exe> <new-package.ajnaddon>
 inspect <package.ajnaddon>
-install-dev <package.ajnaddon> <test-data-directory> [permission,permission]
+install-dev <package.ajnaddon> <test-data-directory> [permission,permission] [--keep-data|--reset-data]
 run <addon-id> <test-data-directory> <wasmtime.exe> [event-name]
 settings <addon-id> <test-data-directory>
 configure <addon-id> <test-data-directory> <settings-patch.json>
@@ -1950,7 +1958,9 @@ disable <addon-id> <test-data-directory>
 `new` and `build` require new destinations. `inspect` validates the package and
 prints its manifest/hash; it does not run the addon. `install-dev` grants exactly
 the comma-separated permissions supplied, none by default. It cannot approve
-native media or arbitrary services. `configure` applies a JSON object of setting
+native media or arbitrary services. If a different package would inherit saved
+data, explicitly pass `--keep-data` or `--reset-data`; otherwise installation
+fails with `stored_data_choice_required`. `configure` applies a JSON object of setting
 changes. `disable` removes registration while retaining saved data. `run` sends
 one event and exits; it is not a background daemon command. `rollback` restores
 the previous installed package and its saved grants, retaining current data.
@@ -4156,7 +4166,7 @@ Color-only source observations use `playerFrames.subscribe(playerId, {stage:"sou
 
 ## Readiness and failures
 
-Subscribe returns promptly. Poll status: `provisioningModel`, `loading`, `buildingEngine`, `waitingForFrame`, `processing`, `ready`, `unsupportedFormat`, `modelMissing`, `failed` or `closed`. First use downloads the approved 176 MB ONNX and builds a local TensorRT engine. This can take minutes. It is not a Wasm callback and holds no decoder image while setting up. Failed setup does not become an all-background mask. `read()` returns null for no new completed observation; unsupported input/native failure raises an explicit error. The inspection example returns that error in its action result.
+Subscribe returns promptly. Poll status: `provisioningModel`, `loading`, `buildingEngine`, `waitingForFrame`, `processing`, `ready`, `unsupportedFormat`, `modelMissing`, `failed` or `closed`. First use downloads the approved 176 MB ONNX and builds a local TensorRT engine. Once approved and started, the model download continues if the last subscription ends, so a later subscriber can reuse it; host shutdown cancels it. This does not keep GPU analysis running without subscribers. This can take minutes. It is not a Wasm callback and holds no decoder image while setting up. Failed setup does not become an all-background mask. `read()` returns null for no new completed observation; unsupported input/native failure raises an explicit error. The inspection example returns that error in its action result.
 
 The host verifies SHA256 `f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99` for [SkyTNT's isnetis.onnx](https://huggingface.co/skytnt/anime-seg/blob/main/isnetis.onnx). It is provisioned under the installation's `animejanai/analysis` directory. The `.analysisengine` cache includes the hash of the actual model bytes, TensorRT version, GPU UUID and driver version. It is separate from upscaler `.engine` cleanup. Cache-lock acquisition is cancellable and stops after ten minutes if another builder does not release it. Do not redistribute engine files between machines. Setup errors are exposed through status; native engine errors are also reported in the player log. Correct the missing runtime/model problem and unsubscribe/re-subscribe to retry.
 

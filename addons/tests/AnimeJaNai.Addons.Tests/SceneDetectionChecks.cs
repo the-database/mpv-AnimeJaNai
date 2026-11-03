@@ -83,6 +83,10 @@ internal static partial class Checks
             True(lease.Read() is null && !lease.Submit("4", 1)); buffer.RenewLease();
             PublishScene(view, 5, 2, 1, false); view.Write(32, 0L); view.Write(128, 2L);
             True(!lease.Submit("5", 1));
+            PublishScene(view, 6, 2, 1, false); view.Write(72, double.NaN);
+            True(lease.Read() is null && lease.Status()["previousPtsSeconds"] is null);
+            _ = lease.Status().ToJsonString();
+            PublishScene(view, 7, 2, 1, false); True(lease.Read() is not null);
             view.Write(16, 1); lease.Dispose(); True(view.ReadInt32(20) == 0); view.Write(16, 0);
             await Error("scene_detector_not_found", () => lease.Submit("5", 1));
             using var next = buffer.Subscribe(new(2, 1, 25), () => { });

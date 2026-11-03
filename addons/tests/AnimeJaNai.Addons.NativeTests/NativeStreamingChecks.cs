@@ -11,6 +11,23 @@ internal static class NativeStreamingChecks
     {
         string work = Path.Combine(output, "workers");
         string source = await NativeEncodingChecks.FixtureAsync(root, output);
+        string hlsSource = Path.Combine(output, "hls-abort-source.mkv");
+        await NativeEncodingChecks.RunAsync(root, output, "hls-abort-fixture", ["--hwdec=no", "--of=matroska", "--ovc=libx264",
+            "--ovcopts=preset=ultrafast", "--oac=aac", "--o=" + hlsSource, source]);
+        // Fail while the HLS muxer still owns its current segment. Assert the
+        // native close callbacks ran BEFORE the managed Dispose safety net.
+        foreach (string format in new[] { "mpegts", "fragmentedMp4" })
+        {
+            string directory = Directory.CreateDirectory(Path.Combine(output, "abort-" + format)).FullName;
+            using var input = File.OpenRead(hlsSource);
+            using var mux = new NativeMuxer(directory, input, default, maximumBytes: 4096, pressureTimeoutMs: 1);
+            bool failed = false;
+            try { mux.Run(root, format, true, 1); }
+            catch (AddonException) { failed = true; }
+            Require(failed && mux.OpenFileCount == 0 && Directory.GetFiles(directory, "part_*").Length > 0,
+                "Aborted HLS mux did not release its open segment: " + format);
+            evidence.Add(new() { ["abortedHls"] = format, ["openHandlesBeforeDispose"] = mux.OpenFileCount });
+        }
         var probe = await NativeProbeProcess.RunAsync(root, source, null, work, command, default);
         Require(probe["tracks"]!.AsArray().Any(t => t!["type"]!.GetValue<string>() == "audio"), "Probe lost fixture audio.");
         Require(probe["durationSeconds"]!.GetValue<double>() >= 7.9, "Probe duration changed.");

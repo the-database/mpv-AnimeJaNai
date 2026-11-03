@@ -67,7 +67,7 @@ internal static class NativeArchiveUpdateChecks
             }
             catch (ManagementException error) when (error.Code == "integrity_mismatch") { }
             await client.CallAsync("addons.installDev", new() { ["path"] = path, ["expectedHash"] = newAddon.Hash,
-                ["permissions"] = new JsonArray("storage.read") });
+                ["permissions"] = new JsonArray("storage.read"), ["keepStoredData"] = true });
             Require(registry.Load(oldAddon.Manifest.Id).Grant.Allowed.SequenceEqual(new[] { "storage.read" }), "New package inherited unapproved permissions.");
             await client.CallAsync("addons.rollback", Id());
             Require(registry.Load(oldAddon.Manifest.Id).Package.Hash == oldAddon.Hash, "Addon rollback did not restore its previously reviewed build.");

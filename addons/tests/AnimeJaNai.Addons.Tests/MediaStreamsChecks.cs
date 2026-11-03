@@ -42,6 +42,7 @@ internal static partial class Checks
             await Error("stream_not_found", () => second.MediaStreams.RequestClose(id));
             firstProvider.Last!.Failed = true;
             await Until(() => first.MediaStreams.Status(id)["state"]!.GetValue<string>() == "failed");
+            await Until(() => firstProvider.Active == 0 && !Directory.Exists(firstProvider.Last.Directory));
             True(firstProvider.Active == 0 && !Directory.Exists(firstProvider.Last.Directory));
             True(secondProvider.Active == 1 && Directory.Exists(secondProvider.Last!.Directory));
             await second.MediaStreams.CloseAsync(other, default);

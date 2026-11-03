@@ -53,7 +53,7 @@ public sealed record SettingDefinition
     }
 
     internal static void LabelText(string text, int maximum) => Contract.Require(text is { Length: > 0 } && text.Length <= maximum &&
-        !text.Any(char.IsControl), "invalid_manifest", "Invalid display text.");
+        !text.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format), "invalid_manifest", "Invalid display text.");
     public SettingDefinition Copy() => this with { Default = Default.DeepClone(), Choices = Choices?.ToArray() };
 }
 

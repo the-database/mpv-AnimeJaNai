@@ -68,6 +68,9 @@ try
 {
     switch (mode)
     {
+        case "--check-install" when args.Length == 2:
+            AddonUpdateTransaction.RequireAppsClosed(Path.GetFullPath(args[1]));
+            return 0;
         case "--prepare-uninstall":
             await AddonUpdateTransaction.PrepareUninstallAsync(installDir);
             return 0;
