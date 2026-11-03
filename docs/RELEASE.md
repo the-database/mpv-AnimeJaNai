@@ -32,7 +32,7 @@ Values below are the current ones; read the file for truth.
 
 | Constant | Current | Source of the value |
 |---|---|---|
-| `AjiVersion` | `v0.19.0` | `the-database/animejanai-inference` release tag |
+| `AjiVersion` | `v0.21.0` | `the-database/animejanai-inference` release tag |
 | `RifeModelsVersion` | `models-rife-fp16-2` | an animejanai-inference release tag (fp16 conversions) |
 | `MpvForkVersion` | `2026-10-24-b4f9f5bfed` | `the-database/mpv-winbuild` release tag |
 | `MpvForkBuildDate` | `20261024` | the date **inside the archive filename** |
@@ -45,7 +45,7 @@ Values below are the current ones; read the file for truth.
 | `OrtDmlVersion` | `1.24.4` | `Microsoft.ML.OnnxRuntime.DirectML` on NuGet |
 | `DirectMLVersion` | `1.15.4` | `Microsoft.AI.DirectML` on NuGet |
 | `MpvNetVersion` | `v7.1.2.0` | `mpvnet-player/mpv.net` release tag |
-| `SevenZipVersion` | `2602` | 7-zip.org "extra" / linux-x64 console |
+| `SevenZipVersion` | `2605` | ip7z/7zip release asset ("extra" / linux-x64 console); with `SevenZipTag` `26.05` and the SHA-256 pins |
 
 **Three constants describe one mpv-winbuild build.** `MpvForkVersion` is the release tag, while
 `MpvForkBuildDate` and `MpvForkGitHash` are the date and short hash embedded in the asset
