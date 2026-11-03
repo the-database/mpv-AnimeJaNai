@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
+// Shared with the release-boundary regression tests in the developer source.
 // Public releases use the ordinary official component pins. The locally built
 // host bundle can only populate support directories, never replace those pins.
 internal static class AddonRelease
