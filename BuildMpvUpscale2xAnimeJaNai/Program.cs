@@ -69,9 +69,15 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.19.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; DirectML pins named input dims)
+const string AjiVersion           = "v0.21.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; fused chroma preprocessing)
 
-const string SevenZipVersion      = "2602";         // 7-zip "extra" (Windows) / linux-x64 standalone console version
+// 7-Zip "extra" (Windows) / linux-x64 standalone console, from the
+// github.com/ip7z/7zip release (7-zip.org no longer hosts every version).
+// The SHA-256s match the digests GitHub records for the release assets.
+const string SevenZipVersion      = "2605";         // the version in the asset filenames
+const string SevenZipTag          = "26.05";        // the release tag
+const string SevenZipSha256Win    = "f27a8f103c84785026edcba1f67faf1357225df9d19ddb0b7760d55947141bc7";
+const string SevenZipSha256Linux  = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089d6833dc30f8350a3b232e";
 const string MpvNetVersion        = "v7.1.2.0";
 const string ManagerVersion       = "0.10.4";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
 
@@ -153,12 +159,13 @@ async Task InstallSevenZip()
     Console.WriteLine("Downloading 7-Zip standalone console...");
     if (plat.IsWindows)
     {
-        var downloadUrl = $"https://www.7-zip.org/a/7z{SevenZipVersion}-extra.7z";
+        var downloadUrl = $"https://github.com/ip7z/7zip/releases/download/{SevenZipTag}/7z{SevenZipVersion}-extra.7z";
         var targetPath = Path.GetFullPath("7z-extra.7z");
         await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
         {
             Console.WriteLine($"Downloading 7-Zip ({progress}%)...");
         });
+        VerifySha256(targetPath, SevenZipSha256Win);
 
         var targetExtractPath = Path.GetFullPath("7z-extra-temp");
         Directory.CreateDirectory(targetExtractPath);
@@ -175,12 +182,13 @@ async Task InstallSevenZip()
     {
         // 7-Zip's linux-x64 console ships as tar.xz; extract with system tar
         // (universal on Linux) to avoid a chicken-and-egg archive dependency.
-        var downloadUrl = $"https://www.7-zip.org/a/7z{SevenZipVersion}-linux-x64.tar.xz";
+        var downloadUrl = $"https://github.com/ip7z/7zip/releases/download/{SevenZipTag}/7z{SevenZipVersion}-linux-x64.tar.xz";
         var targetPath = Path.GetFullPath("7z-linux.tar.xz");
         await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
         {
             Console.WriteLine($"Downloading 7-Zip ({progress}%)...");
         });
+        VerifySha256(targetPath, SevenZipSha256Linux);
         var tmp = Path.GetFullPath("7z-linux-temp");
         Directory.CreateDirectory(tmp);
         await RunProcess("tar", $"-xf \"{targetPath}\" -C \"{tmp}\"");
