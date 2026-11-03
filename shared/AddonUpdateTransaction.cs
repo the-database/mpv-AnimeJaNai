@@ -188,12 +188,12 @@ public static class AddonUpdateTransaction
             throw new IOException("Update staging and installation must be separate directories.");
         using var update = Lock(target);
         RequireAppsClosed(target, includeManager: !component);
-        if (!component) ValidatePackage(source, target);
         Intent(target);
         try
         {
             using var drained = await DrainAsync(target, token);
             RecoverCore(target);
+            if (!component) ValidatePackage(source, target);
             bool removeAddons = !component && File.Exists(Child(target, PackageManifest)) &&
                 !File.Exists(Child(source, PackageManifest));
             if (!component && removals is not null) throw new IOException("Only component transactions accept explicit removal lists.");

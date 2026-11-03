@@ -486,6 +486,11 @@ async Task<int> ApplyAsync()
     // The launching lua quits mpv right after starting us; wait for it to release file locks.
     WaitForProcessExit(Path.GetFileNameWithoutExtension(playerExe), TimeSpan.FromSeconds(30));
 
+    // A partial manifest/version can falsely select an overlay or report that
+    // the update already completed. Restore the installed state first.
+    if (AnimeJaNai.Addons.Management.InstallationActivity.Pending(installDir))
+        await AddonUpdateTransaction.RecoverAsync(installDir);
+
     var release = await GetLatestReleaseAsync();
     string local = ReadLocalVersion();
     if (!IsNewer(release.Tag, local))

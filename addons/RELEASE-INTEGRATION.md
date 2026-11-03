@@ -6,6 +6,20 @@ This is a preview. Public API ownership, representative application acceptance a
 
 Dispatch the ordinary `mpv-winbuild/mpv.yml` workflow with `build_target=64bit`, `compiler=clang`, the selected mpv/libass repositories and full source commits, `addon_metadata=true`, and `release=false` for tests. Default non-addon release behavior is retained. The producing job checks the source ABI declaration, actual build features and PE imports, then emits `mpv-addon-native-x86_64.json` before packaging.
 
+After the native and winbuild changes are merged, a maintainer can publish the separate official addon-native component release. Set these variables to the full merged commits, then dispatch from the merged winbuild `main` branch:
+
+```powershell
+$mergedMpvCommit = '<full merged the-database/mpv commit>'
+$mergedLibassCommit = '<full the-database/libass commit>'
+gh workflow run mpv.yml --repo the-database/mpv-winbuild --ref main `
+  -f mpv_repository=the-database/mpv -f libass_repository=the-database/libass `
+  -f mpv_ref=$mergedMpvCommit -f libass_ref=$mergedLibassCommit `
+  -f build_target=64bit -f compiler=clang -f lgpl=false `
+  -f addon_metadata=true -f release=true -f no_save_cache=true
+```
+
+Keep `prs` and `command` empty. Public releases reject fork source repositories. An addon release uses `<date>-<mpv-short-sha>-addons-<workflow-run-id>`, includes the native JSON and both player/development archives, and does not update the normal `version` branch or GitHub's latest release. Its run-specific tag is not overwritten; rerunning a published job cannot replace its pinned assets. Daily pruning retains addon tags. Use a new dispatch for a rebuilt component set, including rebuilds at the same mpv commit.
+
 Use the player and development archives from that same run. Flatten their recorded binaries into one native input directory and keep the license material. The assembler verifies every native file against the producer record; it cannot manufacture native capability evidence from arbitrary DLL hashes. Static UCRT FFmpeg needs no separate `avformat` DLL. Old sealed shared-FFmpeg previews retain their legacy detection only when the new record is absent. Invalid new metadata never falls back to an old marker.
 
 Schema 1 allows up to 256 native files and 1 MiB of metadata. This accommodates the complete shared dependency closure (139 files in the tested MSYS2 build) while retaining bounded parsing and exact file checks. The producer, host and assembler enforce compatible limits. `test-build/test_native_metadata.py` in winbuild tests configuration, source pins, CRT and linkage rejection paths.
@@ -34,7 +48,9 @@ When a historical core contains a native file inventory, obsolete shared depende
 
 The public assembler accepts `--addons` only for Windows. `AJN_ADDON_BUNDLE` points to the host bundle built from the release checkout by `addons/tools/package.ps1`, **not** the preview assembler's overlay. Only host/runtime/licenses and developer documentation/source/examples are copied into `addon-host` and `addon-development`. Support cannot replace core binaries, Manager, configuration, `version.txt` or `manifest.json`. The Wasmtime executable has a fixed SHA-256 check.
 
-Deployment builds that host from its checkout; there is no external bundle URL input. Native archives and producer metadata come only from the official `the-database/mpv-winbuild` release selected by the checked-in `MpvForkVersion`/date/hash. The metadata SHA-256 pins every native binary. Manager and inference use their ordinary official release pins. Before the first public addon release, publish the reviewed components and set `AddonNativeMetadataSha256`, `AddonManagerSource` and `AddonInferenceSource` in the assembler alongside those versions. Empty pins deliberately reject public addon builds. Pre-merge testing uses the preview assembler.
+Deployment builds that host from its checkout; there is no external bundle URL input. Addon native archives and producer metadata come only from the official `the-database/mpv-winbuild` release selected by the separate checked-in `AddonMpvForkVersion`, `AddonMpvForkBuildDate` and `AddonMpvForkGitHash`. Ordinary packages continue using `MpvForkVersion`/date/hash. The metadata SHA-256 pins every native binary. Manager and inference use their ordinary official release pins.
+
+After the official addon-native release above succeeds, set the following assembler constants from its actual assets: `AddonMpvForkVersion` to its full tag, `AddonMpvForkBuildDate` and `AddonMpvForkGitHash` to the eight-digit date and ten-character hash in `mpv[-dev]-x86_64-<date>-git-<hash>.7z`, and `AddonNativeMetadataSha256` to the SHA-256 of `mpv-addon-native-x86_64.json`. The archive date can differ from the publication date; use the filename. Set `AddonManagerSource` and `AddonInferenceSource` to the full source commits corresponding to the selected official Manager/inference versions. Leave the ordinary `MpvFork*` pins unchanged when updating only addon natives. Empty pins deliberately reject public addon builds. Pre-merge testing uses the preview assembler. Only after these pins and release validation are complete should the main deploy workflow run with `addons=true`.
 
 The native addon build explicitly enables `-Dajn-mvtools=true`; ordinary builds default to false. Its static OpenSSL recipe uses `no-pinshared`, matching the unload behavior tested in CI. The normal native recipe remains unchanged. Validate the final native commit and artifact before shipping: a shared-FFmpeg test artifact alone does not establish the static production artifact's behavior.
 

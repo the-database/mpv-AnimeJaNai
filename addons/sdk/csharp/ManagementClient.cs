@@ -181,15 +181,23 @@ public sealed class InstallationActivity : IDisposable
     public static string LockPath(string root) => Path.Combine(Path.GetFullPath(root), ".ajn-addon-activity.lock");
     public static void Check(string root)
     {
-        if (Pending(root)) throw new ManagementException("update_in_progress",
-            "AnimeJaNai is being updated. If it was interrupted, close the player and Manager, then run the installer again to recover.");
+        if (Pending(root)) throw Updating();
     }
+    private static ManagementException Updating() => new("update_in_progress",
+        "AnimeJaNai is being updated. If it was interrupted, close the player and Manager, then run the installer again to recover.");
     public static InstallationActivity Acquire(string root)
     {
         Check(root);
         FileStream stream;
         try { stream = new(LockPath(root), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite); }
-        catch (IOException) { Check(root); throw; }
+        catch (IOException error)
+        {
+            Check(root);
+            // The transaction may have cleared its intent marker while still
+            // holding the exclusive activity lock during recovery or commit.
+            if ((error.HResult & 0xffff) is 32 or 33) throw Updating();
+            throw;
+        }
         try { Check(root); return new(stream); }
         catch { stream.Dispose(); throw; }
     }

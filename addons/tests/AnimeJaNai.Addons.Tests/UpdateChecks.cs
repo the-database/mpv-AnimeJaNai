@@ -27,6 +27,61 @@ internal static partial class Checks
     }
     private static async Task UpdateChecks()
     {
+        await Test("Update retry recovers installed files before validating an overlay", async () =>
+        {
+            string MakePackage(string version)
+            {
+                string directory = Area();
+                var files = new JsonObject();
+                foreach (string name in new[] { "addon-host/ajn-addon.exe", "addon-host/ajn-addon-launcher.exe",
+                    "addon-host/runtime/wasmtime.exe", "addon-host/native-capabilities.json",
+                    "AnimeJaNaiManager.exe", "libmpv-2.dll", "mpv.exe", "manifest.json", "version.txt" })
+                {
+                    string path = Path.Combine(directory, name);
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    File.WriteAllText(path, name == "manifest.json"
+                        ? new JsonObject { ["deps"] = new JsonObject { ["mpvfork"] = version } }.ToJsonString() : version);
+                    files[name] = AddonRelease.Hash(path);
+                }
+                File.WriteAllText(Path.Combine(directory, "addon-package.json"), new JsonObject {
+                    ["schemaVersion"] = 1, ["platform"] = "win-x64", ["files"] = files }.ToJsonString());
+                return directory;
+            }
+            string target = MakePackage("old"), incoming = MakePackage("new"), overlay = Area();
+            File.Copy(Path.Combine(target, "addon-package.json"), Path.Combine(overlay, "addon-package.json"));
+            try { await AddonUpdateTransaction.ApplyAsync(incoming, target, new HashSet<string>(), afterPublish: _ =>
+                throw new IOException("Interrupted full update")); }
+            catch (IOException error) when (error.Message == "Interrupted full update") { }
+            // A manifest/version ahead of one native file, and another native
+            // file already replaced: the journal must restore the whole set.
+            File.Copy(Path.Combine(incoming, "manifest.json"), Path.Combine(target, "manifest.json"), true);
+            File.WriteAllText(Path.Combine(target, "version.txt"), "new");
+            File.WriteAllText(Path.Combine(target, "libmpv-2.dll"), "new");
+            File.WriteAllText(Path.Combine(target, "mpv.exe"), "old");
+            True(InstallationActivity.Pending(target));
+            bool invalidBeforeRecovery = false;
+            try { AddonUpdateTransaction.ValidatePackage(overlay, target); }
+            catch (IOException) { invalidBeforeRecovery = true; }
+            True(invalidBeforeRecovery);
+            await AddonUpdateTransaction.ApplyAsync(overlay, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "version.txt")) == "old");
+            True(JsonNode.Parse(File.ReadAllText(Path.Combine(target, "manifest.json")))!["deps"]!["mpvfork"]!.GetValue<string>() == "old");
+            True(File.ReadAllText(Path.Combine(target, "libmpv-2.dll")) == "old" && !InstallationActivity.Pending(target));
+            await AddonUpdateTransaction.ApplyAsync(incoming, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "mpv.exe")) == "new");
+        });
+        await Test("Update activity lock reports update_in_progress without a pending marker", () =>
+        {
+            string target = Area();
+            using var updater = new FileStream(InstallationActivity.LockPath(target), FileMode.OpenOrCreate,
+                FileAccess.ReadWrite, FileShare.None);
+            True(!InstallationActivity.Pending(target));
+            bool excluded = false;
+            try { using var activity = InstallationActivity.Acquire(target); }
+            catch (ManagementException error) when (error.Code == "update_in_progress") { excluded = true; }
+            True(excluded);
+            return Task.CompletedTask;
+        });
         await Test("Update identity changes for rebuilt native binaries at an unchanged source commit", () =>
         {
             string target = Area();

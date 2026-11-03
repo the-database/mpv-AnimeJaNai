@@ -97,8 +97,12 @@ const string MpvForkVersion       = "2026-10-24-b4f9f5bfed"; // release tag (Win
 const string MpvForkBuildDate     = "20261024";     // build date in the Windows dev archive filename
 const string MpvForkGitHash       = "b4f9f5bfed";   // git short hash (master; aji ABI v9)
 // Fill these only after the reviewed addon commits have official releases.
-// MpvForkVersion/ManagerVersion/AjiVersion above must point to those releases.
+// Addon natives have a separate release; ordinary MpvFork* pins stay independent.
+// ManagerVersion/AjiVersion above must point to matching official releases.
 // Public deployment fails before downloading anything until this gate is set.
+const string AddonMpvForkVersion = "";
+const string AddonMpvForkBuildDate = "";
+const string AddonMpvForkGitHash = "";
 const string AddonNativeMetadataSha256 = "";
 const string AddonManagerSource = "";
 const string AddonInferenceSource = "";
@@ -136,10 +140,13 @@ if (includeAddons && !plat.IsWindows)
     Environment.ExitCode = 2;
     return;
 }
-if (includeAddons && (!System.Text.RegularExpressions.Regex.IsMatch(AddonNativeMetadataSha256, "^[0-9a-f]{64}$") ||
+if (includeAddons && (string.IsNullOrWhiteSpace(AddonMpvForkVersion) ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonMpvForkBuildDate, "^[0-9]{8}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonMpvForkGitHash, "^[0-9a-f]{10}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonNativeMetadataSha256, "^[0-9a-f]{64}$") ||
     !System.Text.RegularExpressions.Regex.IsMatch(AddonManagerSource, "^[0-9a-f]{40}$") ||
     !System.Text.RegularExpressions.Regex.IsMatch(AddonInferenceSource, "^[0-9a-f]{40}$")))
-    throw new InvalidOperationException("Public addon release pins are not set. Publish the reviewed official components, then set the native metadata SHA-256 and Manager/inference source pins. Use tools/assemble-addon-preview.py for pre-merge testing.");
+    throw new InvalidOperationException("Public addon release pins are not set. Publish the separate official addon-native release, then set AddonMpvForkVersion/BuildDate/GitHash, its metadata SHA-256 and the Manager/inference source pins. Use tools/assemble-addon-preview.py for pre-merge testing.");
 if (includeAddons && (string.IsNullOrWhiteSpace(addonBundle) || !File.Exists(Path.Combine(addonBundle, "host-build.json"))))
 {
     Console.Error.WriteLine("--addons requires AJN_ADDON_BUNDLE built from this checkout by addons/tools/package.ps1.");
@@ -629,7 +636,7 @@ async Task InstallCustomLibmpv()
 
 async Task<System.Text.Json.Nodes.JsonObject> InstallAddonNative()
 {
-    string release = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}";
+    string release = $"https://github.com/the-database/mpv-winbuild/releases/download/{AddonMpvForkVersion}";
     string metadata = Path.GetFullPath("mpv-addon-native-x86_64.json");
     await DownloadFileAsync(release + "/mpv-addon-native-x86_64.json", metadata, _ => { });
     if (AddonRelease.Hash(metadata) != AddonNativeMetadataSha256)
@@ -638,7 +645,7 @@ async Task<System.Text.Json.Nodes.JsonObject> InstallAddonNative()
     var names = record["files"]!.AsObject().Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
     foreach (string prefix in new[] { "mpv-dev", "mpv" })
     {
-        string asset = $"{prefix}-x86_64-{MpvForkBuildDate}-git-{MpvForkGitHash}.7z";
+        string asset = $"{prefix}-x86_64-{AddonMpvForkBuildDate}-git-{AddonMpvForkGitHash}.7z";
         string archive = Path.GetFullPath(asset);
         await DownloadFileAsync(release + "/" + asset, archive, _ => { });
         using (var zip = new ArchiveFile(archive))
