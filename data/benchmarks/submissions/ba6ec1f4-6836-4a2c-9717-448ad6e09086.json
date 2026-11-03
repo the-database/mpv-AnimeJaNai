@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "ba6ec1f4-6836-4a2c-9717-448ad6e09086",
+  "submitted_at": "2026-11-03T02:48:08.274Z",
+  "app_version": "3.9.0",
+  "backend": "DirectML",
+  "gpu": "Intel(R) Arc(TM) 140V GPU (16GB)",
+  "vram_mb": 128,
+  "cpu": "Intel(R) Core(TM) Ultra 7 258V",
+  "cpu_mhz": 2200,
+  "cpu_cores": 8,
+  "cpu_threads": 8,
+  "ram_mb": 32385,
+  "ram_speed_mhz": 8533,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.101.8626",
+  "results": {
+    "Balanced": {
+      "480x360": 23.9,
+      "640x480": 16,
+      "768x576": 10.8,
+      "1280x720": -1,
+      "1920x1080": -1
+    },
+    "Performance": {
+      "480x360": 54.8,
+      "640x480": 30,
+      "768x576": 19.8,
+      "1280x720": 9,
+      "1920x1080": -1
+    }
+  },
+  "submitted_by": "SamuraiFox",
+  "note": "HP OmniBook 7 Flip 32gb RAM"
+}
