@@ -129,13 +129,40 @@ public sealed class AddonRegistry(string root)
         return SafeFiles.DirectoryPath(root, "installed", id);
     }
 
-    public void Install(AddonPackage package, IEnumerable<string> permissions)
+    private IEnumerable<string> PrivateFiles(string id)
+    {
+        yield return Path.Combine(SafeFiles.DirectoryPath(root, "data", id), "state.json");
+        yield return Path.Combine(SafeFiles.DirectoryPath(root, "configuration", id), "settings.json");
+    }
+    private (bool HasData, string? PreviousHash) StoredData(string directory, AddonPackage package, InstalledAddon? existing)
+    {
+        string owner = Path.Combine(directory, "data-owner.json");
+        SafeFiles.CheckParents(owner);
+        string? previous = existing?.Current.Hash;
+        if (previous is null && File.Exists(owner))
+            previous = Contract.ParseObject(AddonPackage.ReadBoundedFile(owner, 1024))["hash"]?.GetValue<string>();
+        bool hasData = PrivateFiles(package.Manifest.Id).Any(path => { SafeFiles.CheckParents(path); return File.Exists(path); });
+        return (hasData, previous);
+    }
+    public JsonObject InspectStoredData(AddonPackage package)
+    {
+        string directory = DirectoryFor(package.Manifest.Id);
+        using var held = SafeFiles.Lock(directory);
+        var data = StoredData(directory, package, ReadState(directory));
+        return new() { ["hasStoredData"] = data.HasData, ["previousHash"] = data.PreviousHash,
+            ["requiresStoredDataChoice"] = data.HasData && data.PreviousHash != package.Hash };
+    }
+    public void Install(AddonPackage package, IEnumerable<string> permissions, bool? keepStoredData = null)
     {
         var grant = new PermissionGrant(package, permissions);
         using var catalogLock = SafeFiles.Lock(SafeFiles.DirectoryPath(root, "installed"));
         string directory = DirectoryFor(package.Manifest.Id);
         using var held = SafeFiles.Lock(directory);
         var existing = ReadState(directory);
+        var data = StoredData(directory, package, existing);
+        bool needsChoice = data.HasData && data.PreviousHash != package.Hash;
+        Contract.Require(!needsChoice || keepStoredData.HasValue, "stored_data_choice_required",
+            "This package may be from a different author. Choose whether it may use the saved settings/data or reset them in Manager.");
         Contract.Require(existing is not null || ListIds().Count < 128, "capacity_exceeded", "At most 128 installed addons are supported by this preview.");
         string packagePath = Path.Combine(directory, package.Hash + ".ajnaddon");
         SafeFiles.CheckParents(packagePath);
@@ -151,9 +178,12 @@ public sealed class AddonRegistry(string root)
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         Contract.Require(AddonPackage.Load(packagePath).Hash == package.Hash, "integrity_mismatch", "Installed package changed.");
+        if (needsChoice && keepStoredData == false)
+            foreach (string path in PrivateFiles(package.Manifest.Id)) { SafeFiles.CheckParents(path); File.Delete(path); }
         var state = new InstalledAddon(new(package.Hash, grant.Allowed.Order(StringComparer.Ordinal).ToArray()),
             existing?.Current.Hash != package.Hash ? existing?.Current : existing?.Previous);
         SafeFiles.AtomicWrite(Path.Combine(directory, "active.json"), JsonSerializer.SerializeToUtf8Bytes(state, Contract.Json));
+        SafeFiles.AtomicWrite(Path.Combine(directory, "data-owner.json"), JsonSerializer.SerializeToUtf8Bytes(new { hash = package.Hash }, Contract.Json));
     }
 
     public (AddonPackage Package, PermissionGrant Grant) Load(string id)
@@ -173,6 +203,7 @@ public sealed class AddonRegistry(string root)
         _ = Resolve(directory, id, previous);
         SafeFiles.AtomicWrite(Path.Combine(directory, "active.json"),
             JsonSerializer.SerializeToUtf8Bytes(new InstalledAddon(previous, state.Current), Contract.Json));
+        SafeFiles.AtomicWrite(Path.Combine(directory, "data-owner.json"), JsonSerializer.SerializeToUtf8Bytes(new { hash = previous.Hash }, Contract.Json));
     }
 
     public void ValidateRollback(string id)
@@ -189,6 +220,8 @@ public sealed class AddonRegistry(string root)
         using var held = SafeFiles.Lock(directory);
         string path = Path.Combine(directory, "active.json");
         SafeFiles.CheckParents(path);
+        // Install/Rollback already recorded the owner. Removal must also work
+        // when active.json is corrupt. Legacy unknown owners require consent.
         File.Delete(path);
     }
 

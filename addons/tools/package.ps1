@@ -109,9 +109,8 @@ Copy-Item -Path (Join-Path $addonRoot 'sdk/*') -Destination (Join-Path $outputRo
 $sourceRoot = Join-Path $outputRoot 'source'
 foreach ($trackedFile in $tracked | Where-Object { $_.StartsWith('addons/') }) {
     $relative = $trackedFile.Substring('addons/'.Length)
-    $normalized = $relative.Replace('\', '/')
     if ($relative -match '(^|[\\/])(bin|obj|\.work|\.tools)([\\/]|$)' -or $relative -match '\.wasm$' -or
-        ($relative -match '\.ajnaddon$' -and $normalized -ne 'tests/fixtures/counter-api-1.0.ajnaddon')) { continue }
+        $relative -match '\.ajnaddon$') { continue }
     $destination = Join-Path $sourceRoot $relative
     [IO.Directory]::CreateDirectory((Split-Path $destination)) | Out-Null
     Copy-Item -LiteralPath (Join-Path $addonRoot $relative) -Destination $destination

@@ -64,7 +64,7 @@ try {
     $manifest.version = '0.2.0'
     [IO.File]::WriteAllText((Join-Path $source 'manifest.json'), ($manifest | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
     $null = Invoke-Checked -CommandArgs @('build', $source, $Compiler, $v2)
-    $null = Invoke-Checked -CommandArgs @('install-dev', $v2, $data, 'storage.read,storage.write')
+    $null = Invoke-Checked -CommandArgs @('install-dev', $v2, $data, 'storage.read,storage.write', '--keep-data')
     $updated = Invoke-Checked -CommandArgs @('action', 'org.example.greeting', $data, $Runtime, 'remember')
     Assert-Check ($updated.message -eq 'Saved greeting 3: Good evening 日本語!') 'update preserves private data and settings'
     $null = Invoke-Checked -CommandArgs @('rollback', 'org.example.greeting', $data)

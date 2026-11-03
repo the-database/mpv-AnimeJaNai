@@ -20,7 +20,7 @@ bool framesOnly = args.Length == 6 && args[^1] == "--frames-only";
 bool rifeSettingsOnly = args.Length == 6 && args[^1] == "--rife-settings-only";
 bool updatesOnly = args.Length == 4 && args[^1] == "--updates-only";
 bool archiveRoundTripOnly = args.Length == 6 && args[^1] == "--archive-roundtrip-only";
-bool installerOnly = args.Length == 5 && args[^1] == "--installer-only";
+bool installerOnly = args.Length is 5 or 6 && args[^1] == "--installer-only";
 bool frameBenchmark = args.Length == 4 && args[^1] == "--frames-benchmark";
 bool nullBenchmark = args.Length == 4 && args[^1] == "--null-benchmark";
 bool encodingOnly = args.Length == 4 && args[^1] == "--encoding-only";
@@ -51,7 +51,7 @@ if (streamingPolicyOnly) args = args[..6];
 if (largeReadOnly) args = args[..6];
 if (updatesOnly) args = args[..3];
 if (archiveRoundTripOnly) args = args[..5];
-if (installerOnly) args = args[..4];
+if (installerOnly) args = args[..^1];
 if (frameBenchmark) args = args[..3];
 if (nullBenchmark) args = args[..3];
 if (encodingOnly) args = args[..3];
@@ -151,7 +151,7 @@ try
     }
     if (installerOnly)
     {
-        await NativeInstallerChecks.RunAsync(root, output, args[3], evidence);
+        await NativeInstallerChecks.RunAsync(root, output, args[3], evidence, args.Length == 5 ? args[4] : null);
         File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, evidence }));
         Console.WriteLine("PASS real installer fresh install, active-addon reinstall, preservation and uninstall.");
         return 0;

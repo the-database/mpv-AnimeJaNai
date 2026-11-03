@@ -13,12 +13,6 @@ on:
         description: 'Include Windows addon support (preview)'
         type: boolean
         default: false
-      addon_bundle_url:
-        description: 'HTTPS URL of the verified addon support bundle zip'
-        type: string
-      addon_bundle_sha256:
-        description: 'SHA-256 of the addon support bundle zip'
-        type: string
       windows_only:
         description: 'Build only the Windows artifacts (skip the Linux leg)'
         default: 'false'
@@ -40,23 +34,24 @@ jobs:
     - name: Publish .NET Core app
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
 
+    - name: Build addon support from the release checkout
+      if: ${{ inputs.addons }}
+      shell: pwsh
+      run: |
+        ./addons/tools/bootstrap.ps1
+        ./addons/tools/package.ps1 -OutputDirectory "$env:RUNNER_TEMP/ajn-release-host"
+        "AJN_ADDON_BUNDLE=$env:RUNNER_TEMP/ajn-release-host" >> $env:GITHUB_ENV
+
     - name: Run the console app
       # --packs also emits component-*.7z + packs.json (publish/packs-v<ver>/) for the
       # AnimeJaNai Manager (updater --components/--install/--remove/--auto).
       shell: pwsh
       env:
         ADDONS: ${{ inputs.addons }}
-        ADDON_BUNDLE_URL: ${{ inputs.addon_bundle_url }}
-        ADDON_BUNDLE_SHA256: ${{ inputs.addon_bundle_sha256 }}
         RELEASE_VERSION: ${{ inputs.release_version }}
       run: |
         $arguments = @($env:RELEASE_VERSION, '--packs')
         if ($env:ADDONS -eq 'true') {
-          if ($env:ADDON_BUNDLE_URL -notmatch '^https://' -or $env:ADDON_BUNDLE_SHA256 -notmatch '^[a-f0-9]{64}$') { throw 'Provide an HTTPS addon bundle URL and SHA-256.' }
-          Invoke-WebRequest -Uri $env:ADDON_BUNDLE_URL -OutFile addon-bundle.zip
-          if ((Get-FileHash addon-bundle.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:ADDON_BUNDLE_SHA256) { throw 'Addon bundle checksum mismatch.' }
-          Expand-Archive addon-bundle.zip addon-bundle
-          $env:AJN_ADDON_BUNDLE = (Resolve-Path addon-bundle).Path
           $arguments += '--addons'
         }
         & ./publish/BuildMpvUpscale2xAnimeJaNai.exe @arguments

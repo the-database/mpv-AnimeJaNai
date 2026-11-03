@@ -60,10 +60,15 @@ try
             var package = AddonPackage.Load(args[1]);
             Print(new { package.Manifest, sha256 = package.Hash, trust = "Unsigned local development package" });
             return 0;
-        case "install-dev" when args.Length is 3 or 4:
+        case "install-dev" when args.Length is >= 3 and <= 5:
             var installing = AddonPackage.Load(args[1]);
-            new AddonRegistry(args[2]).Install(installing, args.Length == 4 ? Grants(args[3]) : []);
-            Print(new { installed = installing.Manifest.Id, sha256 = installing.Hash, permissions = args.Length == 4 ? Grants(args[3]) : [] });
+            string[] grants = args.Length >= 4 && !args[3].StartsWith("--") ? Grants(args[3]) : [];
+            string[] choices = args.Skip(3).Where(a => a.StartsWith("--")).ToArray();
+            Contract.Require(choices.Length <= 1 && choices.All(c => c is "--keep-data" or "--reset-data"),
+                "invalid_params", "Choose --keep-data or --reset-data for existing private data.");
+            bool? keepData = choices.Length == 0 ? null : choices[0] == "--keep-data";
+            new AddonRegistry(args[2]).Install(installing, grants, keepData);
+            Print(new { installed = installing.Manifest.Id, sha256 = installing.Hash, permissions = grants });
             return 0;
         case "rollback" when args.Length == 3:
             new AddonRegistry(args[2]).Rollback(args[1]);
@@ -131,7 +136,7 @@ AJN addon developer host (API 1.7 development)
   inspect <package.ajnaddon>
   serve <data-directory> <wasmtime.exe> [trusted-AJN-root] [maximum-media-sessions]
   attach-player <trusted-AJN-root> <data-directory> <player-process-id>
-  install-dev <package.ajnaddon> <data-directory> [permission,permission]
+  install-dev <package.ajnaddon> <data-directory> [permission,permission] [--keep-data|--reset-data]
   run <addon-id> <data-directory> <wasmtime.exe> [event-name]
   settings <addon-id> <data-directory>
   configure <addon-id> <data-directory> <settings-patch.json>

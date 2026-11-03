@@ -289,7 +289,8 @@ def assemble(args):
         # aji/Manager are overlay components, not full-download dependencies.
         for name in ("addon_native", "aji", "manager"):
             manifest.setdefault("deps", {}).pop(name, None)
-        manifest["deps"]["mpvfork"] = "source:" + sources["mpv"]
+        inventory = "\n".join(f"{name}={record['files'][name]}" for name in sorted(record["files"]))
+        manifest["deps"]["mpvfork"] = "native:" + hashlib.sha256(inventory.encode("utf-8")).hexdigest()
         write(output / "manifest.json", manifest)
         (output / "version.txt").write_text(args.version + "\n", encoding="utf-8")
         (output / "TEST-BUILD.txt").write_text(

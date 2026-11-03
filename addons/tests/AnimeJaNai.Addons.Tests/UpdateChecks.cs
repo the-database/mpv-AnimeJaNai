@@ -5,8 +5,90 @@ using System.Text.Json.Nodes;
 
 internal static partial class Checks
 {
+    private static async Task ReleaseSupportChecks()
+    {
+        await Test("Release support cannot replace pinned core files or configuration", () =>
+        {
+            string bundle = Area();
+            Directory.CreateDirectory(Path.Combine(bundle, "host"));
+            File.WriteAllText(Path.Combine(bundle, "host/ajn-addon.exe"), "host fixture");
+            var files = new JsonObject { ["host/ajn-addon.exe"] = AddonRelease.Hash(Path.Combine(bundle, "host/ajn-addon.exe")) };
+            True(AddonRelease.ValidateSupport(bundle, files).Single().Relative == "addon-host/ajn-addon.exe");
+            foreach (string name in new[] { "libmpv-2.dll", "AnimeJaNaiManager.exe", "manifest.json", "version.txt", "portable_config/mpv.conf" })
+            {
+                string path = Path.Combine(bundle, name); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, "unexpected core override"); files[name] = AddonRelease.Hash(path);
+                bool rejected = false;
+                try { AddonRelease.ValidateSupport(bundle, files); } catch (InvalidDataException) { rejected = true; }
+                True(rejected, "Support bundle accepted " + name); File.Delete(path); files.Remove(name);
+            }
+            return Task.CompletedTask;
+        });
+    }
     private static async Task UpdateChecks()
     {
+        await Test("Update identity changes for rebuilt native binaries at an unchanged source commit", () =>
+        {
+            string target = Area();
+            Directory.CreateDirectory(Path.Combine(target, "addon-host"));
+            string path = Path.Combine(target, "addon-host/native-capabilities.json");
+            var native = new JsonObject { ["sources"] = new JsonObject { ["mpv"] = new string('a', 40) },
+                ["files"] = new JsonObject { ["libmpv-2.dll"] = new string('b', 64), ["mpv.exe"] = new string('c', 64) } };
+            File.WriteAllText(path, native.ToJsonString());
+            string before = AddonUpdateTransaction.NativeDependencyIdentity(target);
+            native["files"]!["libmpv-2.dll"] = new string('d', 64);
+            File.WriteAllText(path, native.ToJsonString());
+            True(before != AddonUpdateTransaction.NativeDependencyIdentity(target));
+        });
+        await Test("Update apply and rollback replace read-only destinations", async () =>
+        {
+            string source = Area(), target = Area(), destination = Path.Combine(target, "managed.conf");
+            File.WriteAllText(destination, "old");
+            File.SetAttributes(destination, FileAttributes.ReadOnly);
+            File.WriteAllText(Path.Combine(source, "managed.conf"), "new");
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), afterPublish: _ =>
+                { File.SetAttributes(destination, FileAttributes.ReadOnly); throw new IOException("Interrupt read-only replacement"); }); }
+            catch (IOException error) when (error.Message == "Interrupt read-only replacement") { }
+            True(InstallationActivity.Pending(target));
+            await AddonUpdateTransaction.RecoverAsync(target);
+            True(File.ReadAllText(destination) == "old" && !InstallationActivity.Pending(target));
+            File.SetAttributes(destination, FileAttributes.ReadOnly);
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(File.ReadAllText(destination) == "new");
+        });
+        await Test("Update preparation cancellation does not leave addon activation paused", async () =>
+        {
+            string source = Area(), target = Area();
+            File.WriteAllText(Path.Combine(source, "new.txt"), "new");
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), new CancellationToken(true)); }
+            catch (OperationCanceledException) { }
+            True(!InstallationActivity.Pending(target) && !File.Exists(Path.Combine(target, "new.txt")));
+            using var activity = InstallationActivity.Acquire(target);
+        });
+        await Test("Update roots may have a junctioned parent but interior links are rejected", async () =>
+        {
+            string real = Area(), links = Area(), parent = Path.Combine(links, "parent");
+            void Link(string path, string destination)
+            {
+                if (!OperatingSystem.IsWindows()) { Directory.CreateSymbolicLink(path, destination); return; }
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe")
+                { Arguments = "/c mklink /J \"" + path + "\" \"" + destination + "\"", UseShellExecute = false, CreateNoWindow = true });
+                process!.WaitForExit(); True(process.ExitCode == 0);
+            }
+            Link(parent, real);
+            string source = Directory.CreateDirectory(Path.Combine(parent, "source")).FullName;
+            string target = Directory.CreateDirectory(Path.Combine(parent, "target")).FullName;
+            File.WriteAllText(Path.Combine(source, "new.txt"), "new");
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "new.txt")) == "new");
+            string outside = Area();
+            File.WriteAllText(Path.Combine(outside, "untouched.txt"), "keep");
+            Link(Path.Combine(source, "interior"), outside);
+            bool rejected = false;
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>()); }
+            catch (IOException error) when (error.Message.Contains("inside the selected root")) { rejected = true; }
+            True(rejected && !InstallationActivity.Pending(target) && File.ReadAllText(Path.Combine(outside, "untouched.txt")) == "keep");
+        });
         await Test("Normal updates remove addon support, retain user data, and can roll back an interruption", async () =>
         {
             string source = Area(), target = Area();

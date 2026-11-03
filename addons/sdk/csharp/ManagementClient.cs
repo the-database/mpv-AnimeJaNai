@@ -71,7 +71,7 @@ public sealed class ManagementClient : IAsyncDisposable
         using var startup = InstallationActivity.Acquire(installation);
         Task<ManagementClient> Connect(CancellationToken token) => kind is null ? ConnectAsync(root, token) : ConnectLifecycleAsync(root, kind, token);
         try { return await Connect(cancellationToken).ConfigureAwait(false); }
-        catch (Exception error) when (error is TimeoutException or IOException) { }
+        catch (Exception error) when (error is TimeoutException or IOException or UnauthorizedAccessException) { }
         cancellationToken.ThrowIfCancellationRequested();
         var info = new ProcessStartInfo(Path.GetFullPath(hostPath)) {
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(hostPath))!,
@@ -86,7 +86,7 @@ public sealed class ManagementClient : IAsyncDisposable
             while (true)
             {
                 try { return await Connect(deadline.Token).ConfigureAwait(false); }
-                catch (Exception retry) when (retry is TimeoutException or IOException) { }
+                catch (Exception retry) when (retry is TimeoutException or IOException or UnauthorizedAccessException) { }
                 // Another player/Manager may have won the exclusive host lease.
                 // Our short-lived contender exiting is not a connection failure.
                 await Task.Delay(150, deadline.Token).ConfigureAwait(false);

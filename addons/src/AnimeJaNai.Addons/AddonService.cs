@@ -122,7 +122,10 @@ public sealed class AddonService : IAsyncDisposable
                 return new JsonObject { ["addons"] = list, ["nextCursor"] = ids.Length > 16 ? ids[15] : null };
             case "addons.inspect":
                 var inspected = AddonPackage.Load(Contract.Text(parameters, "path", 4096));
-                return new JsonObject { ["manifest"] = JsonSerializer.SerializeToNode(inspected.Manifest, Contract.Json), ["hash"] = inspected.Hash };
+                var inspection = registry.InspectStoredData(inspected);
+                inspection["manifest"] = JsonSerializer.SerializeToNode(inspected.Manifest, Contract.Json);
+                inspection["hash"] = inspected.Hash;
+                return inspection;
             case "addons.installDev":
                 var package = AddonPackage.Load(Contract.Text(parameters, "path", 4096));
                 Contract.Require(package.Hash == Contract.Text(parameters, "expectedHash", 64), "integrity_mismatch", "Package changed since it was reviewed. Inspect it again.");
@@ -133,7 +136,7 @@ public sealed class AddonService : IAsyncDisposable
                 return await WithAsync(package.Manifest.Id, async entry =>
                 {
                     await ResetAsync(entry);
-                    registry.Install(package, permissions);
+                    registry.Install(package, permissions, parameters["keepStoredData"]?.GetValue<bool>());
                     Load(entry, package.Manifest.Id);
                     foreach (string connection in clients.Keys) await AutoActivateAsync(entry, connection, token);
                     return Summary(entry);

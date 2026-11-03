@@ -95,6 +95,7 @@ internal static partial class Checks
         await LoginChecks();
         await StartupPathChecks();
         await UpdateChecks();
+        await ReleaseSupportChecks();
         if (OperatingSystem.IsWindows()) await ManagementChecks();
         if (args.Length == 4) await RuntimeChecks(args[1], args[2], args[3]);
         if (args.Length == 4) await RuntimePathChecks(args[1], args[2], args[3]);
@@ -158,6 +159,7 @@ internal static partial class Checks
             (Manifest() with { Api = new() { Major = 1, MinMinor = Contract.Minor } }).Validate();
             await Error("incompatible_api", () => (Manifest() with { Api = new() { Major = 1, MinMinor = Contract.Minor + 1 } }).Validate());
             await Error("invalid_manifest", () => Manifest(permissions: ["files.write"]).Validate());
+            await Error("invalid_manifest", () => (Manifest() with { Name = "Trusted\u202Ename" }).Validate());
             var obj = Contract.ParseObject(ManifestBytes()); obj["futureOptionalMetadata"] = new JsonObject { ["description"] = "accepted" };
             True(AddonPackage.Read(Zip(("manifest.json", Encoding.UTF8.GetBytes(obj.ToJsonString()), 0), ("module.wasm", EmptyModule, 0))).Manifest.Metadata!.ContainsKey("futureOptionalMetadata"));
         });
@@ -205,11 +207,31 @@ internal static partial class Checks
             string directory = Area(); var registry = new AddonRegistry(directory);
             var first = Package(permissions: ["storage.read"]); var second = Package(version: "1.1.0", permissions: ["storage.read", "storage.write"]);
             registry.Install(first, ["storage.read"]); new AddonStorage(directory, first.Manifest.Id).Set("k", JsonValue.Create(7));
-            registry.Install(second, []); True(registry.Load(first.Manifest.Id).Grant.Allowed.Count == 0);
+            registry.Install(second, [], keepStoredData: true); True(registry.Load(first.Manifest.Id).Grant.Allowed.Count == 0);
             registry.Rollback(first.Manifest.Id); var loaded = registry.Load(first.Manifest.Id);
             True(loaded.Package.Hash == first.Hash && loaded.Grant.Allowed.SequenceEqual(["storage.read"]));
             Same(JsonValue.Create(7), new AddonStorage(directory, first.Manifest.Id).Get("k"));
             registry.Disable(first.Manifest.Id); await Error("not_installed", () => registry.Load(first.Manifest.Id));
+        });
+        await Test("Private data reuse requires a choice across updates and uninstall", async () =>
+        {
+            string directory = Area(); var registry = new AddonRegistry(directory);
+            var first = Package(); var other = Package(version: "2.0.0");
+            registry.Install(first, []);
+            new AddonStorage(directory, first.Manifest.Id).Set("secret", JsonValue.Create("private"));
+            string settings = Path.Combine(directory, "configuration", first.Manifest.Id, "settings.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(settings)!); File.WriteAllText(settings, "{\"key\":\"private\"}");
+            True(registry.InspectStoredData(other)["requiresStoredDataChoice"]!.GetValue<bool>());
+            await Error("stored_data_choice_required", () => registry.Install(other, []));
+            True(registry.Load(first.Manifest.Id).Package.Hash == first.Hash);
+            registry.Disable(first.Manifest.Id);
+            await Error("stored_data_choice_required", () => registry.Install(other, []));
+            registry.Install(other, [], keepStoredData: false);
+            True(new AddonStorage(directory, first.Manifest.Id).Get("secret") is null && !File.Exists(settings));
+            new AddonStorage(directory, first.Manifest.Id).Set("secret", JsonValue.Create("new private"));
+            registry.Disable(first.Manifest.Id);
+            registry.Install(first, [], keepStoredData: true);
+            Same(JsonValue.Create("new private"), new AddonStorage(directory, first.Manifest.Id).Get("secret"));
         });
         await Test("Rejected update leaves active package usable", async () =>
         {

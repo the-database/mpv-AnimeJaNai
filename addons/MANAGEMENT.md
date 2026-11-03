@@ -23,8 +23,8 @@ Messages use the guest protocol's bounded JSON-RPC profile: UTF-8 JSON objects, 
 | `host.login` | `{}` | Sign-in registration, launcher availability and moved-installation state |
 | `host.configureLogin` | `{enabled:boolean}` | Explicit user opt-in/out for Windows startup; opt-out releases live login reasons |
 | `addons.list` | `{after?:string}` | Up to 16 summaries and `nextCursor`; client helper joins all pages |
-| `addons.inspect` | `{path}` | Validated manifest and exact package `hash`; no installation |
-| `addons.installDev` | `{path,expectedHash,permissions}` | Revalidate the reviewed hash and selected grant, replace registration, activate for connected Managers |
+| `addons.inspect` | `{path}` | Validated manifest, exact package `hash`, `hasStoredData`, `previousHash` and `requiresStoredDataChoice`; no installation |
+| `addons.installDev` | `{path,expectedHash,permissions,keepStoredData?}` | Revalidate hash/grant and replace registration. If private data belongs to another or unknown package hash, require an explicit `keepStoredData`: true authorizes reuse; false deletes saved settings/storage. Omission fails with `stored_data_choice_required`. |
 | `addons.start` | `{id}` | Explicit manual activation; retries a previously stopped worker |
 | `addons.stop` | `{id}` | Release all current activation reasons and stop the worker |
 | `addons.remove` | `{id}` | Stop and unregister; retain private data/settings for recovery |

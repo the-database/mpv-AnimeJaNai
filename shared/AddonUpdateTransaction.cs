@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AnimeJaNai.Addons.Management;
@@ -17,17 +19,45 @@ public static class AddonUpdateTransaction
     {
         string fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         string path = Path.GetFullPath(Path.Combine(fullRoot, relative));
-        if (!path.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        string prefix = Path.EndsInDirectorySeparator(fullRoot) ? fullRoot : fullRoot + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             throw new IOException("Update path is outside the installation.");
-        for (string? p = path; p is not null; p = Path.GetDirectoryName(p))
+        // The selected root may itself be mounted or junctioned. Only links
+        // inside that tree can redirect an inventory path outside its root.
+        for (string? p = path; p is not null && !p.Equals(fullRoot, StringComparison.OrdinalIgnoreCase); p = Path.GetDirectoryName(p))
             if ((File.Exists(p) || Directory.Exists(p)) && (File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("Updates cannot use links or junctions.");
+                throw new IOException("Update paths cannot contain links or junctions inside the selected root: " + p);
         return path;
+    }
+    private static void MakeWritable(string path)
+    {
+        if (File.Exists(path)) File.SetAttributes(path, FileAttributes.Normal);
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
+    private static long AvailableSpace(string directory)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            if (!GetDiskFreeSpaceEx(Path.TrimEndingDirectorySeparator(directory) + Path.DirectorySeparatorChar, out ulong available, out _, out _))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return (long)Math.Min(available, (ulong)long.MaxValue);
+        }
+        return DriveInfo.GetDrives().Where(d => directory.StartsWith(d.Name, StringComparison.Ordinal))
+            .OrderByDescending(d => d.Name.Length).First().AvailableFreeSpace;
     }
     private static string Hash(string path)
     {
         using var file = File.OpenRead(path);
         return Convert.ToHexStringLower(SHA256.HashData(file));
+    }
+    public static string NativeDependencyIdentity(string root)
+    {
+        using var native = JsonDocument.Parse(File.ReadAllBytes(Child(root, "addon-host/native-capabilities.json")));
+        string inventory = string.Join('\n', native.RootElement.GetProperty("files").EnumerateObject()
+            .OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Name + "=" + p.Value.GetString()));
+        return "native:" + Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(inventory)));
     }
     private static void CopyDurable(string source, string destination)
     {
@@ -108,7 +138,7 @@ public static class AddonUpdateTransaction
         while (true)
         {
             token.ThrowIfCancellationRequested();
-            using var processes = new ProcessSet(Owned(root, "addon-host/ajn-addon.exe", "addon-host/ajn-addon-launcher.exe"));
+            using var processes = new ProcessSet(Owned(root, "addon-host/ajn-addon.exe", "addon-host/ajn-addon-launcher.exe", "addon-host/runtime/wasmtime.exe"));
             if (timer.Elapsed > TimeSpan.FromSeconds(8))
                 foreach (var process in processes.Values)
                     try { process.Kill(true); } catch (InvalidOperationException) { }
@@ -117,7 +147,7 @@ public static class AddonUpdateTransaction
                 try { return new(InstallationActivity.LockPath(root), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
                 catch (IOException) when (timer.Elapsed < TimeSpan.FromSeconds(20)) { }
             }
-            if (timer.Elapsed > TimeSpan.FromSeconds(20)) throw new IOException("Addon processes have not released the installation. Close AnimeJaNai and retry recovery.");
+            if (timer.Elapsed > TimeSpan.FromSeconds(20)) throw new IOException("Addon processes have not released this installation. Close AnimeJaNai in every signed-in Windows account, then retry.");
             await Task.Delay(100, token);
         }
     }
@@ -126,7 +156,7 @@ public static class AddonUpdateTransaction
         public List<Process> Values { get; } = processes.ToList();
         public void Dispose() { foreach (var process in Values) process.Dispose(); }
     }
-    private static void RequireAppsClosed(string root, bool includeManager = true)
+    public static void RequireAppsClosed(string root, bool includeManager = true)
     {
         using var apps = new ProcessSet(Owned(root, includeManager ? ["mpv.exe", "mpvnet.exe", "AnimeJaNaiManager.exe"] : ["mpv.exe", "mpvnet.exe"]));
         if (apps.Values.Count > 0) throw new IOException(includeManager
@@ -138,6 +168,14 @@ public static class AddonUpdateTransaction
         string directory = Child(root, InstallationActivity.DirectoryName);
         Directory.CreateDirectory(directory);
         Write(Child(directory, "pending"), new { schemaVersion = 1, processId = Environment.ProcessId });
+    }
+    private static void CleanupUnprepared(string root)
+    {
+        string transaction = Child(root, InstallationActivity.DirectoryName);
+        if (File.Exists(Child(transaction, "journal.json"))) return;
+        // No installed files have changed until the prepared journal exists.
+        // A failed space/source check must not leave addon activation paused.
+        Cleanup(transaction);
     }
 
     public static async Task ApplyAsync(string source, string target, ISet<string> preserve,
@@ -152,115 +190,124 @@ public static class AddonUpdateTransaction
         RequireAppsClosed(target, includeManager: !component);
         if (!component) ValidatePackage(source, target);
         Intent(target);
-        using var drained = await DrainAsync(target, token);
-        RecoverCore(target);
-        bool removeAddons = !component && File.Exists(Child(target, PackageManifest)) &&
-            !File.Exists(Child(source, PackageManifest));
-        if (!component && removals is not null) throw new IOException("Only component transactions accept explicit removal lists.");
-        var removePaths = (removals ?? []).ToList();
-        if (removeAddons)
+        try
         {
-            foreach (string folder in new[] { "addon-host", "addon-development", "build-info" })
+            using var drained = await DrainAsync(target, token);
+            RecoverCore(target);
+            bool removeAddons = !component && File.Exists(Child(target, PackageManifest)) &&
+                !File.Exists(Child(source, PackageManifest));
+            if (!component && removals is not null) throw new IOException("Only component transactions accept explicit removal lists.");
+            var removePaths = (removals ?? []).ToList();
+            if (removeAddons)
             {
-                string directory = Child(target, folder);
-                if (Directory.Exists(directory))
-                    removePaths.AddRange(FilesIn(directory).Select(f => Path.GetRelativePath(target, f).Replace('\\', '/')));
-            }
-            using var inventory = JsonDocument.Parse(File.ReadAllBytes(Child(target, PackageManifest)));
-            foreach (var file in inventory.RootElement.GetProperty("files").EnumerateObject())
-            {
-                // Remove only unmodified extra native libraries recorded by the
-                // addon package. Incoming release files always win below.
-                if (!file.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
-                    (file.Name.Contains('/') && !file.Name.StartsWith("animejanai/inference/", StringComparison.OrdinalIgnoreCase))) continue;
-                string path = Child(target, file.Name);
-                if (File.Exists(path) && Hash(path) == file.Value.GetString()) removePaths.Add(file.Name);
-            }
-            removePaths.Add(PackageManifest);
-            removePaths.Add("portable_config/scripts/animejanai_addons.lua");
-            removePaths = removePaths.Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(path => !File.Exists(Child(source, path))).ToList();
-        }
-        var changed = new List<(string File, string Relative, string Hash)>();
-        long requiredBytes = 16L * 1024 * 1024;
-        foreach (string file in FilesIn(source))
-        {
-            token.ThrowIfCancellationRequested();
-            string relative = Path.GetRelativePath(source, file).Replace('\\', '/');
-            if (component) RequireComponentPath(relative);
-            if (relative.StartsWith(".ajn-", StringComparison.OrdinalIgnoreCase) ||
-                relative.StartsWith("animejanai/addons/", StringComparison.OrdinalIgnoreCase)) continue;
-            string destination = Child(target, relative);
-            if (preserve.Any(p => relative.Equals(p, StringComparison.OrdinalIgnoreCase) ||
-                relative.StartsWith(p.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase)) && File.Exists(destination)) continue;
-            string hash = Hash(file);
-            if (File.Exists(destination) && Hash(destination) == hash) continue;
-            changed.Add((file, relative, hash));
-            requiredBytes = checked(requiredBytes + new FileInfo(file).Length + (File.Exists(destination) ? new FileInfo(destination).Length : 0));
-        }
-        foreach (string relative in removePaths)
-        {
-            if (component) RequireComponentPath(relative);
-            string destination = Child(target, relative);
-            if (File.Exists(destination)) requiredBytes = checked(requiredBytes + new FileInfo(destination).Length);
-        }
-        if (new DriveInfo(Path.GetPathRoot(target)!).AvailableFreeSpace < requiredBytes)
-            throw new IOException($"This update needs {requiredBytes / (1024 * 1024)} MiB of free space for changed files and rollback backups.");
-        Intent(target);
-        string transaction = Child(target, InstallationActivity.DirectoryName);
-        string staged = Child(transaction, "staged"), backup = Child(transaction, "backup");
-        var entries = new List<Entry>();
-        foreach (var candidate in changed)
-        {
-            token.ThrowIfCancellationRequested();
-            string file = candidate.File, relative = candidate.Relative;
-            string destination = Child(target, relative), prepared = Child(staged, relative), old = Child(backup, relative);
-            _ = Child(source, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(prepared)!); CopyDurable(file, prepared);
-            string hash = Hash(prepared);
-            if (candidate.Hash != hash) throw new IOException("Update source changed during staging.");
-            bool existed = File.Exists(destination);
-            if (existed) { Directory.CreateDirectory(Path.GetDirectoryName(old)!); CopyDurable(destination, old); }
-            entries.Add(new(relative, existed, existed ? Hash(old) : null));
-        }
-        foreach (string relative in removePaths)
-        {
-            string destination = Child(target, relative), old = Child(backup, relative);
-            if (entries.Any(e => e.Path.Equals(relative, StringComparison.OrdinalIgnoreCase))) throw new IOException("Duplicate component path.");
-            bool existed = File.Exists(destination);
-            if (existed) { Directory.CreateDirectory(Path.GetDirectoryName(old)!); CopyDurable(destination, old); }
-            entries.Add(new(relative, existed, existed ? Hash(old) : null, Remove: true));
-        }
-        Write(Child(transaction, "journal.json"), new Journal(1, "prepared", entries.ToArray()));
-        int count = 0;
-        foreach (var entry in entries)
-        {
-            token.ThrowIfCancellationRequested();
-            string destination = Child(target, entry.Path);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            // Windows permits renaming this running updater but not overwriting
-            // it. Its already-flushed backup is independent of this image file.
-            if (destination.Equals(Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) && File.Exists(destination))
-                File.Move(destination, Child(transaction, "running-updater.exe"), true);
-            if (entry.Remove) File.Delete(destination);
-            else File.Move(Child(staged, entry.Path), destination, true);
-            afterPublish?.Invoke(++count);
-        }
-        Write(Child(transaction, "journal.json"), new Journal(1, "committed", entries.ToArray()));
-        File.Delete(Child(transaction, "pending"));
-        Cleanup(transaction); // A running updater image may remain until the next run.
-        if (removeAddons)
-        {
-            foreach (string folder in new[] { "addon-host", "addon-development", "build-info" })
-            {
-                string root = Child(target, folder);
-                if (!Directory.Exists(root)) continue;
-                foreach (string directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length).Append(root))
+                foreach (string folder in new[] { "addon-host", "addon-development", "build-info" })
                 {
-                    _ = Child(target, Path.GetRelativePath(target, directory));
-                    if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
+                    string directory = Child(target, folder);
+                    if (Directory.Exists(directory))
+                        removePaths.AddRange(FilesIn(directory).Select(f => Path.GetRelativePath(target, f).Replace('\\', '/')));
+                }
+                using var inventory = JsonDocument.Parse(File.ReadAllBytes(Child(target, PackageManifest)));
+                foreach (var file in inventory.RootElement.GetProperty("files").EnumerateObject())
+                {
+                    // Remove only unmodified extra native libraries recorded by the
+                    // addon package. Incoming release files always win below.
+                    if (!file.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                        (file.Name.Contains('/') && !file.Name.StartsWith("animejanai/inference/", StringComparison.OrdinalIgnoreCase))) continue;
+                    string path = Child(target, file.Name);
+                    if (File.Exists(path) && Hash(path) == file.Value.GetString()) removePaths.Add(file.Name);
+                }
+                removePaths.Add(PackageManifest);
+                removePaths.Add("portable_config/scripts/animejanai_addons.lua");
+                removePaths = removePaths.Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Where(path => !File.Exists(Child(source, path))).ToList();
+            }
+            var changed = new List<(string File, string Relative, string Hash)>();
+            long requiredBytes = 16L * 1024 * 1024;
+            foreach (string file in FilesIn(source))
+            {
+                token.ThrowIfCancellationRequested();
+                string relative = Path.GetRelativePath(source, file).Replace('\\', '/');
+                if (component) RequireComponentPath(relative);
+                if (relative.StartsWith(".ajn-", StringComparison.OrdinalIgnoreCase) ||
+                    relative.StartsWith("animejanai/addons/", StringComparison.OrdinalIgnoreCase)) continue;
+                string destination = Child(target, relative);
+                if (preserve.Any(p => relative.Equals(p, StringComparison.OrdinalIgnoreCase) ||
+                    relative.StartsWith(p.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase)) && File.Exists(destination)) continue;
+                string hash = Hash(file);
+                if (File.Exists(destination) && Hash(destination) == hash) continue;
+                changed.Add((file, relative, hash));
+                requiredBytes = checked(requiredBytes + new FileInfo(file).Length + (File.Exists(destination) ? new FileInfo(destination).Length : 0));
+            }
+            foreach (string relative in removePaths)
+            {
+                if (component) RequireComponentPath(relative);
+                string destination = Child(target, relative);
+                if (File.Exists(destination)) requiredBytes = checked(requiredBytes + new FileInfo(destination).Length);
+            }
+            if (AvailableSpace(target) < requiredBytes)
+                throw new IOException($"This update needs {requiredBytes / (1024 * 1024)} MiB of free space for changed files and rollback backups.");
+            Intent(target);
+            string transaction = Child(target, InstallationActivity.DirectoryName);
+            string staged = Child(transaction, "staged"), backup = Child(transaction, "backup");
+            var entries = new List<Entry>();
+            foreach (var candidate in changed)
+            {
+                token.ThrowIfCancellationRequested();
+                string file = candidate.File, relative = candidate.Relative;
+                string destination = Child(target, relative), prepared = Child(staged, relative), old = Child(backup, relative);
+                _ = Child(source, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(prepared)!); CopyDurable(file, prepared);
+                string hash = Hash(prepared);
+                if (candidate.Hash != hash) throw new IOException("Update source changed during staging.");
+                bool existed = File.Exists(destination);
+                if (existed) { Directory.CreateDirectory(Path.GetDirectoryName(old)!); CopyDurable(destination, old); }
+                entries.Add(new(relative, existed, existed ? Hash(old) : null));
+            }
+            foreach (string relative in removePaths)
+            {
+                string destination = Child(target, relative), old = Child(backup, relative);
+                if (entries.Any(e => e.Path.Equals(relative, StringComparison.OrdinalIgnoreCase))) throw new IOException("Duplicate component path.");
+                bool existed = File.Exists(destination);
+                if (existed) { Directory.CreateDirectory(Path.GetDirectoryName(old)!); CopyDurable(destination, old); }
+                entries.Add(new(relative, existed, existed ? Hash(old) : null, Remove: true));
+            }
+            Write(Child(transaction, "journal.json"), new Journal(1, "prepared", entries.ToArray()));
+            int count = 0;
+            foreach (var entry in entries)
+            {
+                token.ThrowIfCancellationRequested();
+                string destination = Child(target, entry.Path);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                MakeWritable(destination);
+                // Windows permits renaming this running updater but not overwriting
+                // it. Its already-flushed backup is independent of this image file.
+                if (destination.Equals(Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) && File.Exists(destination))
+                    File.Move(destination, Child(transaction, "running-updater-" + Guid.NewGuid().ToString("N") + ".exe"));
+                if (entry.Remove) File.Delete(destination);
+                else File.Move(Child(staged, entry.Path), destination, true);
+                afterPublish?.Invoke(++count);
+            }
+            Write(Child(transaction, "journal.json"), new Journal(1, "committed", entries.ToArray()));
+            File.Delete(Child(transaction, "pending"));
+            Cleanup(transaction); // A running updater image may remain until the next run.
+            if (removeAddons)
+            {
+                foreach (string folder in new[] { "addon-host", "addon-development", "build-info" })
+                {
+                    string root = Child(target, folder);
+                    if (!Directory.Exists(root)) continue;
+                    foreach (string directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length).Append(root))
+                    {
+                        _ = Child(target, Path.GetRelativePath(target, directory));
+                        if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
+                    }
                 }
             }
+        }
+        catch
+        {
+            CleanupUnprepared(target);
+            throw;
         }
     }
     private static void RequireComponentPath(string path)
@@ -278,15 +325,31 @@ public static class AddonUpdateTransaction
         using var update = Lock(root);
         RequireAppsClosed(root);
         Intent(root);
-        using var drained = await DrainAsync(root, token);
-        RecoverCore(root);
+        try
+        {
+            using var drained = await DrainAsync(root, token);
+            RecoverCore(root);
+        }
+        catch
+        {
+            CleanupUnprepared(root);
+            throw;
+        }
     }
     public static async Task PrepareUninstallAsync(string root, CancellationToken token = default)
     {
         using var update = Lock(root);
         RequireAppsClosed(root);
         Intent(root);
-        using var drained = await DrainAsync(root, token);
+        try
+        {
+            using var drained = await DrainAsync(root, token);
+        }
+        catch
+        {
+            CleanupUnprepared(root);
+            throw;
+        }
         // Leave intent in place until the uninstaller removes its own app tree.
         // No external addon data root is traversed or deleted by this operation.
     }
@@ -307,11 +370,13 @@ public static class AddonUpdateTransaction
                 foreach (var entry in journal.Files.Reverse())
                 {
                     string destination = Child(root, entry.Path);
+                    MakeWritable(destination);
                     if (!entry.Existed) { if (File.Exists(destination)) File.Delete(destination); continue; }
                     string replacement = destination + ".ajn-restore";
+                    MakeWritable(replacement);
                     File.Copy(Child(transaction, "backup/" + entry.Path), replacement, true);
                     if (destination.Equals(Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) && File.Exists(destination))
-                        File.Move(destination, Child(transaction, "recovering-updater.exe"), true);
+                        File.Move(destination, Child(transaction, "recovering-updater-" + Guid.NewGuid().ToString("N") + ".exe"));
                     File.Move(replacement, destination, true);
                 }
                 Write(journalPath, journal with { State = "committed" });
@@ -319,7 +384,6 @@ public static class AddonUpdateTransaction
         }
         File.Delete(Child(transaction, "pending"));
         Cleanup(transaction);
-        if (Directory.Exists(transaction)) throw new IOException("Close the previous updater before retrying this update. Recovery completed; no addon data was removed.");
     }
     private static void Cleanup(string transaction)
     {
@@ -333,11 +397,16 @@ public static class AddonUpdateTransaction
             // rather than the sharing-violation IOException returned for
             // ordinary locked files. Commit has already succeeded; the next
             // updater process finishes this disposable cleanup.
+            MakeWritable(file);
             try { File.Delete(file); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return; }
+            catch (Exception error) when ((error is IOException or UnauthorizedAccessException) &&
+                Path.GetDirectoryName(file) == transaction &&
+                (Path.GetFileName(file).StartsWith("running-updater", StringComparison.Ordinal) ||
+                 Path.GetFileName(file).StartsWith("recovering-updater", StringComparison.Ordinal)) &&
+                Path.GetExtension(file) == ".exe") { }
         }
         foreach (var directory in Directory.EnumerateDirectories(transaction, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length))
         { _ = Child(transaction, Path.GetRelativePath(transaction, directory)); Directory.Delete(directory); }
-        Directory.Delete(transaction);
+        if (!Directory.EnumerateFileSystemEntries(transaction).Any()) Directory.Delete(transaction);
     }
 }

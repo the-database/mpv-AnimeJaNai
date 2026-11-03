@@ -101,10 +101,13 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
                     I(108) != 1 || L(64) <= Environment.TickCount64 || L(56) <= Environment.TickCount64) return null;
                 int width = I(96), height = I(100);
                 Contract.Require(width is >= 1 and <= 320 && height is >= 1 and <= 180, "invalid_frame", "Native scene dimensions are invalid.");
+                double previous = D(72), current = D(80);
+                if (!double.IsFinite(previous) || !double.IsFinite(current) || current <= previous)
+                { lastRead = id; return null; }
                 byte[] pixels = new ReadOnlySpan<byte>(pointer + HeaderBytes, width * height * 2).ToArray();
                 lastRead = id;
                 return new(new JsonObject { ["requestId"] = id.ToString(CultureInfo.InvariantCulture),
-                    ["epoch"] = L(128).ToString(CultureInfo.InvariantCulture), ["previousPtsSeconds"] = D(72), ["currentPtsSeconds"] = D(80),
+                    ["epoch"] = L(128).ToString(CultureInfo.InvariantCulture), ["previousPtsSeconds"] = previous, ["currentPtsSeconds"] = current,
                     ["width"] = (long)width, ["height"] = (long)height, ["sourceWidth"] = (long)I(88), ["sourceHeight"] = (long)I(92),
                     ["format"] = "gray8", ["stage"] = "beforeInterpolation", ["range"] = "full",
                     ["remainingMs"] = Math.Max(0, L(64) - Environment.TickCount64) }, pixels);
@@ -135,6 +138,7 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
         {
             Check(lease);
             int status = Volatile.Read(ref I(108));
+            double previous = D(72), current = D(80);
             return new() { ["state"] = status switch { 0 => "waitingForPlayer", 1 => "pending", 2 => "active", 3 => "fallback", 4 => "sampleUnavailable", 5 => "backendUnavailable", 6 => "suspended", 7 => "detectorUnavailable", 8 => "detectorError", _ => "unavailable" },
                 ["acceptedPairs"] = Math.Max(0, Volatile.Read(ref I(116))), ["timedOutPairs"] = Math.Max(0, Volatile.Read(ref I(112))),
                 ["algorithm"] = I(136) switch { 1 => "mvtools", 2 => "enhanced", _ => "custom" }, ["cutPairs"] = Math.Max(0, Volatile.Read(ref I(156))),
@@ -142,7 +146,8 @@ internal sealed unsafe class NativeSceneBuffer : ISceneSource
                 ["analysisMs"] = Math.Max(0, Volatile.Read(ref L(160))) / 1000.0,
                 ["blockSadThreshold"] = Math.Max(0, Volatile.Read(ref L(168))), ["sourceBits"] = Volatile.Read(ref I(176)),
                 ["epoch"] = Volatile.Read(ref L(128)).ToString(CultureInfo.InvariantCulture),
-                ["previousPtsSeconds"] = D(72), ["currentPtsSeconds"] = D(80),
+                ["previousPtsSeconds"] = double.IsFinite(previous) ? JsonValue.Create(previous) : null,
+                ["currentPtsSeconds"] = double.IsFinite(current) ? JsonValue.Create(current) : null,
                 ["sourceWidth"] = Volatile.Read(ref I(88)), ["sourceHeight"] = Volatile.Read(ref I(92)) };
         }
     }
