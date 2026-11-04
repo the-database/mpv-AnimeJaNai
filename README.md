@@ -110,12 +110,10 @@ Community benchmarks for many GPUs are at [benchmarks.animejan.ai](https://bench
 The 2x_AnimeJaNai ONNX models can be used on a PC with any graphics card to render upscaled videos, even when using graphics cards not fast enough for realtime playback. Please see [VideoJaNai](https://github.com/the-database/VideoJaNai) to create upscaled video files with a GUI on Windows and Linux. Other options include [chaiNNer](https://github.com/chaiNNer-org/chaiNNer) or [VSGAN-tensorrt-docker](https://github.com/styler00dollar/VSGAN-tensorrt-docker), which are multiplatform options for Windows and non-Windows users.
 
 ## Related Projects
-mpv-AnimeJaNai is part of the JaNai suite: see [animejan.ai](https://animejan.ai) for an overview of all the apps.
-- [VideoJaNai](https://github.com/the-database/VideoJaNai): Upscale video files with the same models, on Windows and Linux
-- [animejanai-inference](https://github.com/the-database/animejanai-inference): The GPU inference engine the player's upscaling filter runs on
-- [AnimeJaNai Manager](https://github.com/the-database/AnimeJaNaiManager): The settings app bundled with the player
-- [MangaJaNai](https://github.com/the-database/MangaJaNai): Upscaling models for manga
-- [traiNNer-redux](https://github.com/the-database/traiNNer-redux): Software for training upscaling models
+- [VideoJaNai](https://github.com/the-database/VideoJaNai): Upscale video files
+- [MangaJaNai GUI](https://github.com/the-database/MangaJaNaiGUI): Upscale manga and images
+- [yosh](https://github.com/the-database/yosh): Fast manga, comic and image reader
+- [traiNNer-redux](https://github.com/the-database/traiNNer-redux): Train your own upscaling models
 
 ## Acknowledgements
 - [Upscale Wiki](https://upscale.wiki/wiki/Main_Page) and associated Discord server
