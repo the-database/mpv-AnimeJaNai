@@ -164,6 +164,9 @@ filter calling the `aji` engine. The chain when a user plays a video:
    frames, `hwdec=nvdec`) or `DirectML` (D3D11 frames, `hwdec=d3d11va`; AMD/Intel, or NVIDIA when
    forced). `scripts/animejanai_backend.lua` aligns mpv's `hwdec` + render API to the configured
    backend on startup. (`ncnn` is retired and treated as DirectML by the shim.)
+   On Windows it also rewrites a `TensorRT` conf to `backend=DirectML` + `backend_auto_fallback=yes`
+   when TensorRT can't run (no `nvcuda.dll` in System32, or no `nvinfer_11.dll`), the same keys the
+   Manager writes, so the Manager switches back once TensorRT is usable.
 7. **RIFE** interpolation runs after upscaling by default, or before it when a chain sets
    `rife_before_upscale`; RIFE model files live in `animejanai/rife/` (downloaded by `InstallRife()`).
 8. **Subtitle rendering** has two managed presets in `portable_config/mpv-animejanai.conf`: the
