@@ -13,6 +13,8 @@ Join the [**JaNai Discord server**](https://discord.gg/EeFfZUBvxj) to get the la
 ## Usage Instructions
 Ensure your NVIDIA graphics drivers are up to date. Download and extract the [latest release archive](https://github.com/the-database/mpv-AnimeJaNai/releases) of mpv-AnimeJaNai. Open the video player at `mpvnet.exe`. On Linux, download the AppImage or the `linux-x64` archive from the same release instead (NVIDIA GPUs only, since DirectML is Windows-only).
 
+On Windows, AMD and Intel Arc GPUs upscale with DirectML, which ships with every install. The player switches to it by itself when TensorRT can't run on your PC; you can also choose the backend in the AnimeJaNai Manager (`Ctrl+E`).
+
 When playing a video for the first time, a TensorRT engine file will be created for the selected ONNX model. Playback will be paused and a command prompt box will open. Please make sure to wait while the engine is created. Engine creation only needs to happen once per model. Playback will resume on its own when finished.
 
 To confirm upscaling status, press `ctrl+J` to view upscaling stats. This shows the current profile, and the currently running upscaling models if any. 
@@ -78,10 +80,6 @@ Upscaling can be further customized using the AnimeJaNai Manager which can be la
 All other mpv settings can be configured by adding them to `mpv-upscale-2x_animejanai/portable_config/mpv-user.conf` (see the [mpv manual](https://mpv.io/manual/stable/) for all options). Put your custom mpv options in `mpv-user.conf` rather than `mpv.conf` — `mpv-user.conf` is applied last (so it overrides the defaults) and is never overwritten when you update, so your settings survive upgrades. Likewise, add custom keybindings to `mpv-upscale-2x_animejanai/portable_config/input-user.conf` (same syntax as `input.conf`); they override the shipped bindings and are also preserved across updates. 
 
 By default, screenshots can be taken with the `s` key and are stored in `mpv-upscale-2x_animejanai/portable_config/screenshots`. 
-
-## Setup for AMD or Intel Arc users
-
-mpv-AnimeJaNai uses TensorRT by default, which needs an NVIDIA GPU. On Windows, AMD and Intel Arc GPUs upscale with DirectML instead, which ships with every install. Open the AnimeJaNai Manager once (`Ctrl+E` in the player): when TensorRT can't run on your PC, it switches the backend to DirectML for you. You can also choose the backend there yourself.
 
 ## 2x_AnimeJaNai Models
 The 2x_AnimeJaNai models are a collection of real-time 2x models designed specifically for doubling the resolution of HD and SD anime. The current HD models (V3.1) use the SPAN architecture; the SD V1 beta is a Real-ESRGAN Compact model. 
