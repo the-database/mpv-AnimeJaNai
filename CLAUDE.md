@@ -168,7 +168,8 @@ filter calling the `aji` engine. The chain when a user plays a video:
    when TensorRT can't run (no `nvcuda.dll` in System32, or no `nvinfer_11.dll`), the same keys the
    Manager writes, so the Manager switches back once TensorRT is usable.
    **GPU choice:** the Manager writes `[global] gpu_tensorrt=<Vulkan device UUID>` and
-   `gpu_directml=<D3D11 adapter name>` (absent = Auto); the script sets `vulkan-device` (CUDA
+   `gpu_directml=pci:<bus>:<device>.<function>` (the adapter's PCI slot, which needs the fork's
+   `--d3d11-adapter=pci:...`; an adapter name when Windows reports no slot) (absent = Auto); the script sets `vulkan-device` (CUDA
    decoding, and so the filter, follows the Vulkan device) or `d3d11-adapter` (DirectML follows the
    D3D11 device) only while the user hasn't set it. DirectML Auto sets
    `d3d11-adapter-preference=high-performance` on player builds that have the option. The UUIDs

@@ -284,7 +284,9 @@ end
 
 -- Which GPU upscales. The Manager writes [global] gpu_tensorrt (a Vulkan device
 -- UUID: CUDA decoding, and so the filter, follows the Vulkan device) and
--- gpu_directml (a D3D11 adapter name, matched as a prefix of its description).
+-- gpu_directml (a D3D11 adapter's PCI slot, pci:<bus>:<device>.<function>, which
+-- the fork's --d3d11-adapter matches exactly; or an adapter name when Windows
+-- reports no slot, which mpv matches as a prefix of the adapter's name).
 -- Each is applied only while its mpv option is still unset, so a device chosen
 -- in mpv.conf wins.
 local function unset(opt)
