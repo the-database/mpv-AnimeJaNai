@@ -46,4 +46,10 @@ using var metadata = JsonDocument.Parse(header[BenchmarkResult.MetadataPrefix.Le
 Check(metadata.RootElement.GetProperty("output_resolution").GetString() == "2560x1440",
     "Report measured render target, independently of source or 2x model output.");
 Check(metadata.RootElement.GetProperty("display_hz").GetDouble() == 144, "Preserve display refresh.");
+Check(!metadata.RootElement.TryGetProperty("gpu", out _), "No gpu key without a measured GPU.");
+string withGpu = BenchmarkResult.Format("DirectML", new("mpv-output-trace-v2", "native-display", "2560x1440", 144,
+    "AMD Radeon RX 7600S"), samples, ["Balanced"], ["1920x1080"]);
+string gpuHeader = withGpu.Split('\n').Single(s => s.StartsWith(BenchmarkResult.MetadataPrefix));
+using var gpuMetadata = JsonDocument.Parse(gpuHeader[BenchmarkResult.MetadataPrefix.Length..]);
+Check(gpuMetadata.RootElement.GetProperty("gpu").GetString() == "AMD Radeon RX 7600S", "Record the measured GPU.");
 Console.WriteLine("Benchmark timing and result format checks passed.");
