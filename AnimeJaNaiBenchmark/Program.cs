@@ -70,6 +70,7 @@ try
     var samples = new List<Sample>();
     string? outputResolution = null;
     double? displayHz = null;
+    string? gpu = null;
 
     Console.WriteLine($"AnimeJaNai benchmark v2 - backend: {backend}");
     Console.WriteLine(mode == "native-display"
@@ -165,6 +166,14 @@ try
                         double.IsFinite(hz.GetDouble()) && hz.GetDouble() > 0)
                         displayHz ??= hz.GetDouble();
                 }
+                // The stats log names the GPU the filter ran on (aji v0.22.0+). Every sample must agree.
+                string? sampleGpu = File.Exists(Path.Combine(run, tag + ".model.log"))
+                    ? File.ReadLines(Path.Combine(run, tag + ".model.log"))
+                        .FirstOrDefault(l => l.StartsWith("GPU: ", StringComparison.Ordinal))?[5..].Trim()
+                    : null;
+                if (gpu != null && sampleGpu != null && sampleGpu != gpu)
+                    throw new InvalidDataException($"The GPU changed from {gpu} to {sampleGpu}.");
+                gpu ??= sampleGpu;
                 samples.Add(new(Name(slot), res, round, measurement, report.Clone()));
                 File.WriteAllText(Path.Combine(run, "samples.json"),
                     JsonSerializer.Serialize(samples, BenchmarkResult.JsonOptions));
@@ -173,7 +182,7 @@ try
             }
         }
     }
-    var metadata = new MeasurementMetadata("mpv-output-trace-v2", mode, outputResolution, displayHz);
+    var metadata = new MeasurementMetadata("mpv-output-trace-v2", mode, outputResolution, displayHz, gpu);
     string table = BenchmarkResult.Format(backend, metadata, samples, slots.Select(Name).ToArray(), resolutions);
     File.WriteAllText(Path.Combine(run, "benchmark.txt"), table);
     File.WriteAllText(Path.Combine(root, "benchmark.txt"), table);
