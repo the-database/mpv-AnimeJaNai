@@ -86,8 +86,11 @@ end
 -- Component-pack sanity: a slim install (or one slimmed with
 -- AnimeJaNaiUpdater --remove) may lack the pieces the conf asks for.
 -- The filter would fail with a loader error; say what to run instead.
-local function check_components(backend, rife_configured)
+local function check_components(backend, rife_configured, fallback_hint)
     local hints = {}
+    if fallback_hint then
+        hints[#hints + 1] = fallback_hint
+    end
     if backend == 'tensorrt' then
         -- TensorRT core library name differs per platform (Windows DLL vs
         -- Linux versioned .so).
@@ -161,6 +164,79 @@ local function check_components(backend, rife_configured)
     end)
 end
 
+-- Whether TensorRT can run on this Windows PC: it needs NVIDIA's driver
+-- (nvcuda.dll is installed with it) and the TensorRT runtime component.
+local function trt_usable()
+    local sysroot = os.getenv('SystemRoot') or 'C:\\Windows'
+    if utils.file_info(sysroot .. '\\System32\\nvcuda.dll') == nil then
+        return false, 'no NVIDIA GPU driver'
+    end
+    if not exists('animejanai/inference/nvinfer_11.dll') then
+        return false, 'TensorRT runtime not installed'
+    end
+    return true
+end
+
+-- Rewrites [global] backend= to DirectML and marks it as an automatic
+-- fallback, the same two keys the Manager writes when it makes this switch.
+-- With backend_auto_fallback=yes the Manager switches back to TensorRT by
+-- itself once TensorRT can run. Returns false if the conf can't be updated.
+local function switch_conf_to_directml()
+    local f = io.open(conf_path, 'rb')
+    if not f then
+        return false
+    end
+    local s = f:read('*a')
+    f:close()
+    local nl = s:find('\r\n', 1, true) and '\r\n' or '\n'
+    local trailing = s:sub(-1) == '\n'
+    if not trailing then
+        s = s .. '\n'
+    end
+    local out = {}
+    local in_global, seen_global = false, false
+    local have_backend, have_fallback = false, false
+    local function close_global()
+        if not have_backend then
+            out[#out + 1] = 'backend=DirectML'
+        end
+        if not have_fallback then
+            out[#out + 1] = 'backend_auto_fallback=yes'
+        end
+    end
+    for line in s:gmatch('([^\n]*)\n') do
+        line = line:gsub('\r$', '')
+        local sec = line:match('^%[(.-)%]')
+        if sec then
+            if in_global then
+                close_global()
+            end
+            in_global = sec == 'global'
+            seen_global = seen_global or in_global
+        elseif in_global and line:match('^backend=') then
+            line = 'backend=DirectML'
+            have_backend = true
+        elseif in_global and line:match('^backend_auto_fallback=') then
+            line = 'backend_auto_fallback=yes'
+            have_fallback = true
+        end
+        out[#out + 1] = line
+    end
+    if in_global then
+        close_global()
+    end
+    if not seen_global then
+        return false
+    end
+    f = io.open(conf_path, 'wb')
+    if not f then
+        return false
+    end
+    f:write(table.concat(out, nl) .. (trailing and nl or ''))
+    f:close()
+    return true
+end
+
 local backend_raw, rife_configured, default_slot, sub_render_mode, display_rate_match = read_conf()
 if display_rate_match and mp.get_property('platform') == 'windows' then
     local ok, err = mp.set_property('display-rate-match', 'yes')
@@ -169,6 +245,25 @@ if display_rate_match and mp.get_property('platform') == 'windows' then
     end
 end
 local backend = (backend_raw or 'TensorRT'):lower()
+
+-- A fresh install ships backend=TensorRT, and until now only the Manager
+-- switched it to DirectML on a PC where TensorRT can't run, so AMD and Intel
+-- users got no upscaling until they opened it. Make that switch here, at
+-- startup, before the filter reads the conf.
+local fallback_hint
+if backend == 'tensorrt' and mp.get_property('platform') == 'windows' then
+    local ok, why = trt_usable()
+    if not ok and switch_conf_to_directml() then
+        msg.warn('TensorRT can\'t run here (' .. why .. '); switched animejanai.conf to DirectML')
+        backend = 'directml'
+        if why == 'TensorRT runtime not installed' then
+            -- an NVIDIA GPU: TensorRT is faster, so say how to get it
+            fallback_hint = 'Using DirectML: the TensorRT runtime is not installed - ' ..
+                'press Ctrl+E to open AnimeJaNai Manager'
+        end
+    end
+end
+
 local hwdec = 'nvdec'
 -- DirectML/ncnn use D3D11 frames (hwdec=d3d11va, gpu-api=d3d11). Windows-only:
 -- there is no D3D11 on Linux, where only the TensorRT (CUDA/nvdec) backend
@@ -277,4 +372,4 @@ mp.register_event('file-loaded', function()
     end
 end)
 
-check_components(backend, rife_configured)
+check_components(backend, rife_configured, fallback_hint)
