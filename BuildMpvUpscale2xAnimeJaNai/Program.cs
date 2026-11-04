@@ -69,7 +69,7 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
-const string AjiVersion           = "v0.21.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; fused chroma preprocessing)
+const string AjiVersion           = "v0.22.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log)
 
 // 7-Zip "extra" (Windows) / linux-x64 standalone console, from the
 // github.com/ip7z/7zip release (7-zip.org no longer hosts every version).
