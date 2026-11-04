@@ -1073,6 +1073,52 @@ static (bool HasNvidia, string Sm, string GpuName) DetectGpu()
     }
 }
 
+// Every NVIDIA GPU NVML sees, in its order, with the device UUID. Empty without
+// an NVIDIA driver.
+static List<(string Name, string Uuid)> ListNvidiaGpus()
+{
+    var gpus = new List<(string, string)>();
+    try
+    {
+        if (Nvml.nvmlInit_v2() != 0)
+        {
+            return gpus;
+        }
+        try
+        {
+            if (Nvml.nvmlDeviceGetCount_v2(out uint count) != 0)
+            {
+                return gpus;
+            }
+            for (uint i = 0; i < count; i++)
+            {
+                if (Nvml.nvmlDeviceGetHandleByIndex_v2(i, out var dev) != 0)
+                {
+                    continue;
+                }
+                var name = new byte[96];
+                var uuid = new byte[96];
+                if (Nvml.nvmlDeviceGetName(dev, name, (uint)name.Length) != 0 ||
+                    Nvml.nvmlDeviceGetUUID(dev, uuid, (uint)uuid.Length) != 0)
+                {
+                    continue;
+                }
+                var u = System.Text.Encoding.ASCII.GetString(uuid).TrimEnd('\0');
+                if (u.StartsWith("GPU-", StringComparison.OrdinalIgnoreCase))
+                {
+                    u = u[4..];
+                }
+                gpus.Add((System.Text.Encoding.ASCII.GetString(name).TrimEnd('\0'), u.ToLowerInvariant()));
+            }
+        }
+        finally { Nvml.nvmlShutdown(); }
+    }
+    catch
+    {
+    }
+    return gpus;
+}
+
 // Hardware-matched packs only. RIFE is a user choice, not a recommendation:
 // it is preselected on installs that have never managed components (fresh or
 // legacy-full), and once the user has made any component decision their
@@ -1117,6 +1163,10 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
             package_version = index.PackageVersion,
             version_mismatch = PackVersionMismatch(index),
             gpu = new { nvidia = hasNvidia, sm, name = gpu },
+            // each NVIDIA GPU, for the Manager's TensorRT GPU choice; the uuid is the
+            // CUDA/Vulkan device UUID (NVML's without its "GPU-" prefix), which mpv's
+            // --vulkan-device takes and CUDA decoding follows
+            gpus = ListNvidiaGpus().Select(g => new { name = g.Name, uuid = g.Uuid }),
             packs = index.Packs.Select(p => new
             {
                 name = p.Name,
@@ -1340,6 +1390,8 @@ static class Nvml
     public static extern int nvmlDeviceGetCudaComputeCapability(IntPtr device, out int major, out int minor);
     [System.Runtime.InteropServices.DllImport("nvml.dll")]
     public static extern int nvmlDeviceGetName(IntPtr device, byte[] name, uint length);
+    [System.Runtime.InteropServices.DllImport("nvml.dll")]
+    public static extern int nvmlDeviceGetUUID(IntPtr device, byte[] uuid, uint length);
 }
 
 record Release(string Tag, List<Asset> Assets);

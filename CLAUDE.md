@@ -167,6 +167,12 @@ filter calling the `aji` engine. The chain when a user plays a video:
    On Windows it also rewrites a `TensorRT` conf to `backend=DirectML` + `backend_auto_fallback=yes`
    when TensorRT can't run (no `nvcuda.dll` in System32, or no `nvinfer_11.dll`), the same keys the
    Manager writes, so the Manager switches back once TensorRT is usable.
+   **GPU choice:** the Manager writes `[global] gpu_tensorrt=<Vulkan device UUID>` and
+   `gpu_directml=<D3D11 adapter name>` (absent = Auto); the script sets `vulkan-device` (CUDA
+   decoding, and so the filter, follows the Vulkan device) or `d3d11-adapter` (DirectML follows the
+   D3D11 device) only while the user hasn't set it. DirectML Auto sets
+   `d3d11-adapter-preference=high-performance` on player builds that have the option. The UUIDs
+   come from `AnimeJaNaiUpdater --components --json` (`gpus`, via NVML).
 7. **RIFE** interpolation runs after upscaling by default, or before it when a chain sets
    `rife_before_upscale`; RIFE model files live in `animejanai/rife/` (downloaded by `InstallRife()`).
 8. **Subtitle rendering** has two managed presets in `portable_config/mpv-animejanai.conf`: the
