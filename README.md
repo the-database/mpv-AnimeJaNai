@@ -79,9 +79,9 @@ All other mpv settings can be configured by adding them to `mpv-upscale-2x_anime
 
 By default, screenshots can be taken with the `s` key and are stored in `mpv-upscale-2x_animejanai/portable_config/screenshots`. 
 
-## Setup for AMD or Intel Arc users.
+## Setup for AMD or Intel Arc users
 
-mpv-AnimeJaNai is configured to use TensorRT by default for optimal performance, but TensorRT requires an NVIDIA GPU. Users with AMD or Intel Arc GPUs can use DirectML instead. See the [wiki page](https://github.com/the-database/mpv-AnimeJaNai/wiki/Setup-for-AMD-or-Intel-Arc-users) for detailed instructions. 
+mpv-AnimeJaNai uses TensorRT by default, which needs an NVIDIA GPU. On Windows, AMD and Intel Arc GPUs upscale with DirectML instead, which ships with every install. Open the AnimeJaNai Manager once (`Ctrl+E` in the player): when TensorRT can't run on your PC, it switches the backend to DirectML for you. You can also choose the backend there yourself.
 
 ## 2x_AnimeJaNai Models
 The 2x_AnimeJaNai models are a collection of real-time 2x models designed specifically for doubling the resolution of HD and SD anime. The current HD models (V3.1) use the SPAN architecture; the SD V1 beta is a Real-ESRGAN Compact model. 
@@ -105,9 +105,6 @@ Overall, the V3 models yield significantly more natural and faithful results com
 
 ## Benchmarks
 Community benchmarks for many GPUs are at [benchmarks.animejan.ai](https://benchmarks.animejan.ai). You can add your own from the AnimeJaNai Manager with **Run Benchmarks**. Older results are on the [wiki](https://github.com/the-database/mpv-AnimeJaNai/wiki/Benchmarks).
-
-## Support for Other Media Players
-Any media player which supports external DirectShow filters should be able to run these models, by using [avisynth_filter](https://github.com/CrendKing/avisynth_filter) to get VapourSynth running in the video player. 
 
 ## Prerendering Videos using Other Graphics Cards
 The 2x_AnimeJaNai ONNX models can be used on a PC with any graphics card to render upscaled videos, even when using graphics cards not fast enough for realtime playback. Please see [VideoJaNai](https://github.com/the-database/VideoJaNai) to create upscaled video files with a GUI on Windows and Linux. Other options include [chaiNNer](https://github.com/chaiNNer-org/chaiNNer) or [VSGAN-tensorrt-docker](https://github.com/styler00dollar/VSGAN-tensorrt-docker), which are multiplatform options for Windows and non-Windows users.
