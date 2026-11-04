@@ -38,8 +38,10 @@ local function read_conf()
     local sub_render_mode
     local display_rate_match = false
     local rife = false
+    local gpus = {}
     local in_global = false
     for line in f:lines() do
+        line = line:gsub('\r$', '')
         local sec = line:match('^%[(.-)%]')
         if sec then
             in_global = sec == 'global'
@@ -60,13 +62,18 @@ local function read_conf()
             if r then
                 display_rate_match = r:lower() == 'yes' or r:lower() == 'true'
             end
+            -- the Manager's GPU choice per backend; absent or empty = Auto
+            local gb, gv = line:match('^gpu_(%a+)=%s*(.-)%s*$')
+            if gb and gv ~= '' then
+                gpus[gb:lower()] = gv
+            end
         end
         if line:match('^chain_%d+_rife=yes') or line:match('^chain_%d+_rife=true') then
             rife = true
         end
     end
     f:close()
-    return backend, rife, default_slot, sub_render_mode, display_rate_match
+    return backend, rife, default_slot, sub_render_mode, display_rate_match, gpus
 end
 
 local function exists(rel)
@@ -237,7 +244,8 @@ local function switch_conf_to_directml()
     return true
 end
 
-local backend_raw, rife_configured, default_slot, sub_render_mode, display_rate_match = read_conf()
+local backend_raw, rife_configured, default_slot, sub_render_mode, display_rate_match, gpu_choice = read_conf()
+gpu_choice = gpu_choice or {}
 if display_rate_match and mp.get_property('platform') == 'windows' then
     local ok, err = mp.set_property('display-rate-match', 'yes')
     if not ok then
@@ -272,6 +280,41 @@ if (backend == 'directml' or backend == 'ncnn')
         and mp.get_property('platform') == 'windows' then
     hwdec = 'd3d11va'
     mp.set_property('gpu-api', 'd3d11')
+end
+
+-- Which GPU upscales. The Manager writes [global] gpu_tensorrt (a Vulkan device
+-- UUID: CUDA decoding, and so the filter, follows the Vulkan device) and
+-- gpu_directml (a D3D11 adapter's PCI slot, pci:<bus>:<device>.<function>, which
+-- the fork's --d3d11-adapter matches exactly; or an adapter name when Windows
+-- reports no slot, which mpv matches as a prefix of the adapter's name).
+-- Each is applied only while its mpv option is still unset, so a device chosen
+-- in mpv.conf wins.
+local function unset(opt)
+    return (mp.get_property(opt) or '') == ''
+end
+-- mpv rejects a Vulkan device that isn't there (e.g. a removed GPU) and keeps
+-- its own pick; an unknown D3D11 adapter name falls back to the default adapter
+local function apply_gpu(opt, value)
+    if mp.set_property(opt, value) then
+        msg.info('GPU choice: ' .. opt .. '=' .. value)
+    else
+        msg.warn('GPU choice ' .. value .. ' not found; using the default GPU')
+    end
+end
+if hwdec == 'nvdec' then
+    if gpu_choice.tensorrt and unset('vulkan-device') then
+        apply_gpu('vulkan-device', gpu_choice.tensorrt)
+    end
+elseif unset('d3d11-adapter') then
+    if gpu_choice.directml then
+        apply_gpu('d3d11-adapter', gpu_choice.directml)
+    elseif mp.get_property('d3d11-adapter-preference') == 'default' then
+        -- Auto: the GPU Windows ranks for high performance rather than adapter 0,
+        -- which on a laptop is often the integrated GPU. Player builds without
+        -- the option return nil here and keep adapter 0.
+        mp.set_property('d3d11-adapter-preference', 'high-performance')
+        msg.info('GPU choice: Auto -> d3d11-adapter-preference=high-performance')
+    end
 end
 mp.set_property('hwdec', hwdec)
 msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
