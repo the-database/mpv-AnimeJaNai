@@ -6,12 +6,12 @@
 
 ## Overview
 
-This project provides a collection of Real-ESRGAN Compact ONNX upscaling models, along with a custom build of mpv video player. The video player (currently Windows only), enables real-time upscaling of 1080p content to 4K by running these models using TensorRT (NVIDIA only) or DirectML (for AMD or Intel Arc). While the default configuration upscales using the 2x_AnimeJaNai models, it can be easily customized to utilize any Real-ESRGAN Compact ONNX models.
+This project provides the 2x_AnimeJaNai ONNX upscaling models, along with a custom build of the mpv video player for Windows and Linux. The player upscales 1080p content to 4K in real time by running these models with TensorRT (NVIDIA) or, on Windows, DirectML (AMD or Intel Arc). While the default configuration upscales using the 2x_AnimeJaNai models, it can be customized to use other ONNX upscaling models.
 
 Join the [**JaNai Discord server**](https://discord.gg/EeFfZUBvxj) to get the latest news, download pre-release and experimental models, get support and ask questions, share your screenshots (use the `s` key in mpv), or share your feedback. 日本語も大丈夫です。
 
 ## Usage Instructions
-Ensure your NVIDIA graphics drivers are up to date. Download and extract the [latest release archive](https://github.com/the-database/mpv-upscale-2x_animejanai/releases) of mpv-upscale-2x_animejanai. Open the video player at `mpvnet.exe`.
+Ensure your NVIDIA graphics drivers are up to date. Download and extract the [latest release archive](https://github.com/the-database/mpv-AnimeJaNai/releases) of mpv-AnimeJaNai. Open the video player at `mpvnet.exe`. On Linux, download the AppImage or the `linux-x64` archive from the same release instead (NVIDIA GPUs only, since DirectML is Windows-only).
 
 When playing a video for the first time, a TensorRT engine file will be created for the selected ONNX model. Playback will be paused and a command prompt box will open. Please make sure to wait while the engine is created. Engine creation only needs to happen once per model. Playback will resume on its own when finished.
 
@@ -29,7 +29,7 @@ The default upscaling profile is the Balanced profile which is recommended for u
 
 ## Updating
 
-mpv-upscale-2x_animejanai checks for updates on startup. When a newer version is available, an
+mpv-AnimeJaNai checks for updates on startup. When a newer version is available, an
 on-screen message appears; press `Ctrl+U` (or use the *AnimeJaNai > Install Update* menu) to install
 it. mpv closes, the update is applied in place, and mpv reopens automatically.
 
@@ -40,7 +40,7 @@ actually changes. (Your previous `input.conf` is backed up to `input.conf.bak-<v
 shipped keybindings are refreshed.)
 
 > Note for users upgrading from a version before this updater existed: download the
-> [latest release](https://github.com/the-database/mpv-upscale-2x_animejanai/releases) once
+> [latest release](https://github.com/the-database/mpv-AnimeJaNai/releases) once
 > manually; from then on updates are handled in place.
 
 ## Customizing Profiles and Other Settings
@@ -81,10 +81,10 @@ By default, screenshots can be taken with the `s` key and are stored in `mpv-ups
 
 ## Setup for AMD or Intel Arc users.
 
-mpv-upscale-2x_animejanai is configured to use TensorRT by default for optimal performance, but TensorRT requires an NVIDIA GPU. Users with AMD or Intel Arc GPUs can use DirectML instead. See the [wiki page](https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Setup-for-AMD-or-Intel-Arc-users) for detailed instructions. 
+mpv-AnimeJaNai is configured to use TensorRT by default for optimal performance, but TensorRT requires an NVIDIA GPU. Users with AMD or Intel Arc GPUs can use DirectML instead. See the [wiki page](https://github.com/the-database/mpv-AnimeJaNai/wiki/Setup-for-AMD-or-Intel-Arc-users) for detailed instructions. 
 
 ## 2x_AnimeJaNai Models
-The 2x_AnimeJaNai models are a collection of real-time 2x Real-ESRGAN Compact, UltraCompact, and SuperUltraCompact models designed specifically for doubling the resolution of HD and SD models. 
+The 2x_AnimeJaNai models are a collection of real-time 2x models designed specifically for doubling the resolution of HD and SD anime. The current HD models (V3.1) use the SPAN architecture; the SD V1 beta is a Real-ESRGAN Compact model. 
 
 ### 2x_AnimeJaNai HD V3 Models
 
@@ -101,20 +101,23 @@ Overall, the V3 models yield significantly more natural and faithful results com
 
 ### 2x_AnimeJaNai SD V1 Models
 
-2x_AnimeJaNai SD V1 models are in development. The latest release of mpv-upscale-2x_animejanai includes an early beta model for 2x_AnimeJaNai SD V1. While the 2xAnimeJaNai HD models can also work well for some SD sources, those models were specifically trained to upscale HD anime and don't always work well for SD sources. The SD models are designed to upscale SD anime to appear as if the anime was mastered in HD resolution. With sufficient hardware, these models can be stacked with the HD models to upscale SD anime to 4k resolution. 
+2x_AnimeJaNai SD V1 models are in development. The latest release of mpv-AnimeJaNai includes an early beta model for 2x_AnimeJaNai SD V1. While the 2xAnimeJaNai HD models can also work well for some SD sources, those models were specifically trained to upscale HD anime and don't always work well for SD sources. The SD models are designed to upscale SD anime to appear as if the anime was mastered in HD resolution. With sufficient hardware, these models can be stacked with the HD models to upscale SD anime to 4k resolution. 
 
 ## Benchmarks
-[Benchmarks](https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Benchmarks) for various hardware configurations tested against various upscaling configurations are available on the wiki. 
+Community benchmarks for many GPUs are at [benchmarks.animejan.ai](https://benchmarks.animejan.ai). You can add your own from the AnimeJaNai Manager with **Run Benchmarks**. Older results are on the [wiki](https://github.com/the-database/mpv-AnimeJaNai/wiki/Benchmarks).
 
 ## Support for Other Media Players
 Any media player which supports external DirectShow filters should be able to run these models, by using [avisynth_filter](https://github.com/CrendKing/avisynth_filter) to get VapourSynth running in the video player. 
 
 ## Prerendering Videos using Other Graphics Cards
-The 2x_AnimeJaNai_V2 ONNX models can be used on a PC with any graphics card to render upscaled videos, even when using graphics cards not fast enough for realtime playback. Please see the [AnimeJaNaiConverterGui](https://github.com/the-database/AnimeJaNaiConverterGui) project to create upscaled video files using a Windows GUI. Other options include [chaiNNer](https://github.com/chaiNNer-org/chaiNNer) or [VSGAN-tensorrt-docker](https://github.com/styler00dollar/VSGAN-tensorrt-docker), which are multiplatform options for Windows and non-Windows users.
+The 2x_AnimeJaNai ONNX models can be used on a PC with any graphics card to render upscaled videos, even when using graphics cards not fast enough for realtime playback. Please see [VideoJaNai](https://github.com/the-database/VideoJaNai) to create upscaled video files with a GUI on Windows and Linux. Other options include [chaiNNer](https://github.com/chaiNNer-org/chaiNNer) or [VSGAN-tensorrt-docker](https://github.com/styler00dollar/VSGAN-tensorrt-docker), which are multiplatform options for Windows and non-Windows users.
 
 ## Related Projects
-- [MangaJaNai](https://github.com/the-database/mangajanai): Upscale manga with ESRGAN models
-- [VideoJaNai](https://github.com/the-database/VideoJaNai): Windows GUI for upscaling videos with extremely fast performance
+mpv-AnimeJaNai is part of the JaNai suite: see [animejan.ai](https://animejan.ai) for an overview of all the apps.
+- [VideoJaNai](https://github.com/the-database/VideoJaNai): Upscale video files with the same models, on Windows and Linux
+- [animejanai-inference](https://github.com/the-database/animejanai-inference): The GPU inference engine the player's upscaling filter runs on
+- [AnimeJaNai Manager](https://github.com/the-database/AnimeJaNaiManager): The settings app bundled with the player
+- [MangaJaNai](https://github.com/the-database/MangaJaNai): Upscaling models for manga
 - [traiNNer-redux](https://github.com/the-database/traiNNer-redux): Software for training upscaling models
 
 ## Acknowledgements
