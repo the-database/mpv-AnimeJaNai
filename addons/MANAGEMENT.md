@@ -1,4 +1,14 @@
-# Trusted management protocol 1.5 preview
+# Trusted management protocol 1.7 preview
+
+Protocol 1.7 advertises `deviceSettingsAvailable: true`. `network.inspectDevice`
+accepts `{ id, expectedHash, setting, host }` for a manifest string setting with
+`deviceEndpoints`. It resolves the hostname once and returns `{ reviewId, host,
+destinations }`. The hash-bound review expires after three minutes.
+`network.approveDevice` accepts `{ id, expectedHash, reviewId }`, stops the addon,
+replaces that device's named approvals together, saves its canonical hostname,
+and returns effective settings. Other devices retain their grants. The user
+must see all reviewed services before approving. These are trusted Manager
+operations, never worker methods. Restart the addon after connecting devices.
 
 This protocol connects AJN Manager to the persistent host. It is **not** an addon capability. Guests only receive their private broker channel and cannot install packages, edit grants, or control another addon through it.
 

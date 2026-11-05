@@ -64,7 +64,7 @@ public sealed class Broker : IAsyncDisposable
         .. playerFrames is not null ? new[] { "playerFrames" } : [],
         .. playerFrames?.SupportsAnalysis == true ? new[] { "playerAnalysis" } : [],
         .. sceneDetection is not null ? new[] { "sceneDetection" } : []];
-    private int CapabilityMinor(string name) => name == "playerFrames" && playerFrames?.SupportsAnalysis == true ? 1 : name == "sceneDetection" ? 2 : name == "mediaStreams" && MediaStreams?.SupportsReadiness == true ? 1 : name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
+    private int CapabilityMinor(string name) => name == "settings" ? 2 : name == "playerFrames" && playerFrames?.SupportsAnalysis == true ? 1 : name == "sceneDetection" ? 2 : name == "mediaStreams" && MediaStreams?.SupportsReadiness == true ? 1 : name == "sessions" && sessions is not null ? sessions.CapabilityMinor(owner!) : 0;
 
     public JsonObject Info() => new()
     {

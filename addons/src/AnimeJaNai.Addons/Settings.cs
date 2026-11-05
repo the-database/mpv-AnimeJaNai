@@ -11,16 +11,21 @@ public sealed record SettingDefinition
     public required string Label { get; init; }
     public required JsonNode Default { get; init; }
     public string? Description { get; init; }
+    public string? Group { get; init; }
+    public bool Advanced { get; init; }
     public double? Minimum { get; init; }
     public double? Maximum { get; init; }
     public int? MaxLength { get; init; }
     public string[]? Choices { get; init; }
+    public DeviceEndpointDefinition[]? DeviceEndpoints { get; init; }
 
     public void Validate()
     {
         Contract.Require(Type is "boolean" or "number" or "string" or "choice", "invalid_manifest", "Unknown setting type.");
         LabelText(Label, 100);
         if (Description is not null) LabelText(Description, 500);
+        if (Group is not null) LabelText(Group, 100);
+        Contract.Require(!Advanced || Group is not null, "invalid_manifest", "Advanced settings require a group.");
         Contract.Require((Minimum is null || double.IsFinite(Minimum.Value)) && (Maximum is null || double.IsFinite(Maximum.Value)) &&
             (Minimum is null || Maximum is null || Minimum <= Maximum), "invalid_manifest", "Invalid setting bounds.");
         Contract.Require(Type == "number" || (Minimum is null && Maximum is null), "invalid_manifest", "Only numbers accept numeric bounds.");
@@ -29,6 +34,9 @@ public sealed record SettingDefinition
             Choices.All(c => c is { Length: > 0 and <= 100 } && !c.Any(char.IsControl)) && Choices.Distinct(StringComparer.Ordinal).Count() == Choices.Length
             : Choices is null, "invalid_manifest", "Invalid setting choices.");
         Contract.Require(Accepts(Default), "invalid_manifest", "Invalid setting default.");
+        Contract.Require(DeviceEndpoints is null || (Type == "string" && DeviceEndpoints.Length is > 0 and <= 4 && DeviceEndpoints.All(e => e is not null)),
+            "invalid_manifest", "Device endpoints require a string setting and one to four endpoints.");
+        foreach (var endpoint in DeviceEndpoints ?? []) endpoint.Validate();
     }
 
     public bool Accepts(JsonNode? value)
@@ -54,7 +62,13 @@ public sealed record SettingDefinition
 
     internal static void LabelText(string text, int maximum) => Contract.Require(text is { Length: > 0 } && text.Length <= maximum &&
         !text.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format), "invalid_manifest", "Invalid display text.");
-    public SettingDefinition Copy() => this with { Default = Default.DeepClone(), Choices = Choices?.ToArray() };
+    public SettingDefinition Copy() => this with { Default = Default.DeepClone(), Choices = Choices?.ToArray(), DeviceEndpoints = DeviceEndpoints?.ToArray() };
+}
+
+public sealed record DeviceEndpointDefinition(string Name, string Protocol, int Port)
+{
+    public void Validate() => Contract.Require(Name is { Length: > 0 and <= 100 } && !Name.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format) &&
+        Protocol is "http" or "https" or "udp" && Port is >= 1 and <= 65535, "invalid_manifest", "Invalid device endpoint.");
 }
 
 public sealed record ActionDefinition

@@ -32,6 +32,43 @@ internal static partial class Checks
 
     private static async Task NetworkChecks()
     {
+        await Test("A device review approves both services from one address and reconnect replaces only that device", async () =>
+        {
+            string area = Area();
+            var definition = new SettingDefinition { Type = "string", Label = "Light 1 address", Default = JsonValue.Create("")!, MaxLength = 253,
+                DeviceEndpoints = [new("light-http", "http", 80), new("light-ddp", "udp", 4048)] };
+            var manifest = Manifest(permissions: ["network.connect"]) with { Settings = new() { ["light"] = definition },
+                RequiredCapabilities = new() { ["settings"] = new() { Major = 1, MinMinor = 1 } } };
+            var package = AddonPackage.Create(manifest, EmptyModule); var grant = new PermissionGrant(package, package.Manifest.Permissions);
+            new AddonRegistry(area).Install(package, package.Manifest.Permissions);
+            var selections = new NetworkSelections(area);
+            string otherId = selections.Approve(package, grant, "other-light", LoopbackDestination(81));
+            await using var service = new AddonService(area, (_, _, _, _) => Task.FromResult<IAddonInstance>(new FakeAddon()), networkSelections: selections);
+            var hello = await service.InvokeAsync("manager", "manager.hello", new() { ["major"] = 1L }, default);
+            True(hello!["deviceSettingsAvailable"]!.GetValue<bool>());
+            JsonObject Request() => new() { ["id"] = package.Manifest.Id, ["expectedHash"] = package.Hash };
+            var inspect = Request(); inspect["setting"] = "light"; inspect["host"] = "127.0.0.1";
+            var reviewed = (await service.InvokeAsync("manager", "network.inspectDevice", inspect, default))!;
+            True(reviewed["destinations"]!.AsArray().Count == 2 && selections.List(package, grant)["destinations"]!.AsArray().Count == 1);
+            await service.InvokeAsync("manager", "addons.start", Request(), default);
+            var approve = Request(); approve["reviewId"] = reviewed["reviewId"]!.DeepClone();
+            await service.InvokeAsync("manager", "network.approveDevice", approve, default);
+            True(!service.HasRunningWorkers && new AddonSettings(area, manifest).Get()["light"]!.GetValue<string>() == "127.0.0.1");
+            var all = selections.List(package, grant)["destinations"]!.AsArray();
+            True(all.Count == 3 && all.Any(d => d!["origin"]!.GetValue<string>() == "http://127.0.0.1:80") && all.Any(d => d!["origin"]!.GetValue<string>() == "udp://127.0.0.1:4048"));
+            await Error("review_expired", () => service.InvokeAsync("manager", "network.approveDevice", approve, default));
+            inspect["host"] = "127.0.0.2";
+            reviewed = (await service.InvokeAsync("manager", "network.inspectDevice", inspect, default))!;
+            approve["reviewId"] = reviewed["reviewId"]!.DeepClone();
+            await service.InvokeAsync("manager", "network.approveDevice", approve, default);
+            all = selections.List(package, grant)["destinations"]!.AsArray();
+            True(all.Count == 3 && selections.Resolve(package, grant, otherId).Destination.Port == 81);
+            True(all.Count(d => d!["origin"]!.GetValue<string>().Contains("127.0.0.2")) == 2);
+            await Error("invalid_destination", () => NetworkDestination.InspectDeviceAsync("host/path", definition.DeviceEndpoints, default));
+            await Error("invalid_manifest", () => AddonPackage.Create(manifest with { Settings = new() { ["one"] = definition, ["two"] = definition } }, EmptyModule));
+            await using var broker = new Broker(package, grant, Area());
+            True(broker.Info()["capabilities"]!["settings"]!["minor"]!.GetValue<int>() == 2);
+        });
         await Test("Destination inspection normalizes explicit origins and rejects broader address forms", async () =>
         {
             var destination = await NetworkDestination.InspectAsync("http://127.0.0.1:18745", default);

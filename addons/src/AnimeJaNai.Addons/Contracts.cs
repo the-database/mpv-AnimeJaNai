@@ -131,6 +131,13 @@ public sealed record AddonManifest
         Contract.Require(Settings is null || (Settings.Count <= 32 && Settings.All(p => Contract.ValidKey(p.Key) && p.Value is not null)),
             "invalid_manifest", "Invalid settings definitions.");
         foreach (var (_, setting) in Settings ?? []) setting.Validate();
+        Contract.Require(!(Settings ?? []).Values.Any(s => s.Group is not null) ||
+            (RequiredCapabilities?.TryGetValue("settings", out var layoutCapability) == true && layoutCapability.Major == 1 && layoutCapability.MinMinor >= 2),
+            "invalid_manifest", "Grouped settings require settings capability 1.2.");
+        var endpoints = (Settings ?? []).Values.SelectMany(s => s.DeviceEndpoints ?? []).ToArray();
+        Contract.Require(endpoints.Length <= 8 && endpoints.Select(e => e.Name).Distinct(StringComparer.Ordinal).Count() == endpoints.Length &&
+            (endpoints.Length == 0 || (Permissions.Contains("network.connect") && RequiredCapabilities?.TryGetValue("settings", out var settingsCapability) == true && settingsCapability.Major == 1 && settingsCapability.MinMinor >= 1)),
+            "invalid_manifest", "Device settings require network.connect, settings capability 1.1, and at most eight uniquely named endpoints.");
         Contract.Require(Actions is null || (Actions.Count <= 16 && Actions.All(p => Contract.ValidKey(p.Key) && p.Value is not null)),
             "invalid_manifest", "Invalid action definitions.");
         foreach (var (_, action) in Actions ?? []) action.Validate();
