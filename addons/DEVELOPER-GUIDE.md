@@ -602,6 +602,93 @@ accepts control characters. Defaults must pass the same validation as saved valu
 | `string` | String; optional `maxLength` from 1–4096, default 4096 |
 | `choice` | String selected from required `choices`: 1–32 unique nonempty strings, each at most 100 characters |
 
+### Group settings and explain their effect
+
+Settings capability **1.2** adds `group` and `advanced`. Require
+`"settings": { "major": 1, "minMinor": 2 }` in `requiredCapabilities`
+when using groups. The guest API remains 1.12; capability versions are separate.
+Ungrouped addons retain their existing layout.
+
+Add `group` to related setting definitions. It is a nonempty display label of
+at most 100 characters, with the same text restrictions as `label`. Groups
+appear in the order first encountered in the manifest; fields retain their
+order within each group. `advanced` defaults to false and requires a group.
+A group starts collapsed only when every field in it has `advanced: true`.
+Collapsed controls still participate in Save settings.
+
+For example, merge this object into the manifest's `settings` object:
+
+```json
+{
+"brightness": {
+  "type": "number",
+  "label": "Brightness",
+  "description": "Raise this to make the light brighter; lower it for a dimmer room. Zero turns the light output off.",
+  "default": 0.5,
+  "minimum": 0,
+  "maximum": 1,
+  "group": "Brightness and color"
+}
+}
+```
+
+Use descriptions to explain the result of changing a value, including units
+and the meaning of zero or an empty string. Manager shows descriptions below
+controls and action buttons; numeric controls show the default and, when both
+bounds are declared, the range. Grouping does not rename settings or change
+their defaults, permissions, or saved values. Keep setting keys stable when
+reorganizing a page.
+
+### Connect a device using one address
+
+Settings capability **1.1** adds `deviceEndpoints` to a string setting.
+An addon using both device endpoints and groups requires settings **1.2**.
+Also declare `network.connect` in `permissions` and network capability 1.0
+when using the network methods. For example:
+
+```json
+{
+"lightAddress": {
+  "type": "string",
+  "label": "Light address",
+  "description": "Enter the device hostname or IP address and press Connect. Leave this blank to disable this light.",
+  "default": "",
+  "maxLength": 253,
+  "group": "Connection",
+  "deviceEndpoints": [
+    { "name": "light-http", "protocol": "http", "port": 80 },
+    { "name": "light-ddp", "protocol": "udp", "port": 4048 }
+  ]
+}
+}
+```
+
+Manager's **Connect** button reviews both services for that one hostname or IP.
+Enter only the address, without a scheme, port, or path. Each device may declare
+one to four endpoints; a manifest may declare at most eight in total, with
+unique endpoint names. Protocols are `http`, `https`, and `udp`, with ports
+from 1 through 65535. Keep endpoint names stable between updates.
+
+After approval, the host stops the addon, saves the canonical address and
+replaces that device's named approvals. Other devices and unsaved form fields
+are preserved. The user starts the addon again after connecting. Read
+`ajn.network.selections().destinations` and select entries by their declared
+name **and** the origin corresponding to the saved address. Pass their opaque
+`id` to the ordinary network methods; never treat a saved hostname as a grant.
+Treat a blank address as disabled in your addon and show a helpful message
+when either approved service is missing. Clearing or editing the setting alone
+does not revoke or grant network access; users can remove existing access in
+Manager's network controls.
+
+Approval pins the reviewed IP addresses and is bound to the package hash.
+Reconnect if the device's IP changes, or after installing a new addon package.
+Preserving saved settings during an upgrade does not preserve network approval.
+The guest cannot call `network.inspectDevice` or `network.approveDevice`;
+those are trusted [management protocol 1.7](MANAGEMENT.md) operations.
+See [NETWORK.md](NETWORK.md) for sending data and handling rejected access.
+
+### Actions and saved values
+
 Action definitions accept `label` and optional `description` with the same
 display-text bounds. Their keys appear as `event.data.id` during an `action`
 event. Arbitrary action arguments, dynamic setting schemas and addon-provided
