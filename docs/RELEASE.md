@@ -30,6 +30,15 @@ AnimeJaNaiManager  ────────► "Release"                   → A
 Every pin is a `const string` near the top of `BuildMpvUpscale2xAnimeJaNai/Program.cs`.
 Values below are the current ones; read the file for truth.
 
+**Bump PRs.** `AjiVersion`, the three `MpvFork*` Windows constants, `MpvForkLinuxVersion` and
+`ManagerVersion` don't need hand edits: each upstream release sends a `repository_dispatch` and
+`.github/workflows/bump-pins.yml` opens a PR on `bump/<source>` (`libaji`, `mpv-winbuild`,
+`mpv-linux`, `manager`). `scripts/bump_pins.py <source> <tag>` does the edit and checks that the
+release has every asset the assembler fetches; run it locally to bump by hand. The aji release
+sends nothing until its Windows zips are up: run its `notify-downstream.yml` after the upload
+(step 4). Both directions need the `JANAI_BUMP_TOKEN` secret. The other pins are still bumped by
+hand.
+
 | Constant | Current | Source of the value |
 |---|---|---|
 | `AjiVersion` | `v0.22.1` | `the-database/animejanai-inference` release tag |
@@ -101,7 +110,7 @@ gh workflow run MPV -R the-database/mpv-winbuild \
 `packages/{mpv,libass}.cmake` at them (adding `-Dthreads=enabled` for libass). Tag format is
 `$(date +%Y-%m-%d)-$(head -c 10 <<< $sha)`. See that repo's `CLAUDE.md`.
 
-→ bump `MpvForkVersion`, `MpvForkBuildDate`, `MpvForkGitHash`.
+→ bump `MpvForkVersion`, `MpvForkBuildDate`, `MpvForkGitHash` (the `bump/mpv-winbuild` PR).
 
 ### 3. mpv, Linux — `the-database/mpv`
 
@@ -117,7 +126,7 @@ date, e.g. `2026-10-09-19c0fcf`). It becomes both the release tag and part of th
 > `linux-support`, but that branch is hundreds of commits behind `master`, so a push-triggered
 > run would build stale code. See the mpv fork's `DOCS/animejanai-build-ci.md`.
 
-→ bump `MpvForkLinuxVersion`.
+→ bump `MpvForkLinuxVersion` (the `bump/mpv-linux` PR).
 
 ### 4. aji engine — `the-database/animejanai-inference`
 
@@ -143,9 +152,14 @@ gh release upload v0.9.0 <aji-win>\dist\v0.9.0\aji-windows-x64.zip -R the-databa
 
 Full recipe and dependency setup: that repo's `docs/BUILD-WINDOWS.md`. Both assets must land on
 the **same tag**, because the assembler derives both URLs from `AjiVersion` — the Linux run
-publishes the tag, so the Windows upload is what completes it.
+publishes the tag, so the Windows upload is what completes it. Then ask the four repos that pin
+libaji for their bump PRs:
 
-→ bump `AjiVersion`.
+```bash
+gh workflow run notify-downstream.yml -R the-database/animejanai-inference -f tag=v0.9.0
+```
+
+→ bump `AjiVersion` (the `bump/libaji` PR).
 
 ### 5. Manager — `the-database/AnimeJaNaiManager`
 
@@ -161,7 +175,7 @@ The Windows leg is gated on `github.event_name == 'workflow_dispatch'`; a push t
 > `releases/download/<tag>/` URL — draft assets 404 for unauthenticated requests." The
 > assembler downloads it unauthenticated, so a draft breaks `InstallAnimeJaNaiManager`.
 
-→ bump `ManagerVersion`.
+→ bump `ManagerVersion` (the `bump/manager` PR).
 
 ### 6. Assemble — this repo
 

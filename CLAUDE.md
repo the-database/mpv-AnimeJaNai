@@ -101,7 +101,9 @@ to decide overlay-vs-full updates (`overlay_paths` = files an in-place update ov
 
 The download/version pins are constants at the top of `Program.cs` (`AjiVersion`, `MpvForkVersion`,
 `TrtVersion`, `TrtCudaVersion`, `OrtDmlVersion`, `DirectMLVersion`, `RifeModelsVersion`, `MpvNetVersion`,
-`ManagerVersion`). Bumping a component = bump its constant.
+`ManagerVersion`). Bumping a component = bump its constant. Releases of libaji, the two mpv fork
+builds and the Manager open that PR themselves (`bump-pins.yml`, `scripts/bump_pins.py`; see
+`docs/RELEASE.md`).
 
 All three csproj target **net10.0**, and `.github/workflows/deploy.yml` pins
 `dotnet-version: '10.x'` in both legs — keep them in sync after a TFM bump. There is no
@@ -229,8 +231,8 @@ edits `animejanai.conf` and is launched by mpv via `Ctrl+E`. It ships **inside t
 updates without a full re-download. It also carries default-profile definitions, so a model rename
 must be reflected there too.
 
-To ship a new editor build: run the editor repo's manual `Release` workflow, then bump
-`ManagerVersion` here. Its binaries are **not** committed (they're `.gitignore`d as a guard).
+To ship a new editor build: run the editor repo's manual `Release` workflow, then merge the
+`ManagerVersion` bump PR it opens here. Its binaries are **not** committed (they're `.gitignore`d as a guard).
 
 ## Conventions
 
