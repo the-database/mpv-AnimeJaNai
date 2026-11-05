@@ -18,6 +18,7 @@ public sealed class AddonService : IAsyncDisposable
         public IAddonInstance? Worker;
         public string? Failure;
         public (string Id, string Hash, NetworkDestination Destination, DateTime Expires)? DestinationReview;
+        public (string Id, string Hash, string Setting, NetworkDestination[] Destinations, DateTime Expires)? DeviceReview;
         public (string Id, string Hash, ListenerBinding Binding, DateTime Expires)? ListenerReview;
         public readonly Queue<string> Logs = new();
         // 32 x 512 UTF-16 units fit the management response even when every
@@ -72,7 +73,7 @@ public sealed class AddonService : IAsyncDisposable
                     catch (Exception error) when (error is AddonException or IOException or UnauthorizedAccessException) { }
                 }
             if (kind != "on_manager") return new JsonObject { ["major"] = 1, ["minor"] = 5, ["kind"] = kind };
-            return new JsonObject { ["major"] = 1, ["minor"] = 6, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true,
+            return new JsonObject { ["major"] = 1, ["minor"] = 7, ["nativeMediaAvailable"] = media is not null, ["networkAvailable"] = true, ["deviceSettingsAvailable"] = true,
                 ["credentialsAvailable"] = OperatingSystem.IsWindows(), ["httpServerAvailable"] = true, ["listenerTlsAvailable"] = OperatingSystem.IsWindows(),
                 ["listenerNetworkAvailable"] = true, ["hostSettingsAvailable"] = hostSettings is not null, ["loginSettingsAvailable"] = loginSettings is not null };
         }
@@ -260,6 +261,36 @@ public sealed class AddonService : IAsyncDisposable
                     await entry.Activation!.StopAsync(); listeners.Revoke(entry.Package!, entry.Grant!, selected);
                     return null;
                 }, token);
+            case "network.inspectDevice":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters); entry.Grant!.Demand("network.connect");
+                    string key = Contract.Text(parameters, "setting", 64);
+                    var definition = entry.Package!.Manifest.Settings?.GetValueOrDefault(key);
+                    Contract.Require(definition?.DeviceEndpoints is not null,
+                        "invalid_settings", "Choose a declared device address setting.");
+                    var destinations = await NetworkDestination.InspectDeviceAsync(Contract.Text(parameters, "host", 253), definition.DeviceEndpoints, token);
+                    Contract.Require(definition.Accepts(JsonValue.Create(destinations[0].Host)), "invalid_settings", "The device address exceeds the setting limit.");
+                    string reviewId = Guid.NewGuid().ToString("N");
+                    entry.DeviceReview = (reviewId, entry.Package.Hash, key, destinations, DateTime.UtcNow.AddMinutes(3));
+                    return new JsonObject { ["reviewId"] = reviewId, ["host"] = destinations[0].Host,
+                        ["destinations"] = new JsonArray(destinations.Select(d => (JsonNode?)d.Describe()).ToArray()) };
+                }, token);
+            case "network.approveDevice":
+                return await WithAsync(Id(parameters), async entry =>
+                {
+                    DemandReviewed(entry, parameters);
+                    var review = entry.DeviceReview;
+                    Contract.Require(review is not null && review.Value.Id == Contract.Text(parameters, "reviewId", 64) &&
+                        review.Value.Hash == entry.Package!.Hash && review.Value.Expires > DateTime.UtcNow,
+                        "review_expired", "Review the device address again before approving it.");
+                    var value = review.Value;
+                    await entry.Activation!.StopAsync();
+                    network.ApproveDevice(entry.Package!, entry.Grant!, entry.Package!.Manifest.Settings![value.Setting].DeviceEndpoints!, value.Destinations);
+                    entry.DeviceReview = null;
+                    return await entry.Activation.UpdateSettingsAsync(new(root, entry.Package.Manifest),
+                        new JsonObject { [value.Setting] = value.Destinations[0].Host }, token);
+                }, token);
             case "network.inspectDestination":
                 return await WithAsync(Id(parameters), async entry =>
                 {
@@ -417,7 +448,7 @@ public sealed class AddonService : IAsyncDisposable
     private static async Task ResetAsync(Entry entry)
     {
         if (entry.Activation is not null) await entry.Activation.DisposeAsync();
-        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Grant = null; entry.Failure = null; entry.DestinationReview = null; entry.ListenerReview = null;
+        entry.Activation = null; entry.Worker = null; entry.Package = null; entry.Grant = null; entry.Failure = null; entry.DestinationReview = null; entry.DeviceReview = null; entry.ListenerReview = null;
     }
 
     public async ValueTask DisposeAsync()

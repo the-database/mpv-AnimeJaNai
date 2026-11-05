@@ -58,6 +58,18 @@ public sealed record NetworkDestination(string Origin, string Scheme, string Hos
             _ => false,
         };
     }
+
+    public static async Task<NetworkDestination[]> InspectDeviceAsync(string host, DeviceEndpointDefinition[] endpoints, CancellationToken token)
+    {
+        host = host.Trim();
+        Contract.Require(host.Length is > 0 and <= 253 && !host.Any(char.IsControl) &&
+            (IPAddress.TryParse(host.Trim('[', ']'), out _) || Uri.CheckHostName(host) == UriHostNameType.Dns) &&
+            !host.Contains('%'), "invalid_destination", "Enter a device hostname or IP address without a protocol, port or path.");
+        string authority = host.Contains(':') ? "[" + host.Trim('[', ']') + "]" : host;
+        var parsed = endpoints.Select(e => Parse($"{e.Protocol}://{authority}:{e.Port}")).ToArray();
+        var first = await InspectAsync(parsed[0].Origin, token);
+        return parsed.Select(p => new NetworkDestination(p.Origin, p.Scheme, p.Host, p.Port, [.. first.Addresses])).ToArray();
+    }
 }
 
 public sealed record ApprovedDestination(string Id, string Name, NetworkDestination Destination, string? CredentialHeader = null, string? ProtectedCredential = null);
@@ -113,6 +125,24 @@ public sealed class NetworkSelections(string root)
             var found = Read(DirectoryFor(package, grant), package.Hash).Destinations.FirstOrDefault(d => d.Id == id);
             Contract.Require(found is not null, "destination_not_granted", "This service is not approved for this addon version.");
             return found with { Destination = found.Destination with { Addresses = [.. found.Destination.Addresses] } };
+        }
+    }
+
+    // One reviewed device replaces its named endpoints together. Other devices retain their grants.
+    public void ApproveDevice(AddonPackage package, PermissionGrant grant, DeviceEndpointDefinition[] endpoints, NetworkDestination[] destinations)
+    {
+        Contract.Require(endpoints.Length == destinations.Length && endpoints.Length is > 0 and <= 4, "invalid_destination", "Invalid device endpoints.");
+        foreach (var destination in destinations) ValidateDestination(destination);
+        lock (sync)
+        {
+            string directory = DirectoryFor(package, grant);
+            var state = Read(directory, package.Hash);
+            var names = endpoints.Select(e => e.Name).ToHashSet(StringComparer.Ordinal);
+            var retained = state.Destinations.Where(d => !names.Contains(d.Name)).ToArray();
+            Contract.Require(retained.Length + endpoints.Length <= 8, "capacity_exceeded", "At most eight service destinations per addon are supported.");
+            var added = endpoints.Select((e, i) => new ApprovedDestination(Guid.NewGuid().ToString("N"), e.Name,
+                destinations[i] with { Addresses = [.. destinations[i].Addresses] })).ToArray();
+            Write(directory, state with { Destinations = [.. retained, .. added] });
         }
     }
 

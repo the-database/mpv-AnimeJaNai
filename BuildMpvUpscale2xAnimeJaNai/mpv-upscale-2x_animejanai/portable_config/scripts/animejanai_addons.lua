@@ -31,7 +31,6 @@ local control = utils.join_path(data, 'player-control/' .. instance .. '.json')
 local label = 'ajn-player-sample'
 local revision, changed, mapping = nil, 0, nil
 local scene_mapping = nil
-local source_taps = {}
 local desired_taps, desired_since = nil, 0
 local function update_source_tap(kind, name)
     local tap = 'ajn-player-' .. kind
@@ -40,10 +39,11 @@ local function update_source_tap(kind, name)
         or not name:sub(#prefix + 1):match('^[a-f0-9]+$') then name = nil end
     local found = false
     for _, item in ipairs(mp.get_property_native('vf') or {}) do
-        if item.label == tap then found = true end
+        if item.label == tap then found = item; break end
     end
-    if found and source_taps[kind] ~= name then mp.commandv('vf', 'remove', '@' .. tap); found = false end
-    source_taps[kind] = name
+    if found and (not name or found.name ~= 'ajn-sample' or not found.params or found.params.name ~= name) then
+        mp.commandv('vf', 'remove', '@' .. tap); found = false
+    end
     if name and not found then
         -- Before all user upscaling/interpolation. Native CUDA decode is also
         -- available with the AJN chain disabled; no second decoder is opened.
@@ -65,9 +65,11 @@ local function update_scene(name)
         end
     end
 end
-local function tap_present()
+local function tap_present(expected)
     for _, item in ipairs(mp.get_property_native('vf') or {}) do
-        if item.label == label then return true end
+        if item.label == label then
+            return not expected or (item.name == 'ajn-sample' and item.params and item.params.name == expected)
+        end
     end
     return false
 end
@@ -102,8 +104,8 @@ local function update_sample()
     local name = value.mapping
     if type(name) ~= 'string' or #name ~= #prefix + 32 or name:sub(1, #prefix) ~= prefix
         or not name:sub(#prefix + 1):match('^[a-f0-9]+$') then remove_tap(); return end
-    if mapping ~= name then remove_tap(); mapping = name end
-    if not tap_present() then
+    if mapping ~= name or not tap_present(name) then remove_tap(); mapping = name end
+    if not tap_present(name) then
         mp.commandv('vf', 'add', '@' .. label .. ':ajn-sample:name=%' .. #name .. '%' .. name)
     end
 end

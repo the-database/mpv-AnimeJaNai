@@ -294,6 +294,18 @@ internal static partial class Checks
 
     private static async Task SettingsAndActivationChecks()
     {
+        await Test("Grouped settings preserve values and require settings 1.2", async () =>
+        {
+            string directory = Area(); var original = SettingsManifest();
+            new AddonSettings(directory, original).Update(new() { ["rate"] = 30 });
+            var updated = original with { RequiredCapabilities = new() { ["settings"] = new() { Major = 1, MinMinor = 2 } },
+                Settings = original.Settings!.ToDictionary(p => p.Key, p => p.Value with { Group = "Advanced", Advanced = true }) };
+            var package = AddonPackage.Create(updated, EmptyModule);
+            True(package.Manifest.Settings!["rate"].Group == "Advanced" && package.Manifest.Settings["rate"].Advanced);
+            Same(JsonValue.Create(30), new AddonSettings(directory, package.Manifest).Get()["rate"]);
+            await Error("invalid_manifest", () => (updated with { RequiredCapabilities = original.RequiredCapabilities }).Validate());
+            await Error("invalid_manifest", () => (updated.Settings!["rate"] with { Group = null }).Validate());
+        });
         await Test("Declarative settings defaults, type bounds and reload", async () =>
         {
             string directory = Area(); var manifest = SettingsManifest();
