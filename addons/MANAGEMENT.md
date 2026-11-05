@@ -50,6 +50,8 @@ Messages use the guest protocol's bounded JSON-RPC profile: UTF-8 JSON objects, 
 | `network.selections` | `{id}` | Approved destinations and credential metadata, never values |
 | `network.inspectDestination` | `{id,expectedHash,origin}` | Resolve and return a canonical destination plus a single-use three-minute review ID |
 | `network.approveDestination` | `{id,expectedHash,reviewId,name}` | Approve the reviewed protocol, origin and pinned addresses |
+| `network.inspectDevice` | `{id,expectedHash,setting,host}` | Resolve one declared device address and review its endpoints together; return `{reviewId,host,destinations}` |
+| `network.approveDevice` | `{id,expectedHash,reviewId}` | Stop the addon, replace that device's named approvals, save its canonical address and return effective settings |
 | `network.setCredential` | `{id,expectedHash,destinationId,header,value}` | Validate, stop addon and protect the header for this service |
 | `network.removeCredential` | `{id,expectedHash,destinationId}` | Stop/drain; remove only the saved header |
 | `network.revoke` | `{id,expectedHash,destinationId}` | Stop/drain; remove destination and credential |
