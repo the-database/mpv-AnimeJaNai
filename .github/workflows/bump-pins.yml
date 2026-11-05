@@ -1,0 +1,74 @@
+name: Bump pins
+
+# Opens a PR that re-pins an upstream release (scripts/bump_pins.py: the constants, plus the
+# SHA-256 and size of each pinned asset, computed from the download). Upstream release workflows
+# send a repository_dispatch (event_type upstream-release, client_payload {source, tag}); run it
+# by hand with the same two inputs. One branch per source, bump/<source>: a newer release
+# force-pushes it and updates the open PR instead of adding one. Never merges.
+#
+# JANAI_BUMP_TOKEN (a fine-grained PAT with Contents and Pull requests write on this repo) pushes
+# the branch and opens the PR, so the PR's own checks run (a GITHUB_TOKEN push wouldn't start them).
+on:
+  repository_dispatch:
+    types: [upstream-release]
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Which upstream to re-pin
+        type: choice
+        options: [libaji, mpv-winbuild, mpv-linux, manager]
+      tag:
+        description: 'Release tag: v0.22.2 (libaji), 2026-10-24-b4f9f5bfed (mpv-winbuild), 2026-10-24-c493f1c (mpv-linux), 0.10.4 (manager)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bump-pins-${{ github.event.client_payload.source || inputs.source }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE: ${{ github.event.client_payload.source || inputs.source }}
+      TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+      BASE: ${{ github.ref_name }}  # repository_dispatch: the default branch
+    steps:
+      - name: Check the token
+        env:
+          TOKEN: ${{ secrets.JANAI_BUMP_TOKEN }}
+        run: '[ -n "$TOKEN" ] || { echo "::error::Add the JANAI_BUMP_TOKEN secret to this repo"; exit 1; }'
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.JANAI_BUMP_TOKEN }}
+
+      - name: Bump
+        env:
+          GH_TOKEN: ${{ secrets.JANAI_BUMP_TOKEN }}
+        run: python3 scripts/bump_pins.py "$SOURCE" "$TAG" --out "$RUNNER_TEMP/bump"
+
+      - name: Open or update the PR
+        env:
+          GH_TOKEN: ${{ secrets.JANAI_BUMP_TOKEN }}
+        run: |
+          if git diff --quiet; then
+            echo "Already pinned; no PR."
+            exit 0
+          fi
+          branch="bump/$SOURCE"
+          title="$(cat "$RUNNER_TEMP/bump/title.txt")"
+          git config user.name the-database
+          git config user.email 25811902+the-database@users.noreply.github.com
+          git switch -c "$branch"
+          git commit -qam "$title"
+          git push --force origin "$branch"
+          pr="$(gh pr list --head "$branch" --base "$BASE" --state open --json number -q '.[0].number')"
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "$title" --body-file "$RUNNER_TEMP/bump/body.md"
+            echo "Updated #$pr" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr create --base "$BASE" --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/bump/body.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
