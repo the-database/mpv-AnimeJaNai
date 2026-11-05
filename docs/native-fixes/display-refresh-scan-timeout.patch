@@ -1,0 +1,218 @@
+diff --git a/demux/demux.h b/demux/demux.h
+index 25aa554..aab7709 100644
+--- a/demux/demux.h
++++ b/demux/demux.h
+@@ -214,6 +214,8 @@ struct demuxer_params {
+     bool *matroska_was_valid;
+     struct timeline *timeline;
+     bool disable_timeline;
++    // Private cadence scan: Matroska may emit timestamp-only packets.
++    bool probe_timestamps;
+     bstr init_fragment;
+     bool skip_lavf_probing;
+     bool stream_record; // if true, enable stream recording if option is set
+diff --git a/demux/demux_mkv.c b/demux/demux_mkv.c
+index adaa0bb..315b63d 100644
+--- a/demux/demux_mkv.c
++++ b/demux/demux_mkv.c
+@@ -180,7 +180,7 @@ typedef struct mkv_index {
+ 
+ struct block_info {
+     uint64_t duration;
+-    bool simple, keyframe, duration_known;
++    bool simple, keyframe, duration_known, timestamps_only;
+     int64_t timecode, discardpadding;
+     mkv_track_t *track;
+     // Actual packet data.
+@@ -192,6 +192,7 @@ struct block_info {
+ 
+ typedef struct mkv_demuxer {
+     struct demux_mkv_opts *opts;
++    bool probe_timestamps;
+ 
+     int64_t segment_start, segment_end;
+ 
+@@ -2615,6 +2616,10 @@ static int demux_mkv_open(demuxer_t *demuxer, enum demux_check check)
+     probe_x264_garbage(demuxer);
+     probe_if_image(demuxer);
+ 
++    // Opening probes inspect real codec data. Only subsequent reads for the
++    // private display-cadence scan can omit it.
++    mkv_d->probe_timestamps = demuxer->params &&
++                             demuxer->params->probe_timestamps;
+     return 0;
+ }
+ 
+@@ -2689,6 +2694,12 @@ static int demux_mkv_read_block_lacing(struct block_info *block, int type,
+         uint32_t size = lace_size[i];
+         if (stream_tell(s) + size > endpos || size > (1 << 30))
+             goto error;
++        if (block->timestamps_only) {
++            if (!stream_seek_skip(s, stream_tell(s) + size))
++                goto error;
++            block->num_laces++;
++            continue;
++        }
+         int pad = MPMAX(AV_INPUT_BUFFER_PADDING_SIZE, AV_LZO_INPUT_PADDING);
+         AVBufferRef *buf = av_buffer_alloc(size + pad);
+         if (!buf)
+@@ -3079,13 +3090,6 @@ static int read_block(demuxer_t *demuxer, int64_t end, struct block_info *block)
+ 
+     block->filepos = stream_tell(s);
+ 
+-    int lace_type = (header_flags >> 1) & 0x03;
+-    if (demux_mkv_read_block_lacing(block, lace_type, s, endpos))
+-        goto exit;
+-
+-    if (block->simple)
+-        block->keyframe = header_flags & 0x80;
+-    block->timecode = time * mkv_d->tc_scale + mkv_d->cluster_tc;
+     for (int i = 0; i < mkv_d->num_tracks; i++) {
+         if (mkv_d->tracks[i]->tnum == num) {
+             block->track = mkv_d->tracks[i];
+@@ -3096,7 +3100,26 @@ static int read_block(demuxer_t *demuxer, int64_t end, struct block_info *block)
+         res = 0;
+         goto exit;
+     }
++    if (mkv_d->probe_timestamps) {
++        mkv_track_t *track = block->track;
++        if (!demux_stream_is_selected(track->stream)) {
++            res = 0;
++            goto exit;
++        }
++        // These tracks already carry one presentation timestamp per lace.
++        // Tracks requiring payload parsing or DTS reconstruction use the
++        // existing demux path, as do Dolby Vision's virtual split streams.
++        block->timestamps_only = track->stream->type == STREAM_VIDEO &&
++                                 !track->parse && !track->block_dts &&
++                                 !track->dovi_split;
++    }
++    int lace_type = (header_flags >> 1) & 0x03;
++    if (demux_mkv_read_block_lacing(block, lace_type, s, endpos))
++        goto exit;
+ 
++    if (block->simple)
++        block->keyframe = header_flags & 0x80;
++    block->timecode = time * mkv_d->tc_scale + mkv_d->cluster_tc;
+     if (stream_tell(s) != endpos)
+         goto exit;
+ 
+@@ -3176,6 +3199,20 @@ static int handle_block(demuxer_t *demuxer, struct block_info *block_info)
+             AVBufferRef *data = block_info->laces[i];
+             demux_packet_t *dp = NULL;
+ 
++            if (block_info->timestamps_only) {
++                // The packet queue drops empty packets. This private probe
++                // consumes only timestamps; the placeholder is never decoded.
++                dp = new_demux_packet(demuxer->packet_pool, 1);
++                if (!dp)
++                    break;
++                dp->buffer[0] = 0;
++                dp->pos = filepos;
++                if (i == 0 || track->default_duration)
++                    dp->pts = current_pts + i * track->default_duration;
++                dp->keyframe = keyframe;
++                add_packet(demuxer, stream, dp);
++                continue;
++            }
+             bstr block = {data->data, data->size};
+             bstr nblock = demux_mkv_decode(demuxer->log, track, block, 1);
+             if (!nblock.len)
+diff --git a/player/display_rate.c b/player/display_rate.c
+index 5904edd..3d4b274 100644
+--- a/player/display_rate.c
++++ b/player/display_rate.c
+@@ -34,20 +34,27 @@ void mp_probe_display_rates(struct demuxer *demux, int stream_flags)
+     if (!videos)
+         return;
+ 
+-    // Limit additional startup work. An incomplete scan is never called CFR:
+-    // playback will use a single higher refresh instead of guessing and then
+-    // changing it mid-episode. Cancellation uses the normal opener cancel tree.
+-    double deadline = mp_time_sec() + 5;
++    // Limit additional startup work. An incomplete scan is never called CFR
++    // and must not force a different refresh without verified timing.
++    // Cancellation uses the normal opener cancel tree.
++    double started = mp_time_sec();
++    double deadline = started + 5;
+     struct demuxer_params params = {
+         .force_format = (char *)demux->desc->name,
+         .stream_flags = stream_flags,
+         .disable_timeline = true,
++        .probe_timestamps = strcmp(demux->desc->name, "mkv") == 0,
+         // is_top_level=false disables the packet cache, even with cache=yes.
+     };
+     struct demuxer *probe = demux_open_url(demux->filename, &params,
+                                           demux->cancel, demux->global);
+     if (!probe)
+         return;
++    if (params.probe_timestamps) {
++        // Headers are tiny. The playback-sized read/skip buffer otherwise
++        // reads most compressed frame payloads even when seeking past them.
++        probe->stream->requested_buffer_size = STREAM_BUFFER_SIZE * 2;
++    }
+ 
+     struct samples {
+         double *pts;
+@@ -107,8 +114,10 @@ void mp_probe_display_rates(struct demuxer *demux, int stream_flags)
+             }
+         }
+     } else {
+-        MP_VERBOSE(demux, "Display refresh scan incomplete; keeping a higher refresh for this file.\n");
++        MP_VERBOSE(demux, "Display refresh scan incomplete; leaving display refresh unchanged.\n");
+     }
++    MP_VERBOSE(demux, "Display refresh scan took %.3f seconds.\n",
++               mp_time_sec() - started);
+     talloc_free(samples);
+     demux_cancel_and_free(probe);
+ }
+diff --git a/test/display_rate.c b/test/display_rate.c
+index 0b4278e..8429d1d 100644
+--- a/test/display_rate.c
++++ b/test/display_rate.c
+@@ -111,9 +111,10 @@ int main(void)
+     const unsigned fractional[] = {120, 143, 119, 144};
+     assert(choose_rate(rate, common, 3) == 120);
+     assert(fabs(choose_rate(rate, fractional, 4) - 120000.0 / 1001) < 0.001);
+-    // A missing/incomplete profile, unlike measured VFR, still uses maximum Hz.
+-    assert(choose(0, tv, 8) == 60);
+-    assert(choose(0, integer_modes, 10) == 144);
++    // A timed-out scan must not replace a correct 23.976 Hz desktop with 60 Hz
++    // merely because the whole-file timing could not be verified.
++    assert(choose(0, tv, 8) == 0);
++    assert(choose(0, integer_modes, 10) == 0);
+ 
+     double t = 0;
+     for (int n = 0; n < 600; n++) {
+@@ -167,6 +168,6 @@ int main(void)
+     assert(mp_display_rate_score(rate, 144) > mp_display_rate_score(rate, 60));
+     assert(mp_display_rate_section(cadences, rate.num_cadences, 0) == -1);
+     assert(mp_display_rate_section(cadences, rate.num_cadences, pts[599]) == -1);
+-    puts("PASS CFR sections and seeks; whole-file CFR/VFR; rounded/reordered PTS; common multiples; duration-weighted selection; unknown fallback; playback scale");
++    puts("PASS CFR sections and seeks; whole-file CFR/VFR; rounded/reordered PTS; common multiples; duration-weighted selection; unknown preserves display; playback scale");
+     return 0;
+ }
+diff --git a/video/out/display_rate.h b/video/out/display_rate.h
+index 9166f17..da7018e 100644
+--- a/video/out/display_rate.h
++++ b/video/out/display_rate.h
+@@ -136,8 +136,8 @@ static inline double mp_display_rate_vfr_score(struct mp_display_rate rate,
+ }
+ 
+ // Prefer the lowest exact multiple for CFR, then a near multiple. Measured
+-// VFR uses its whole-file profile; unverified inputs retain the highest-rate
+-// fallback. Exact matches always win over near ones.
++// VFR uses its whole-file profile. Without verified timing, leave the display
++// unchanged. Exact matches always win over near ones.
+ static inline double mp_display_rate_score(struct mp_display_rate rate, double hz)
+ {
+     if (!(hz > 1) || (!rate.variable && !(rate.fps > 0)))
+@@ -146,7 +146,7 @@ static inline double mp_display_rate_score(struct mp_display_rate rate, double h
+         isfinite(rate.scale) && rate.scale > 0)
+         return mp_display_rate_vfr_score(rate, hz);
+     if (rate.variable)
+-        return hz;
++        return -1;
+     double multiple = round(hz / rate.fps);
+     if (!rate.variable && multiple >= 1) {
+         double error = fabs(hz / (rate.fps * multiple) - 1);
