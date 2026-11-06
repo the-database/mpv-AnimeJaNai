@@ -69,6 +69,21 @@ var trtDebSha256 = new Dictionary<string, string>
     ["libnvonnxparsers11"]  = "d7b0e623e6b8d1c368a000b996938494137e2584b85e2eed8b89f7b34092436c",
     ["libnvinfer-bin"]      = "36b0a4f11c3a15bf9f2d4eb5a33ce02b7248582eb384696a1d80a154abf005f8",
 };
+// The shared runtime packs every libaji app pins (animejanai-inference runtime-<n>): TensorRT and the
+// per-GPU builder packs, installed once per user into the shared pack store by aji-runtime (the
+// updater's store mode; the-database/aji-runtime). The manifest carries the platform's index URL and
+// SHA-256. animejanai-inference's runtime-packs.yml asks bump-pins.yml here for the bump PR. The
+// component packs below are still built: the AppImage, and older versions' updaters, use them.
+const string RuntimeRepo          = "the-database/animejanai-inference";
+const string RuntimeTag           = "runtime-2";
+const string RuntimeIndexSha256Win   = "5b6f0450ba4eed34d6e25dde072ce1298f083d91d142fd858495483e7711aea1";
+const string RuntimeIndexSha256Linux = "d441210f7747b255f17483f7c8b921817ad3f997abab5a1ba5d348b51511ab61";
+// aji-runtime, the store's tool, from its release (the binary in aji-runtime-<platform>.zip/.tar.gz).
+// Dev override: AJI_RUNTIME_LOCAL points at a local aji-runtime(.exe).
+const string AjiRuntimeRepo       = "the-database/aji-runtime";
+const string AjiRuntimeVersion    = "v0.1.1";
+const string AjiRuntimeSha256Win   = "a85d7780b72be53e9d7856bbef84322958b8f58322969a399568f448c2eac129";
+const string AjiRuntimeSha256Linux = "a668b13030c57e5a4dd43a4e38fcb33059c47693320891ad84aedf8de6e34ece";
 const string AjiVersion           = "v0.23.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json)
 
 // 7-Zip "extra" (Windows) / linux-x64 standalone console, from the
@@ -495,6 +510,48 @@ async Task InstallAji()
     }
 }
 
+// aji-runtime(.exe), the shared pack store's tool, at the install root beside the updater, which runs it.
+async Task InstallAjiRuntime()
+{
+    string exe = plat.IsWindows ? "aji-runtime.exe" : "aji-runtime";
+    string dest = Path.Combine(installDirectory, exe);
+    var local = Environment.GetEnvironmentVariable("AJI_RUNTIME_LOCAL");
+    if (!string.IsNullOrEmpty(local))
+    {
+        Console.WriteLine($"Using local aji-runtime: {local}");
+        File.Copy(local, dest, true);
+    }
+    else
+    {
+        string asset = plat.IsWindows ? "aji-runtime-windows-x64.zip" : "aji-runtime-linux-x64.tar.gz";
+        string archive = Path.GetFullPath(asset);
+        Console.WriteLine($"Downloading {asset} {AjiRuntimeVersion}...");
+        await DownloadFileAsync($"https://github.com/{AjiRuntimeRepo}/releases/download/{AjiRuntimeVersion}/{asset}", archive, _ => { });
+        VerifySha256(archive, plat.IsWindows ? AjiRuntimeSha256Win : AjiRuntimeSha256Linux);
+        var unpack = Path.GetFullPath("aji-runtime-unpack");
+        if (Directory.Exists(unpack)) Directory.Delete(unpack, true);
+        Directory.CreateDirectory(unpack);
+        if (plat.IsWindows)
+            ExtractZip(archive, unpack, (double progress) => { });
+        else
+            await RunProcess("tar", $"-xzf \"{archive}\" -C \"{unpack}\"");
+        if (Directory.GetFiles(unpack, exe, SearchOption.AllDirectories).FirstOrDefault() is string found)
+        {
+            File.Copy(found, dest, true);
+        }
+        Directory.Delete(unpack, true);
+        File.Delete(archive);
+        if (!File.Exists(dest))
+        {
+            throw new InvalidOperationException($"{asset} has no {exe}");
+        }
+    }
+    if (!plat.IsWindows)
+    {
+        await RunProcess("chmod", $"+x \"{dest}\"");
+    }
+}
+
 // ONNX Runtime + DirectML for the DirectML backend (Windows only). The .nupkg
 // files are plain zips; only the x64 runtime DLLs (and the DirectML license,
 // which the redistribution terms require keeping intact) go into the package.
@@ -890,6 +947,7 @@ void WriteVersionAndManifest()
         "version.txt",
         "manifest.json",
         plat.Exe("AnimeJaNaiUpdater"),
+        plat.Exe("aji-runtime"),
         "animejanai/onnx",
         "animejanai/benchmarks",
     };
@@ -926,6 +984,15 @@ void WriteVersionAndManifest()
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,
             sevenzip = SevenZipVersion,
             rife = RifeModelsVersion,
+            // the shared runtime release the updater's store mode installs TensorRT from
+            runtime = RuntimeTag,
+        },
+        // The shared runtime packs (the updater's store mode): this platform's index and its pin.
+        runtime = new
+        {
+            tag = RuntimeTag,
+            index_url = $"https://github.com/{RuntimeRepo}/releases/download/{RuntimeTag}/packs-{(plat.IsWindows ? "windows" : "linux")}-x64.json",
+            index_sha256 = plat.IsWindows ? RuntimeIndexSha256Win : RuntimeIndexSha256Linux,
         },
         overlay_paths = overlayPaths.ToArray(),
         // User data never overwritten by an update (full updates preserve these explicitly).
@@ -934,6 +1001,8 @@ void WriteVersionAndManifest()
             "animejanai/animejanai.conf",
             "animejanai/currentanimejanai.log",
             "animejanai/manager-ui.json",
+            // written by the shared pack store for this install
+            "animejanai/inference/aji-runtime.json",
             "portable_config/mpv.conf",
             "portable_config/input.conf",
             "portable_config/saved-props.json",
@@ -1111,6 +1180,7 @@ async Task Main()
     PortConfigsForTarget();
     GenerateInputConf();
     await InstallAnimeJaNaiManager();
+    await InstallAjiRuntime();
     WriteThirdPartyNotices();
     WriteLinuxLauncher();
     WriteVersionAndManifest();
