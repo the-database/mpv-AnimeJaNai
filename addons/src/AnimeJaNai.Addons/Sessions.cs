@@ -1,0 +1,349 @@
+using System.Text.Json.Nodes;
+
+namespace AnimeJaNai.Addons;
+
+// Implemented by trusted AJN integration code. Addons receive opaque public ids,
+// never provider handles, executable names, command lines, or raw file paths.
+public interface IProcessingSession : IAsyncDisposable
+{
+    Task<JsonObject> GetStatusAsync(CancellationToken cancellationToken);
+}
+
+public interface IControllableProcessingSession : IProcessingSession
+{
+    Task PauseAsync(bool paused, CancellationToken cancellationToken);
+    Task SeekAsync(double seconds, CancellationToken cancellationToken);
+}
+
+public interface IProcessingSelectionProvider
+{
+    JsonObject ListSelections();
+}
+
+// A provider can hand cleanup ownership back even if starting the resource
+// failed. The registry retains the resource if cleanup also needs a retry.
+public sealed class ProcessingSessionStartException(IProcessingSession session, Exception cause) : Exception("Processing session start needs cleanup.", cause)
+{
+    public IProcessingSession Session { get; } = session;
+}
+
+public interface IProcessingSessionProvider
+{
+    int ApiMinor => 0;
+    bool SupportsFrames => false;
+    bool SupportsOutputs => false;
+    bool SupportsOutputPlayback => false;
+    bool SupportsRemoteSources => false;
+    JsonObject RemoteSourceFormats() => throw new AddonException("feature_unavailable", "Remote media sources are unavailable.");
+    Task<IProcessingSession> OpenRemoteAsync(RemoteInputRequest source, string? profileId, CancellationToken cancellationToken) =>
+        throw new AddonException("feature_unavailable", "Remote media sources are unavailable.");
+    Task<IProcessingSession> OpenRemoteOutputAsync(RemoteInputRequest source, string? profileId, OutputRequest output, CancellationToken cancellationToken) =>
+        throw new AddonException("feature_unavailable", "Remote media output is unavailable.");
+    JsonObject OutputFormats() => throw new AddonException("feature_unavailable", "Encoded output is unavailable.");
+    Task<IProcessingSession> OpenOutputAsync(string sourceId, string? profileId, OutputRequest output, CancellationToken cancellationToken) =>
+        throw new AddonException("feature_unavailable", "Encoded output is unavailable.");
+    Task<IProcessingSession> OpenAsync(string sourceId, string? profileId, CancellationToken cancellationToken);
+    IProcessingSessionProvider ForAddon(AddonPackage package, PermissionGrant grant) => this;
+    IProcessingSessionProvider ForAddon(AddonPackage package, PermissionGrant grant, RequestCredentials credentials) => ForAddon(package, grant);
+}
+
+public sealed class SessionRegistry(IProcessingSessionProvider provider, int totalLimit = 16, int perOwnerLimit = 4)
+{
+    public sealed class Owner
+    {
+        internal readonly CancellationTokenSource Lifetime = new();
+        internal readonly TaskCompletionSource Drained = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int Pending;
+        internal bool Closing;
+        internal readonly IProcessingSessionProvider Provider;
+        internal Owner(IProcessingSessionProvider provider) { Provider = provider; }
+    }
+    private sealed record OwnedSession(Owner Owner, IProcessingSession Session)
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public Task? Closing;
+        public string? CleanupError;
+        public Dictionary<string, IFrameSubscription> Frames { get; } = new(StringComparer.Ordinal);
+    }
+    private readonly Dictionary<string, OwnedSession> sessions = new(StringComparer.Ordinal);
+    private readonly object sync = new();
+    private int pending;
+    public Owner CreateOwner() => new(provider);
+    public Owner CreateOwner(AddonPackage package, PermissionGrant grant) => new(provider.ForAddon(package, grant));
+    public Owner CreateOwner(AddonPackage package, PermissionGrant grant, RequestCredentials credentials) => new(provider.ForAddon(package, grant, credentials));
+    internal IMediaProbeProvider? ProbeProvider(Owner owner) => owner.Provider is IMediaProbeProvider { SupportsProbes: true } probe ? probe : null;
+    public int CapabilityMinor(Owner owner) => owner.Provider.ApiMinor;
+    public bool SupportsFrames(Owner owner) => owner.Provider.SupportsFrames;
+    public bool SupportsOutputs(Owner owner) => owner.Provider.SupportsOutputs;
+    public bool SupportsOutputPlayback(Owner owner) => owner.Provider.SupportsOutputPlayback;
+    internal IMediaStreamProvider? StreamProvider(Owner owner) => owner.Provider is IMediaStreamProvider { SupportsStreams: true } streams ? streams : null;
+    internal ISubtitleProvider? SubtitleProvider(Owner owner) => owner.Provider is ISubtitleProvider { SupportsSubtitles: true } subtitles ? subtitles : null;
+    public bool SupportsRemoteSources(Owner owner) => owner.Provider.SupportsRemoteSources;
+    public JsonObject RemoteSourceFormats(Owner owner)
+    {
+        lock (sync) Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
+        Contract.Require(owner.Provider.SupportsRemoteSources, "feature_unavailable", "Remote media sources are unavailable.");
+        return owner.Provider.RemoteSourceFormats();
+    }
+    public JsonObject OutputFormats(Owner owner)
+    {
+        lock (sync) Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
+        Contract.Require(owner.Provider.SupportsOutputs, "feature_unavailable", "Encoded output is unavailable.");
+        return owner.Provider.OutputFormats();
+    }
+
+    public async Task<string> SubscribeFramesAsync(Owner owner, string sessionId, FrameRequest request, CancellationToken token)
+    {
+        request.Validate();
+        OwnedSession item;
+        lock (sync) item = Owned(owner, sessionId);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, owner.Lifetime.Token);
+        await item.Gate.WaitAsync(linked.Token);
+        try
+        {
+            lock (sync)
+            {
+                _ = Owned(owner, sessionId);
+                Contract.Require(item.Closing is null, "session_closed", "Session is closing.");
+                Contract.Require(item.Frames.Count == 0, "capacity_exceeded", "This producer supports one sample subscription per session.");
+            }
+            Contract.Require(owner.Provider.SupportsFrames && item.Session is IFrameProcessingSession, "feature_unavailable", "This session does not offer frame samples.");
+            var subscription = ((IFrameProcessingSession)item.Session).SubscribeFrames(request);
+            try
+            {
+                lock (sync)
+                {
+                    _ = Owned(owner, sessionId);
+                    string id = Guid.NewGuid().ToString("N");
+                    item.Frames.Add(id, subscription);
+                    return id;
+                }
+            }
+            catch { subscription.Dispose(); throw; }
+        }
+        finally { item.Gate.Release(); }
+    }
+
+    public async Task<FramePacket?> ReadFrameAsync(Owner owner, string subscriptionId, bool unsubscribe, CancellationToken token)
+    {
+        OwnedSession item;
+        lock (sync)
+        {
+            Contract.Require(!owner.Closing, "subscription_not_found", "Frame subscription is closed.");
+            item = sessions.Values.FirstOrDefault(s => s.Owner == owner && s.Frames.ContainsKey(subscriptionId))
+                ?? throw new AddonException("subscription_not_found", "Frame subscription is not owned by this addon instance.");
+        }
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, owner.Lifetime.Token);
+        await item.Gate.WaitAsync(linked.Token);
+        try
+        {
+            IFrameSubscription subscription;
+            lock (sync)
+            {
+                Contract.Require(!owner.Closing && item.Closing is null && item.Frames.ContainsKey(subscriptionId), "subscription_not_found", "Frame subscription is closed.");
+                subscription = item.Frames[subscriptionId];
+            }
+            if (!unsubscribe) return subscription.ReadLatest();
+            subscription.Dispose();
+            lock (sync) item.Frames.Remove(subscriptionId);
+            return null;
+        }
+        finally { item.Gate.Release(); }
+    }
+
+    public JsonObject Selections(Owner owner)
+    {
+        lock (sync) Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
+        return owner.Provider is IProcessingSelectionProvider selections ? selections.ListSelections()
+            : throw new AddonException("feature_unavailable", "This provider does not offer selected media.");
+    }
+
+    public Task<string> OpenAsync(Owner owner, string source, string? profile, CancellationToken cancellationToken) =>
+        OpenCoreAsync(owner, token => owner.Provider.OpenAsync(source, profile, token), cancellationToken);
+
+    public Task<string> OpenOutputAsync(Owner owner, string source, string? profile, OutputRequest output, CancellationToken cancellationToken)
+    {
+        output.Validate();
+        Contract.Require(owner.Provider.SupportsOutputs, "feature_unavailable", "Encoded output is unavailable.");
+        Contract.Require(output.Playback is null || owner.Provider.SupportsOutputPlayback, "feature_unavailable", "Output playback controls are unavailable.");
+        return OpenCoreAsync(owner, token => owner.Provider.OpenOutputAsync(source, profile, output, token), cancellationToken);
+    }
+
+    public Task<string> OpenRemoteAsync(Owner owner, RemoteInputRequest source, string? profile, OutputRequest? output, CancellationToken cancellationToken)
+    {
+        source.Validate(); output?.Validate();
+        Contract.Require(owner.Provider.SupportsRemoteSources, "feature_unavailable", "Remote media sources are unavailable.");
+        Contract.Require(output is null || owner.Provider.SupportsOutputs, "feature_unavailable", "Encoded output is unavailable.");
+        Contract.Require(output?.Playback is null || owner.Provider.SupportsOutputPlayback, "feature_unavailable", "Output playback controls are unavailable.");
+        return OpenCoreAsync(owner, token => output is null ? owner.Provider.OpenRemoteAsync(source, profile, token)
+            : owner.Provider.OpenRemoteOutputAsync(source, profile, output, token), cancellationToken);
+    }
+
+    private async Task<string> OpenCoreAsync(Owner owner, Func<CancellationToken, Task<IProcessingSession>> open, CancellationToken cancellationToken)
+    {
+        lock (sync)
+        {
+            Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
+            Contract.Require(sessions.Count + pending < totalLimit && sessions.Values.Count(s => s.Owner == owner) + owner.Pending < perOwnerLimit,
+                "capacity_exceeded", "Processing session limit reached.");
+            pending++; owner.Pending++;
+        }
+        IProcessingSession? created = null;
+        try
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, owner.Lifetime.Token);
+            created = await open(linked.Token);
+            string id = Guid.NewGuid().ToString("N");
+            lock (sync)
+            {
+                linked.Token.ThrowIfCancellationRequested();
+                Contract.Require(!owner.Closing, "owner_closed", "Addon instance has stopped.");
+                sessions.Add(id, new(owner, created));
+                created = null;
+                return id;
+            }
+        }
+        catch (ProcessingSessionStartException error)
+        {
+            created = error.Session;
+            throw new AddonException("session_start", "Processing could not start. Its resource cleanup will be retried when the addon stops.");
+        }
+        finally
+        {
+            try
+            {
+                if (created is not null)
+                {
+                    try { await created.DisposeAsync(); }
+                    catch
+                    {
+                        // A cancelled open can still produce a resource if its
+                        // provider is late to observe cancellation. If release
+                        // fails, retain ownership/capacity for cleanup retry.
+                        lock (sync) sessions.Add(Guid.NewGuid().ToString("N"), new(owner, created));
+                        throw;
+                    }
+                }
+            }
+            finally
+            {
+                lock (sync)
+                {
+                    pending--; owner.Pending--;
+                    if (owner.Closing && owner.Pending == 0) owner.Drained.TrySetResult();
+                }
+            }
+        }
+    }
+
+    public async Task<JsonObject> StatusAsync(Owner owner, string id, CancellationToken cancellationToken)
+    {
+        OwnedSession item;
+        lock (sync)
+        {
+            item = Owned(owner, id);
+            if (item.Closing is not null) return new() { ["state"] = item.CleanupError is null ? "closing" : "cleanup_failed", ["error"] = item.CleanupError };
+        }
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, owner.Lifetime.Token);
+        await item.Gate.WaitAsync(linked.Token);
+        try
+        {
+            lock (sync) _ = Owned(owner, id);
+            return await item.Session.GetStatusAsync(linked.Token);
+        }
+        finally { item.Gate.Release(); }
+    }
+
+    public async Task CloseAsync(Owner owner, string id, CancellationToken cancellationToken)
+    {
+        OwnedSession item;
+        lock (sync) item = Owned(owner, id);
+        await CloseItemAsync(id, item, cancellationToken);
+    }
+
+    public void RequestClose(Owner owner, string id)
+    {
+        lock (sync)
+        {
+            var item = Owned(owner, id);
+            if (item.Closing is { IsCompleted: false }) return;
+            item.CleanupError = null;
+            item.Closing = Task.Run(async () =>
+            {
+                try { await CloseItemAsync(id, item, CancellationToken.None); }
+                catch { lock (sync) item.CleanupError = "Session cleanup needs a retry. Close this session again or stop the addon."; }
+            });
+        }
+    }
+
+    public async Task ControlAsync(Owner owner, string id, bool? paused, double? seconds, CancellationToken cancellationToken)
+    {
+        Contract.Require(paused.HasValue != seconds.HasValue && (seconds is null || double.IsFinite(seconds.Value) && seconds >= 0 && seconds <= 315576000),
+            "invalid_request", "Choose one valid session control.");
+        OwnedSession item;
+        lock (sync) item = Owned(owner, id);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, owner.Lifetime.Token);
+        await item.Gate.WaitAsync(linked.Token);
+        try
+        {
+            lock (sync)
+            {
+                _ = Owned(owner, id);
+                Contract.Require(item.Closing is null, "session_closed", "Session is closing.");
+            }
+            Contract.Require(item.Session is IControllableProcessingSession, "feature_unavailable", "Session controls are unavailable.");
+            var control = (IControllableProcessingSession)item.Session;
+            if (paused.HasValue) await control.PauseAsync(paused.Value, linked.Token);
+            else await control.SeekAsync(seconds!.Value, linked.Token);
+        }
+        finally { item.Gate.Release(); }
+    }
+
+    private async Task CloseItemAsync(string id, OwnedSession item, CancellationToken cancellationToken)
+    {
+        await item.Gate.WaitAsync(cancellationToken);
+        try
+        {
+            lock (sync) if (!sessions.ContainsKey(id)) return;
+            KeyValuePair<string, IFrameSubscription>[] subscriptions;
+            lock (sync) subscriptions = item.Frames.ToArray();
+            foreach (var entry in subscriptions)
+            {
+                entry.Value.Dispose();
+                lock (sync) item.Frames.Remove(entry.Key);
+            }
+            await item.Session.DisposeAsync();
+            lock (sync) sessions.Remove(id);
+        }
+        finally { item.Gate.Release(); }
+    }
+
+    public async Task ReleaseOwnerAsync(Owner owner)
+    {
+        bool cancel;
+        lock (sync)
+        {
+            cancel = !owner.Closing;
+            owner.Closing = true;
+            if (owner.Pending == 0) owner.Drained.TrySetResult();
+        }
+        if (cancel) owner.Lifetime.Cancel();
+        await owner.Drained.Task;
+        KeyValuePair<string, OwnedSession>[] owned;
+        lock (sync) owned = sessions.Where(s => s.Value.Owner == owner).ToArray();
+        var errors = await Task.WhenAll(owned.Select(async item =>
+        {
+            try { await CloseItemAsync(item.Key, item.Value, CancellationToken.None); return (Exception?)null; }
+            catch (Exception error) { return error; }
+        }));
+        if (errors.Any(e => e is not null)) throw new AggregateException("Processing session cleanup failed.", errors.Where(e => e is not null).Cast<Exception>());
+    }
+
+    private OwnedSession Owned(Owner owner, string id)
+    {
+        Contract.Require(!owner.Closing && sessions.TryGetValue(id, out var item) && item.Owner == owner,
+            "session_not_found", "Session is not owned by this addon instance.");
+        return sessions[id];
+    }
+}
+

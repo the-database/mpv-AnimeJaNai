@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.output-inspector",
+  "name": "Media output inspector example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 4 },
+  "permissions": ["sessions.manage", "media.output", "network.connect", "credentials.use"],
+  "requiredCapabilities": { "sessions": { "major": 1, "minMinor": 1 }, "outputs": { "major": 1, "minMinor": 0 }, "network": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "sourceIndex": { "type": "number", "label": "Approved media file number", "default": 1, "minimum": 1, "maximum": 16 },
+    "profileIndex": { "type": "number", "label": "Approved profile number", "default": 1, "minimum": 1, "maximum": 8 },
+    "destinationIndex": { "type": "number", "label": "Approved service number", "description": "Numbers follow List approved resources. Select an HTTP or HTTPS receiver that accepts a streamed POST or PUT.", "default": 1, "minimum": 1, "maximum": 8 },
+    "sessionCount": { "type": "number", "label": "Number of independent outputs", "description": "Each output processes the selected source separately. Host capacity and hardware limit admission.", "default": 1, "minimum": 1, "maximum": 16 },
+    "videoCodec": { "type": "choice", "label": "Video codec", "choices": ["h264", "hevc", "av1"], "default": "h264" },
+    "container": { "type": "choice", "label": "Container", "choices": ["matroska", "mpegts", "fragmentedMp4"], "default": "matroska" },
+    "videoKbps": { "type": "number", "label": "Video bitrate (kbps)", "default": 4000, "minimum": 256, "maximum": 50000 },
+    "audioCodec": { "type": "choice", "label": "Audio codec", "choices": ["none", "aac", "opus"], "default": "aac" },
+    "lengthSeconds": { "type": "number", "label": "Output duration (seconds)", "description": "The example sends a short clip by default. Zero processes to the end of the source, within host limits.", "default": 2, "minimum": 0, "maximum": 86400 },
+    "method": { "type": "choice", "label": "HTTP method", "choices": ["POST", "PUT"], "default": "POST" },
+    "path": { "type": "string", "label": "Service upload path", "default": "/media", "maxLength": 2048 },
+    "useCredential": { "type": "boolean", "label": "Use this service's saved credential", "default": false }
+  },
+  "actions": {
+    "resources": { "label": "List approved resources" },
+    "formats": { "label": "Show host output formats" },
+    "open": { "label": "Send processed media", "description": "Starts the configured outputs and sends video and optional audio to the selected approved service." },
+    "status": { "label": "Show output status" },
+    "pause": { "label": "Pause outputs" },
+    "resume": { "label": "Resume outputs" },
+    "close": { "label": "Close outputs" }
+  }
+}

@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+.tools/
+.work/
+*.ajnaddon
+examples/*/addon.wasm
+examples/*/addon.bundled.js

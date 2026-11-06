@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.sample-inspector",
+  "name": "Frame sample inspector",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 2 },
+  "permissions": ["sessions.manage", "frames.read"],
+  "requiredCapabilities": { "frames": { "major": 1, "minMinor": 0 }, "timers": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "sessionCount": { "type": "number", "label": "Sessions to sample", "default": 1, "minimum": 1, "maximum": 16 },
+    "width": { "type": "number", "label": "Sample width", "default": 64, "minimum": 1, "maximum": 320 },
+    "height": { "type": "number", "label": "Sample height", "default": 36, "minimum": 1, "maximum": 180 },
+    "maxFps": { "type": "number", "label": "Maximum samples per second", "description": "Reopen sessions to apply changed sample settings.", "default": 30, "minimum": 1, "maximum": 60 }
+  },
+  "actions": {
+    "open": { "label": "Start samples", "description": "Start the addon first, then approve a local file and a DirectML profile." },
+    "status": { "label": "Show sample information" },
+    "close": { "label": "Close sample sessions" }
+  }
+}

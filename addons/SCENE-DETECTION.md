@@ -1,0 +1,203 @@
+# Custom RIFE scene detectors — API 1.8 preview
+
+## Enhanced extension — API 1.11 / sceneDetection 1.2
+
+`sceneDetection.list()` adds `nativeEnhanced`. Attach with
+`{algorithm:"enhanced", thscd1:240, thscd2:130}` to use AJN's scene classifier on
+the existing MVTools motion analysis. It recovers weaker cuts and rejects false
+stops during motion, lighting changes and fades. The matching player
+and DLL must advertise `privateEnhancedSceneAbi: 1`; an older runtime rejects
+attachment with `feature_unavailable`. Shared-header offsets and the MVTools C
+ABI remain unchanged.
+
+Classification compares luma histograms and spatial correlation in the changed
+regions before and after motion compensation. Recent motion distinguishes a
+new discontinuity from sustained effects or a fade. Weak cut candidates also
+require distinct moving image features, so a pan or zoom is not mistaken for
+an edit. Appearance samples are bounded to 240x135 and feature thumbnails to
+120x68, normalized across integer bit depths. The existing readback is reused;
+the classifier adds no extra lookahead beyond the bridge's bounded source queue and no fixed quiet-shot warmup. History resets on seeks,
+discontinuities and format changes. This heuristic does not guarantee correct
+classification on every video. The separate `mvtools` algorithm is unchanged.
+
+Status counts and thresholds describe the underlying MVTools analysis; enhanced
+mode can accept or reject a cut independently of its legacy threshold. Permissions, ownership and
+native-mode restrictions remain the same.
+
+## Native MVTools extension — API 1.10 / sceneDetection 1.1
+
+`sceneDetection.list()` adds `nativeMvtools`, indicating a verified matching
+player and optional detector library. Attach with
+`{algorithm:"mvtools", thscd1:240, thscd2:130}` to select the legacy `sc_mode=2`
+analysis core. Thresholds are integers in 0..16320 and 0..255 respectively.
+The original `custom` algorithm remains the default for existing callers.
+
+Native mode operates on the original decoded resolution as planar YUV/gray in the trusted player's optional worker, before upscale or RIFE resizing.
+It does not deliver `scene.request` events or samples to the addon; `read` returns
+null and `submit` is not accepted for this mode. Sample dimensions and the guest
+deadline apply only to `custom`. Ownership, leases, revocation and fallback to
+AJN on unsupported inputs remain in effect. The detector DLL is loaded only
+after activation; normal playback performs no new analysis or GPU readback.
+
+Status adds `algorithm`, `cutPairs`, `changedBlocks`, `totalBlocks`, `analysisMs`,
+`blockSadThreshold`, and `sourceBits`. The last-pair time includes native sample
+preparation. `detectorUnavailable` means the optional DLL is missing or has the
+wrong ABI; `detectorError` means native analysis failed. Both use AJN's detector.
+See [RIFE Settings](rife-settings/README.md) for the packaged addon and limits.
+
+## Original custom-detector contract
+
+This optional API lets a WebAssembly addon decide whether RIFE should interpolate
+between a pair of frames. Creators can port motion-aware detectors to Wasm.
+The `scene-detector` example demonstrates the contract using average luma
+difference. It is **not an MVTools port** and does not reproduce `sc_mode=2`.
+
+## Requirements and installation
+
+Use a Windows x64 API 1.8 host, matching player with `privateSceneAbi: 1`, and
+inference dispatcher/backend implementing the optional scene ABI. Enable RIFE
+in the selected AJN profile first. This API does not enable RIFE or select/build
+its model. It currently targets ordinary AJN players, not independent headless
+addon sessions. Samples support progressive mono SDR; other inputs fall back.
+CUDA and D3D11 hardware downloads are implemented; consult the build's test
+results for which backend/hardware combinations have been qualified.
+
+Build the example with the ordinary AJN build command. Install its `.ajnaddon`
+in Manager's Addons page and approve `player.sceneDetection` and `frames.read`.
+Start RIFE playback and the addon, then use **Enable on available AJN players**.
+Use **Show detector status** to check progress. **Restore AJN scene detection**,
+disabling the addon or closing its worker releases its attachments. Installation
+alone does not change playback: the example uses manual activation. No remote
+host address is needed. A replacement player gets a new ID; attach again.
+
+The example's **Developer test mode** offers `cut`, `continuous` and `default`
+for connection tests; `analyze` runs its demonstration algorithm. Suspension
+requires detach/attach. A production addon may manage player discovery with
+bounded timers and reset its own history when playback changes.
+
+## Manifest and compatibility
+
+Declare `api: {"major":1,"minMinor":8}`, permissions
+`["player.sceneDetection","frames.read"]`, and
+`requiredCapabilities: {"sceneDetection":{"major":1,"minMinor":0}}`.
+The package remains `manifest.json` plus `module.wasm`. Ported C/C++ code must
+produce compatible core Wasm and implement the same RPC protocol. Native DLLs
+are not accepted package contents. `player.observe` does not grant this control.
+
+The host advertises this capability only with matching native player metadata.
+An older inference backend reports `backendUnavailable` and retains AJN's
+detector. Existing addon calls, inference struct layouts and `aji_infer_rife`
+callers keep their behavior; this is an additive optional API.
+
+## JavaScript contract
+
+| Call | Result and limits |
+| --- | --- |
+| `ajn.sceneDetection.list()` | `{playerId,inUse,format:"gray8",stage:"beforeInterpolation"}[]`. Same opaque player IDs as normal observations; no titles/paths. |
+| `attach(playerId,{width?,height?,deadlineMs?})` | `{detectorId,width,height,deadlineMs,format,stage}`. Defaults 160×90, 25 ms; width 1–320, height 1–180, deadline 5–100 ms. |
+| `read(detectorId)` | Latest pending pair once, or `null` when consumed, expired or unavailable. |
+| `submit(detectorId,requestId,decision)` | `{accepted:boolean}`; decision is `cut`, `continuous` or `default`. |
+| `status(detectorId)` | `{state,acceptedPairs,timedOutPairs}`. |
+| `detach(detectorId)` | Releases the caller's detector and restores built-in detection. |
+
+There is one exclusive detector per player, at most four players per host.
+A conflicting attachment returns `scene_detector_in_use`. Detector handles
+belong to their addon worker; another worker cannot use them.
+
+The host delivers `onEvent({name:"scene.request",data:{detectorId},...},ajn)`.
+Read, analyze and submit inside that callback. Events run serially per worker.
+Cache settings on `start` and `settings.changed`; avoid network/storage work
+in this callback. Do not busy-poll or queue expired requests.
+
+```typescript
+interface ScenePair {
+  requestId: string; epoch: string;
+  previousPtsSeconds: number; currentPtsSeconds: number;
+  width: number; height: number;
+  sourceWidth: number; sourceHeight: number;
+  format: "gray8"; stage: "beforeInterpolation"; range: "full";
+  remainingMs: number;
+  previous: Uint8Array; current: Uint8Array;
+}
+```
+
+Each array has `width*height` row-major bytes without row padding: full-range,
+encoded SDR luma, bilinearly resized from RIFE's input pair. These are not
+linear-light or final-display pixels. `sourceWidth/sourceHeight` describe the
+processing stage, which may already be resized/upscaled. Later subtitles/OSD
+are absent. Analysis runs once per input pair, independent of interpolation
+factor. The preceding reduced sample is cached when its identity matches.
+
+`cut` invokes RIFE's existing left-frame substitution. `continuous` interpolates
+even when the built-in threshold would classify a cut. `default` delegates this
+pair to AJN. AJN retains control of output timestamps and frame cadence.
+
+Keep IDs as opaque strings. Reset cached history on epoch changes, seeks,
+geometry changes or timestamp discontinuities. `accepted:false` means a late,
+duplicate, revoked or stale submission; it never affects a later pair. An
+accepted submission acknowledges delivery, not proof the native thread consumed
+it before the deadline. `acceptedPairs` counts native consumption.
+
+## Deadlines, fallback and cost
+
+The native deadline begins **after sample production**. `remainingMs` is the
+budget left when the host copied the pair and may be stale by guest delivery.
+Missing/invalid decisions use AJN's detector. Three consecutive missed deadlines
+suspend the attachment until detach/attach. An independent three-second host
+lease expires if the player's lifecycle connection stops renewing it.
+
+Without a detector there is no scene sampling, additional look-ahead or worker.
+With one, a bounded background worker analyzes original decoded source frames,
+up to two frames ahead of interpolation. Native MVTools uses source-resolution
+planes; custom Wasm uses the reduced samples. Upscaling and RIFE order do not
+change this analysis stage. Only completed results with the exact pair timestamps,
+configuration and seek epoch are consumed. A missing or late result uses AJN's
+built-in detector immediately; playback never waits for the guest deadline.
+
+Downloads, reduction, native analysis and guest waits occur on this optional
+worker. These are not zero-copy operations and can use GPU bandwidth and CPU.
+The queue retains at most three pending pairs and never grows for a slow addon.
+The first pair after startup/seek and any overloaded pairs can use the built-in
+detector. `deadlineMs` limits guest response validity, not player waiting time.
+Benchmark accuracy and accepted-pair coverage on the intended hardware.
+
+Existing worker limits apply: 500 broker calls/second, 128/event, 16 MiB/second
+of binary frame transport, a two-second outer event deadline, and Wasm memory
+and CPU limits. A pair is at most 115,200 bytes. Multiple players share worker
+resources. A slow unrelated callback can cause scene deadlines to expire.
+
+| Status | Meaning/action |
+| --- | --- |
+| `waitingForPlayer` | No pair yet; check the active profile has RIFE enabled. |
+| `pending` | Player is waiting for a decision. |
+| `active` | A decision was consumed; this does not assess its quality. |
+| `fallback` | A deadline was missed; built-in detection was used. |
+| `suspended` | Three consecutive misses; fix workload, detach, reattach. |
+| `sampleUnavailable` | Unsupported/sample-failure path, including HDR/interlaced/stereo. |
+| `backendUnavailable` | Loaded inference DLLs lack the optional scene ABI. |
+| `unavailable` | Unknown native state. |
+
+Player closure releases its detectors; later calls return
+`scene_detector_not_found`. Enumerate again. Missing grants give
+`permission_denied`; missing support gives `feature_unavailable` or startup
+`missing_capability`. Invalid options give `invalid_request`.
+
+## Raw RPC for other Wasm languages
+
+Methods are `sceneDetection.list`, `.attach`, `.read`, `.submit`, `.status`,
+`.detach`, with parameters matching the SDK table. Raw `attach` must supply
+all three numeric options. A read response is `{pair,byteLength}` followed
+immediately after its JSON newline by exactly `byteLength` bytes, previous
+plane first. Metadata contains every field above except the arrays. No data is
+`{pair:null,byteLength:0}`. Other replies are JSON only. Consume the entire tail
+before the next JSON message; use the standard hello/event/error protocol.
+
+## Creator qualification
+
+Test increasing `acceptedPairs` and forced cut/continuous behavior on permitted
+SDR footage with working RIFE. Compare detector quality on cuts, pans, flashes
+and fades. Test seek, pause/resume, profile/RIFE-order changes, player restart,
+disable, competing detectors, deadline suspension/recovery and HDR fallback.
+Measure overhead and missed deadlines with the intended number of players.
+Protocol tests and compilation alone do not establish smooth playback or
+MVTools parity. The complete example source is supplied in `examples/scene-detector`.
