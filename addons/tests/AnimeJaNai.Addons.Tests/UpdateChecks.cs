@@ -1,0 +1,272 @@
+using AnimeJaNai.Addons;
+using AnimeJaNai.Addons.Management;
+using AnimeJaNai.Updates;
+using System.Text.Json.Nodes;
+
+internal static partial class Checks
+{
+    private static async Task ReleaseSupportChecks()
+    {
+        await Test("Release support cannot replace pinned core files or configuration", () =>
+        {
+            string bundle = Area();
+            Directory.CreateDirectory(Path.Combine(bundle, "host"));
+            File.WriteAllText(Path.Combine(bundle, "host/ajn-addon.exe"), "host fixture");
+            var files = new JsonObject { ["host/ajn-addon.exe"] = AddonRelease.Hash(Path.Combine(bundle, "host/ajn-addon.exe")) };
+            True(AddonRelease.ValidateSupport(bundle, files).Single().Relative == "addon-host/ajn-addon.exe");
+            foreach (string name in new[] { "libmpv-2.dll", "AnimeJaNaiManager.exe", "manifest.json", "version.txt", "portable_config/mpv.conf" })
+            {
+                string path = Path.Combine(bundle, name); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, "unexpected core override"); files[name] = AddonRelease.Hash(path);
+                bool rejected = false;
+                try { AddonRelease.ValidateSupport(bundle, files); } catch (InvalidDataException) { rejected = true; }
+                True(rejected, "Support bundle accepted " + name); File.Delete(path); files.Remove(name);
+            }
+            return Task.CompletedTask;
+        });
+    }
+    private static async Task UpdateChecks()
+    {
+        await Test("Update retry recovers installed files before validating an overlay", async () =>
+        {
+            string MakePackage(string version)
+            {
+                string directory = Area();
+                var files = new JsonObject();
+                foreach (string name in new[] { "addon-host/ajn-addon.exe", "addon-host/ajn-addon-launcher.exe",
+                    "addon-host/runtime/wasmtime.exe", "addon-host/native-capabilities.json",
+                    "AnimeJaNaiManager.exe", "libmpv-2.dll", "mpv.exe", "manifest.json", "version.txt" })
+                {
+                    string path = Path.Combine(directory, name);
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    File.WriteAllText(path, name == "manifest.json"
+                        ? new JsonObject { ["deps"] = new JsonObject { ["mpvfork"] = version } }.ToJsonString() : version);
+                    files[name] = AddonRelease.Hash(path);
+                }
+                File.WriteAllText(Path.Combine(directory, "addon-package.json"), new JsonObject {
+                    ["schemaVersion"] = 1, ["platform"] = "win-x64", ["files"] = files }.ToJsonString());
+                return directory;
+            }
+            string target = MakePackage("old"), incoming = MakePackage("new"), overlay = Area();
+            File.Copy(Path.Combine(target, "addon-package.json"), Path.Combine(overlay, "addon-package.json"));
+            try { await AddonUpdateTransaction.ApplyAsync(incoming, target, new HashSet<string>(), afterPublish: _ =>
+                throw new IOException("Interrupted full update")); }
+            catch (IOException error) when (error.Message == "Interrupted full update") { }
+            // A manifest/version ahead of one native file, and another native
+            // file already replaced: the journal must restore the whole set.
+            File.Copy(Path.Combine(incoming, "manifest.json"), Path.Combine(target, "manifest.json"), true);
+            File.WriteAllText(Path.Combine(target, "version.txt"), "new");
+            File.WriteAllText(Path.Combine(target, "libmpv-2.dll"), "new");
+            File.WriteAllText(Path.Combine(target, "mpv.exe"), "old");
+            True(InstallationActivity.Pending(target));
+            bool invalidBeforeRecovery = false;
+            try { AddonUpdateTransaction.ValidatePackage(overlay, target); }
+            catch (IOException) { invalidBeforeRecovery = true; }
+            True(invalidBeforeRecovery);
+            await AddonUpdateTransaction.ApplyAsync(overlay, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "version.txt")) == "old");
+            True(JsonNode.Parse(File.ReadAllText(Path.Combine(target, "manifest.json")))!["deps"]!["mpvfork"]!.GetValue<string>() == "old");
+            True(File.ReadAllText(Path.Combine(target, "libmpv-2.dll")) == "old" && !InstallationActivity.Pending(target));
+            await AddonUpdateTransaction.ApplyAsync(incoming, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "mpv.exe")) == "new");
+        });
+        await Test("Update activity lock reports update_in_progress without a pending marker", () =>
+        {
+            string target = Area();
+            using var updater = new FileStream(InstallationActivity.LockPath(target), FileMode.OpenOrCreate,
+                FileAccess.ReadWrite, FileShare.None);
+            True(!InstallationActivity.Pending(target));
+            bool excluded = false;
+            try { using var activity = InstallationActivity.Acquire(target); }
+            catch (ManagementException error) when (error.Code == "update_in_progress") { excluded = true; }
+            True(excluded);
+            return Task.CompletedTask;
+        });
+        await Test("Update identity changes for rebuilt native binaries at an unchanged source commit", () =>
+        {
+            string target = Area();
+            Directory.CreateDirectory(Path.Combine(target, "addon-host"));
+            string path = Path.Combine(target, "addon-host/native-capabilities.json");
+            var native = new JsonObject { ["sources"] = new JsonObject { ["mpv"] = new string('a', 40) },
+                ["files"] = new JsonObject { ["libmpv-2.dll"] = new string('b', 64), ["mpv.exe"] = new string('c', 64) } };
+            File.WriteAllText(path, native.ToJsonString());
+            string before = AddonUpdateTransaction.NativeDependencyIdentity(target);
+            native["files"]!["libmpv-2.dll"] = new string('d', 64);
+            File.WriteAllText(path, native.ToJsonString());
+            True(before != AddonUpdateTransaction.NativeDependencyIdentity(target));
+        });
+        await Test("Update apply and rollback replace read-only destinations", async () =>
+        {
+            string source = Area(), target = Area(), destination = Path.Combine(target, "managed.conf");
+            File.WriteAllText(destination, "old");
+            File.SetAttributes(destination, FileAttributes.ReadOnly);
+            File.WriteAllText(Path.Combine(source, "managed.conf"), "new");
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), afterPublish: _ =>
+                { File.SetAttributes(destination, FileAttributes.ReadOnly); throw new IOException("Interrupt read-only replacement"); }); }
+            catch (IOException error) when (error.Message == "Interrupt read-only replacement") { }
+            True(InstallationActivity.Pending(target));
+            await AddonUpdateTransaction.RecoverAsync(target);
+            True(File.ReadAllText(destination) == "old" && !InstallationActivity.Pending(target));
+            File.SetAttributes(destination, FileAttributes.ReadOnly);
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(File.ReadAllText(destination) == "new");
+        });
+        await Test("Update preparation cancellation does not leave addon activation paused", async () =>
+        {
+            string source = Area(), target = Area();
+            File.WriteAllText(Path.Combine(source, "new.txt"), "new");
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), new CancellationToken(true)); }
+            catch (OperationCanceledException) { }
+            True(!InstallationActivity.Pending(target) && !File.Exists(Path.Combine(target, "new.txt")));
+            using var activity = InstallationActivity.Acquire(target);
+        });
+        await Test("Update roots may have a junctioned parent but interior links are rejected", async () =>
+        {
+            string real = Area(), links = Area(), parent = Path.Combine(links, "parent");
+            void Link(string path, string destination)
+            {
+                if (!OperatingSystem.IsWindows()) { Directory.CreateSymbolicLink(path, destination); return; }
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe")
+                { Arguments = "/c mklink /J \"" + path + "\" \"" + destination + "\"", UseShellExecute = false, CreateNoWindow = true });
+                process!.WaitForExit(); True(process.ExitCode == 0);
+            }
+            Link(parent, real);
+            string source = Directory.CreateDirectory(Path.Combine(parent, "source")).FullName;
+            string target = Directory.CreateDirectory(Path.Combine(parent, "target")).FullName;
+            File.WriteAllText(Path.Combine(source, "new.txt"), "new");
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "new.txt")) == "new");
+            string outside = Area();
+            File.WriteAllText(Path.Combine(outside, "untouched.txt"), "keep");
+            Link(Path.Combine(source, "interior"), outside);
+            bool rejected = false;
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>()); }
+            catch (IOException error) when (error.Message.Contains("inside the selected root")) { rejected = true; }
+            True(rejected && !InstallationActivity.Pending(target) && File.ReadAllText(Path.Combine(outside, "untouched.txt")) == "keep");
+        });
+        await Test("Normal updates remove addon support, retain user data, and can roll back an interruption", async () =>
+        {
+            string source = Area(), target = Area();
+            Directory.CreateDirectory(Path.Combine(target, "addon-host/runtime"));
+            Directory.CreateDirectory(Path.Combine(target, "animejanai/addons"));
+            string data = Path.Combine(target, "animejanai/addons/saved.json");
+            File.WriteAllText(data, "keep");
+            File.WriteAllText(Path.Combine(target, "addon-host/runtime/wasmtime.exe"), "runtime");
+            File.WriteAllText(Path.Combine(target, "extra-native.dll"), "addon native");
+            string nativeHash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(target, "extra-native.dll"))));
+            File.WriteAllText(Path.Combine(target, "addon-package.json"), new JsonObject { ["files"] = new JsonObject { ["extra-native.dll"] = nativeHash } }.ToJsonString());
+            foreach (string folder in new[] { "addon-development", "build-info", "portable_config/scripts" })
+                Directory.CreateDirectory(Path.Combine(target, folder));
+            File.WriteAllText(Path.Combine(target, "addon-development/guide.html"), "old guide");
+            File.WriteAllText(Path.Combine(target, "build-info/old.json"), "old metadata");
+            File.WriteAllText(Path.Combine(target, "portable_config/scripts/animejanai_addons.lua"), "old bridge");
+            Directory.CreateDirectory(Path.Combine(source, "portable_config/scripts"));
+            File.WriteAllText(Path.Combine(source, "portable_config/scripts/animejanai_addons.lua"), "normal release bridge");
+            File.WriteAllText(Path.Combine(target, "player.bin"), "old");
+            File.WriteAllText(Path.Combine(source, "player.bin"), "new");
+            File.WriteAllText(Path.Combine(target, "unchanged.bin"), "same");
+            File.WriteAllText(Path.Combine(source, "unchanged.bin"), "same");
+            File.SetLastWriteTimeUtc(Path.Combine(target, "unchanged.bin"), new DateTime(2020, 1, 1));
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), afterPublish: n =>
+                { if (n == 2) throw new IOException("Interrupted downgrade"); }); }
+            catch (IOException error) when (error.Message == "Interrupted downgrade") { }
+            True(InstallationActivity.Pending(target));
+            await AddonUpdateTransaction.RecoverAsync(target);
+            True(File.Exists(Path.Combine(target, "addon-host/runtime/wasmtime.exe")) && File.ReadAllText(Path.Combine(target, "player.bin")) == "old");
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(!Directory.Exists(Path.Combine(target, "addon-host")) && !File.Exists(Path.Combine(target, "addon-package.json")));
+            True(File.ReadAllText(data) == "keep" && File.ReadAllText(Path.Combine(target, "player.bin")) == "new");
+            True(File.GetLastWriteTimeUtc(Path.Combine(target, "unchanged.bin")).Year == 2020);
+            True(File.ReadAllText(Path.Combine(target, "portable_config/scripts/animejanai_addons.lua")) == "normal release bridge");
+            True(!Directory.Exists(Path.Combine(target, "addon-development")) && !Directory.Exists(Path.Combine(target, "build-info")) && !File.Exists(Path.Combine(target, "extra-native.dll")));
+        });
+        await Test("Normal downgrade preserves an unchanged bridge supplied by the incoming release", async () =>
+        {
+            string source = Area(), target = Area();
+            File.WriteAllText(Path.Combine(target, "addon-package.json"), "{\"files\":{}}");
+            foreach (string root in new[] { source, target })
+            {
+                Directory.CreateDirectory(Path.Combine(root, "portable_config/scripts"));
+                File.WriteAllText(Path.Combine(root, "portable_config/scripts/animejanai_addons.lua"), "same bridge");
+            }
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>());
+            True(File.ReadAllText(Path.Combine(target, "portable_config/scripts/animejanai_addons.lua")) == "same bridge");
+        });
+        await Test("Component removal recovers its files and installed-state record together", async () =>
+        {
+            string source = Area(), target = Area();
+            Directory.CreateDirectory(Path.Combine(target, "animejanai/inference"));
+            string runtime = Path.Combine(target, "animejanai/inference/component.bin");
+            File.WriteAllText(runtime, "component");
+            File.WriteAllText(Path.Combine(target, "components.json"), "old state");
+            File.WriteAllText(Path.Combine(source, "components.json"), "new state");
+            bool failed = false;
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), afterPublish: n =>
+                { if (n == 2) throw new IOException("Interrupted component change"); }, component: true, removals: ["animejanai/inference/component.bin"]); }
+            catch (IOException error) when (error.Message == "Interrupted component change") { failed = true; }
+            True(failed && !File.Exists(runtime));
+            await AddonUpdateTransaction.RecoverAsync(target);
+            True(File.ReadAllText(runtime) == "component" && File.ReadAllText(Path.Combine(target, "components.json")) == "old state");
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), component: true, removals: ["animejanai/inference/component.bin"]);
+            True(!File.Exists(runtime) && File.ReadAllText(Path.Combine(target, "components.json")) == "new state");
+        });
+        await Test("Interrupted replacement blocks activation and recovery restores the complete prior file set", async () =>
+        {
+            string source = Area(), target = Area();
+            File.WriteAllText(Path.Combine(target, "old.txt"), "old");
+            File.WriteAllText(Path.Combine(source, "old.txt"), "new");
+            File.WriteAllText(Path.Combine(source, "new.txt"), "new file");
+            string data = Directory.CreateDirectory(Path.Combine(target, "animejanai/addons/data")).FullName;
+            File.WriteAllText(Path.Combine(data, "saved.json"), "saved");
+            File.WriteAllText(Path.Combine(source, "user.conf"), "default");
+            File.WriteAllText(Path.Combine(target, "user.conf"), "custom");
+            bool interrupted = false;
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string> { "user.conf" }, afterPublish: _ => throw new IOException("Interruption")); }
+            catch (IOException error) when (error.Message == "Interruption") { interrupted = true; }
+            True(interrupted && InstallationActivity.Pending(target));
+            try { using var forbidden = InstallationActivity.Acquire(target); throw new Exception("Activation was allowed during interrupted update"); }
+            catch (ManagementException error) when (error.Code == "update_in_progress") { }
+            await AddonUpdateTransaction.RecoverAsync(target);
+            True(!InstallationActivity.Pending(target) && File.ReadAllText(Path.Combine(target, "old.txt")) == "old");
+            True(!File.Exists(Path.Combine(target, "new.txt")) && File.ReadAllText(Path.Combine(target, "user.conf")) == "custom");
+            True(File.ReadAllText(Path.Combine(data, "saved.json")) == "saved");
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string> { "user.conf" });
+            True(File.ReadAllText(Path.Combine(target, "old.txt")) == "new" && File.Exists(Path.Combine(target, "new.txt")));
+            True(!InstallationActivity.Pending(target) && File.ReadAllText(Path.Combine(target, "user.conf")) == "custom");
+            await AddonUpdateTransaction.RecoverAsync(target); // Idempotent after successful commit.
+        });
+        await Test("Update intent drains a running addon host and excludes concurrent activation across replacement", async () =>
+        {
+            string source = Area(), target = Area(), data = Directory.CreateDirectory(Path.Combine(target, "animejanai/addons")).FullName;
+            File.WriteAllText(Path.Combine(source, "managed.txt"), "new");
+            var package = AddonPackage.Create(Manifest() with { Activation = ["on_manager"] }, EmptyModule);
+            new AddonRegistry(data).Install(package, []);
+            await using var service = new AddonService(data, (_, _, _, _) => Task.FromResult<IAddonInstance>(new FakeAddon()));
+            using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var run = new ManagementServer(data, service, target).RunAsync(cancel.Token, exitWhenIdle: false);
+            await using var client = await ManagementClient.ConnectAsync(data, cancel.Token);
+            True(service.HasRunningWorkers);
+            bool excluded = false;
+            await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), cancel.Token, afterPublish: _ =>
+            {
+                try { using var contender = InstallationActivity.Acquire(target); }
+                catch (ManagementException error) when (error.Code == "update_in_progress") { excluded = true; }
+            });
+            await run.WaitAsync(TimeSpan.FromSeconds(5));
+            True(excluded && !service.HasRunningWorkers && !InstallationActivity.Pending(target));
+            using var restarted = InstallationActivity.Acquire(target);
+            True(File.ReadAllText(Path.Combine(target, "managed.txt")) == "new");
+        });
+        await Test("Incomplete addon inventory is rejected before installed files change", async () =>
+        {
+            string source = Area(), target = Area();
+            File.WriteAllText(Path.Combine(target, "old.txt"), "old");
+            File.WriteAllText(Path.Combine(source, "addon-package.json"), new JsonObject {
+                ["schemaVersion"] = 1, ["platform"] = "win-x64", ["files"] = new JsonObject() }.ToJsonString());
+            bool rejected = false;
+            try { await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>()); }
+            catch (IOException) { rejected = true; }
+            True(rejected && !InstallationActivity.Pending(target) && File.ReadAllText(Path.Combine(target, "old.txt")) == "old");
+        });
+    }
+}

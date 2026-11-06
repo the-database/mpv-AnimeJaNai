@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.service-inspector",
+  "name": "Service inspector example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 3 },
+  "permissions": ["network.connect", "credentials.use"],
+  "requiredCapabilities": { "network": { "major": 1, "minMinor": 0 }, "timers": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "destinationIndex": { "type": "number", "label": "Approved destination number", "description": "1 selects the first destination shown by List approved services.", "default": 1, "minimum": 1, "maximum": 8 },
+    "path": { "type": "string", "label": "HTTP request path", "default": "/", "maxLength": 2048 },
+    "useCredential": { "type": "boolean", "label": "Use this service's saved credential", "default": false },
+    "datagram": { "type": "string", "label": "UDP message", "description": "Sent only when you choose Send request for a UDP destination.", "default": "AJN service test", "maxLength": 1024 }
+  },
+  "actions": {
+    "list": { "label": "List approved services" },
+    "request": { "label": "Send request", "description": "Start the addon first. Sends one HTTP GET or the configured UDP message to the selected destination." },
+    "status": { "label": "Show request result" },
+    "cancel": { "label": "Cancel request" }
+  }
+}

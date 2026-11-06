@@ -1,0 +1,87 @@
+# Windows addon release integration
+
+This is a preview. Public API ownership, representative application acceptance and support commitments still require maintainer decisions. Windows is implemented first; Linux assembly excludes this runtime. The Plex and bias-light applications and website/catalog distribution remain separate projects.
+
+## Native build
+
+Dispatch the ordinary `mpv-winbuild/mpv.yml` workflow with `build_target=64bit`, `compiler=clang`, the selected mpv/libass repositories and full source commits, `addon_metadata=true`, and `release=false` for tests. Default non-addon release behavior is retained. The producing job checks the source ABI declaration, actual build features and PE imports, then emits `mpv-addon-native-x86_64.json` before packaging.
+
+After the native and winbuild changes are merged, a maintainer can publish the separate official addon-native component release. Set these variables to the full merged commits, then dispatch from the merged winbuild `main` branch:
+
+```powershell
+$mergedMpvCommit = '<full merged the-database/mpv commit>'
+$mergedLibassCommit = '<full the-database/libass commit>'
+gh workflow run mpv.yml --repo the-database/mpv-winbuild --ref main `
+  -f mpv_repository=the-database/mpv -f libass_repository=the-database/libass `
+  -f mpv_ref=$mergedMpvCommit -f libass_ref=$mergedLibassCommit `
+  -f build_target=64bit -f compiler=clang -f lgpl=false `
+  -f addon_metadata=true -f release=true -f no_save_cache=true
+```
+
+Keep `prs` and `command` empty. Public releases reject fork source repositories. An addon release uses `<date>-<mpv-short-sha>-addons-<workflow-run-id>`, includes the native JSON and both player/development archives, and does not update the normal `version` branch or GitHub's latest release. Its run-specific tag is not overwritten; rerunning a published job cannot replace its pinned assets. Daily pruning retains addon tags. Use a new dispatch for a rebuilt component set, including rebuilds at the same mpv commit.
+
+Use the player and development archives from that same run. Flatten their recorded binaries into one native input directory and keep the license material. The assembler verifies every native file against the producer record; it cannot manufacture native capability evidence from arbitrary DLL hashes. Static UCRT FFmpeg needs no separate `avformat` DLL. Old sealed shared-FFmpeg previews retain their legacy detection only when the new record is absent. Invalid new metadata never falls back to an old marker.
+
+Schema 1 allows up to 256 native files and 1 MiB of metadata. This accommodates the complete shared dependency closure (139 files in the tested MSYS2 build) while retaining bounded parsing and exact file checks. The producer, host and assembler enforce compatible limits. `test-build/test_native_metadata.py` in winbuild tests configuration, source pins, CRT and linkage rejection paths.
+
+The null-output hardware-frame shortcut requires `--vo-null-accept-hwframes=yes`. The owned non-encoding media worker opts in. Ordinary benchmarks retain their previous default behavior. Compare both modes on the same machine and workload before changing a benchmark baseline.
+
+## Managed builds and assembly
+
+The API 1.7 assembler requires producer evidence for `privateProbeAbi`,
+`privateMuxAbi` and `privateSubtitlesAbi`, in addition to the prior sample/output
+ABIs. It rejects an older or partial native runtime instead of creating a full
+streaming preview with missing capabilities. See `STREAMING-TESTS.md` for the
+separate native and packaged-Wasm qualification gates.
+
+Use PowerShell 7, .NET SDK 10 and the pinned tools from `addons/tools/bootstrap.ps1`. Run `addons/tools/test.ps1`, then `addons/tools/package.ps1 -OutputDirectory <new-host-bundle>`. Publish the updater normally with `dotnet publish AnimeJaNaiUpdater -c Release -r win-x64 -o <output>`. In the matching Manager checkout, run `tools/check-addon-client.ps1` before publishing `AnimeJaNaiConfEditor` for win-x64 with self-contained and single-file options. Tests can pass `-p:UsedAvaloniaProducts=` to suppress the dependency's telemetry task.
+
+Host packaging requires a clean Git checkout; `-Git <git-executable>` selects Git when it is not on PATH. It copies tracked source files and emits `host-build.json` with the source commit, source tree identities, SDK version and all bundle file hashes. Full/support assembly checks those trees against the supplied main checkout and verifies the bundle inventory. Later changes outside the host source trees do not require recompiling an identical host. This producer record establishes build coherence, not a publisher signature.
+
+The host bundle contains the runtime, examples, SDK, offline documentation, licenses and buildable source, including the transaction source shared with the updater.
+
+`tools/assemble-addon-preview.py` requires Python 3.12+, Git, produced native metadata/binaries, the host bundle, Manager publish directory and updater executable. Supply clean committed checkouts with `--main-source`, `--manager-source`, `--mpv-source` and `--winbuild-source`. Its `--help` lists all inputs.
+
+Omit `--core-archive` to create a support bundle zip. Supply a core archive with `--core-sha256` and `--sevenzip` to create a full preview. Choose a new `--output` and preview `--version`; repeat `--evidence` for completed JSON test evidence. The result includes `addon-package.json`, source archives, native provenance, evidence and the zip's checksum. Checksum, source pin and SDK mismatches stop packaging.
+
+When a historical core contains a native file inventory, obsolete shared dependencies are removed only from the new extracted copy and only after verifying their hashes. Core build evidence is retained under `build-info/core`; the new preview's authoritative record is `build-info/addon-preview.json`.
+
+The public assembler accepts `--addons` only for Windows. `AJN_ADDON_BUNDLE` points to the host bundle built from the release checkout by `addons/tools/package.ps1`, **not** the preview assembler's overlay. Only host/runtime/licenses and developer documentation/source/examples are copied into `addon-host` and `addon-development`. Support cannot replace core binaries, Manager, configuration, `version.txt` or `manifest.json`. The Wasmtime executable has a fixed SHA-256 check.
+
+Deployment builds that host from its checkout; there is no external bundle URL input. Addon native archives and producer metadata come only from the official `the-database/mpv-winbuild` release selected by the separate checked-in `AddonMpvForkVersion`, `AddonMpvForkBuildDate` and `AddonMpvForkGitHash`. Ordinary packages continue using `MpvForkVersion`/date/hash. The metadata SHA-256 pins every native binary. Manager and inference use their ordinary official release pins.
+
+After the official addon-native release above succeeds, set the following assembler constants from its actual assets: `AddonMpvForkVersion` to its full tag, `AddonMpvForkBuildDate` and `AddonMpvForkGitHash` to the eight-digit date and ten-character hash in `mpv[-dev]-x86_64-<date>-git-<hash>.7z`, and `AddonNativeMetadataSha256` to the SHA-256 of `mpv-addon-native-x86_64.json`. The archive date can differ from the publication date; use the filename. Set `AddonManagerSource` and `AddonInferenceSource` to the full source commits corresponding to the selected official Manager/inference versions. Leave the ordinary `MpvFork*` pins unchanged when updating only addon natives. Empty pins deliberately reject public addon builds. Pre-merge testing uses the preview assembler. Only after these pins and release validation are complete should the main deploy workflow run with `addons=true`.
+
+The native addon build explicitly enables `-Dajn-mvtools=true`; ordinary builds default to false. Its static OpenSSL recipe uses `no-pinshared`, matching the unload behavior tested in CI. The normal native recipe remains unchanged. Validate the final native commit and artifact before shipping: a shared-FFmpeg test artifact alone does not establish the static production artifact's behavior.
+
+Addon installers and normal installers over an addon installation stage the incoming tree and use the updater transaction. They check for an open player/Manager in `PrepareToInstall`, before files and registration change. Errors display the updater's actual diagnostic. Fresh normal installs retain direct copying.
+
+## Updates and recovery
+
+The updater validates incoming addon inventories before replacing files. It also supports returning to an ordinary release: owned work drains, `animejanai/addons` is preserved, and addon host/developer files, build provenance and the bundle manifest are removed in the same recoverable transaction. Extra native DLLs are removed only when they match the old inventory. Any file supplied by the incoming release, including its Lua bridge, is kept or replaced by that release's copy. Addons remain inactive until support is installed again. Close the player and Manager first. Persistent update intent blocks new activation; existing hosts drain their jobs. An exclusive installation lease spans replacement after those processes exit. The bounded legacy fallback stops only helpers whose full executable paths belong to this installation.
+
+Unchanged files are hashed and skipped. Required free space includes changed-file staging, their rollback backups, removed-file backups and a small reserve. All replacements and backups are staged before a prepared journal is written. The journal becomes committed only after every replacement succeeds. If interrupted, addon startup stays blocked. Running the installer again or `AnimeJaNaiUpdater --recover` restores the complete prior file set. Recovery verifies all backups first and can be retried. A failed recovery preserves its journal for repair.
+
+For addon builds, `deps.mpvfork` records `native:<sha256>` of the sorted `filename=sha256` native inventory. Rebuilding the same source with different dependencies therefore requires a full update. Source identities remain in `addon-package.json` and `build-info`; Manager and inference remain overlay components. Normal builds retain the original serialized dependency object.
+
+Addon data/settings are preserved independently of the release's preservation list. **Remove addon** preserves them too. Full application uninstall retains the existing policy of deleting the app tree, including data inside it. It drains this installation and unregisters only Run values still pointing at its own quoted launcher/login command. External/shared data roots and startup entries now pointing at another installation remain untouched.
+
+Component installation/removal uses the same transaction for its runtime/model files and `components.json`, so those records recover together. Close the player first; Manager may stay open for these operations. Existing addon work stops and can be started again afterwards.
+
+## Lifecycle and native validation
+
+Run the native test executable with `<built-root> <new-output> <dotnet> --updates-only` to exercise real host shutdown, independent installations, persisted state after moving an installation, a terminated transaction process, and replacement of the running updater itself. The old executable may remain in the transaction directory until the next updater process cleans it up; that cleanup does not change a successful commit into a failed update.
+
+For the actual full archives, run `<built-root> <new-output> <dotnet> <previous-full.zip> <current-full.zip> --archive-roundtrip-only`. It extracts isolated copies, uses the packaged updater to upgrade and roll back, checks every installed inventory hash, preserves internal addon settings/storage, exercises renewed package approval and addon rollback, and verifies the older API 1.6 host rejects an installed addon requiring API 1.7. Use the sealed integration.1 archive as the previous build and the matching new full archive; this test does not modify either source archive or the user's installation.
+
+`installer/tests/test-addons.ps1 -BuiltRoot <preview> -Compiler <Inno-6-ISCC.exe> -OutputDirectory <new-output> -Dotnet <dotnet>` compiles and runs a real installer lifecycle test. Its `/DInstallerTest` build has a separate application name and registration, disables optional component downloads, and runs with shortcuts and associations disabled. The harness refuses a production installer. It checks fresh install, rejection before file or registration changes while the player is open, reinstall with an active addon, preservation of settings and external data, uninstall, and ownership of login entries. Pass `-NormalSetup <normal-installer.exe>` to also check replacing an addon installation with a normal build and restoring addon support. Both installers must use `/DInstallerTest`. These test installers must never be distributed as normal releases.
+
+For GPU validation, run the native suite against the exact produced binaries; use the additional output, encoding, player-frame, remote-input, capacity and lifecycle modes as needed. `--null-benchmark` compares the native default with explicit hardware-frame acceptance using alternating 240-frame runs at 480x360 and 1920x1080 with DirectML slot 1002. It records startup-inclusive wall/CPU time and raw logs, discards one warmup per mode, and does not change the catalog benchmark or establish performance on other hardware. Run GPU measurements sequentially.
+
+## Paths and capability limits
+
+Deep persistent data paths are supported by relocating disposable compiler and worker files to a short uniquely named temporary directory. No directory is exposed to the guest. Executable paths of 260 characters or more, or a temporary folder too long for this policy, produce a readable startup diagnostic. Move the application/tools or choose a shorter Windows TEMP folder. Windows Run-command length is checked separately.
+
+Relocated runtime workers use a temporary parent specific to their data root. After an interrupted host, its next exclusive data-directory lease recovers the known disposable worker modules from both normal and relocated paths. Unfamiliar contents and another data root's temporary workers are left alone.
+
+Samples represent processed SDR images using DirectML/D3D11. CUDA/TensorRT, HDR, subtitles/OSD and final display composition require separate implementations. Encoded output retains the private UCRT descriptor handoff. Native test results apply only to the exact binaries, backends and hardware recorded for each preview; unit tests and metadata alone do not establish GPU support.

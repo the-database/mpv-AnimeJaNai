@@ -9,6 +9,10 @@ on:
       linux_only:
         description: 'Build only the Linux artifacts (skip the Windows leg)'
         default: 'false'
+      addons:
+        description: 'Include Windows addon support (preview)'
+        type: boolean
+        default: false
       windows_only:
         description: 'Build only the Windows artifacts (skip the Linux leg)'
         default: 'false'
@@ -30,10 +34,28 @@ jobs:
     - name: Publish .NET Core app
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
 
+    - name: Build addon support from the release checkout
+      if: ${{ inputs.addons }}
+      shell: pwsh
+      run: |
+        ./addons/tools/bootstrap.ps1
+        ./addons/tools/package.ps1 -OutputDirectory "$env:RUNNER_TEMP/ajn-release-host"
+        "AJN_ADDON_BUNDLE=$env:RUNNER_TEMP/ajn-release-host" >> $env:GITHUB_ENV
+
     - name: Run the console app
       # --packs also emits component-*.7z + packs.json (publish/packs-v<ver>/) for the
       # AnimeJaNai Manager (updater --components/--install/--remove/--auto).
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe ${{ github.event.inputs.release_version }} --packs
+      shell: pwsh
+      env:
+        ADDONS: ${{ inputs.addons }}
+        RELEASE_VERSION: ${{ inputs.release_version }}
+      run: |
+        $arguments = @($env:RELEASE_VERSION, '--packs')
+        if ($env:ADDONS -eq 'true') {
+          $arguments += '--addons'
+        }
+        & ./publish/BuildMpvUpscale2xAnimeJaNai.exe @arguments
+        if ($LASTEXITCODE -ne 0) { throw 'Package assembly failed.' }
 
     - name: Build updater and add it to the package
       shell: pwsh
@@ -59,7 +81,10 @@ jobs:
       run: |
         choco install innosetup -y
         $ver = "${{ github.event.inputs.release_version }}"
+        $addonFlags = @()
+        if ('${{ inputs.addons }}' -eq 'true') { $addonFlags += '/DEnableAddons' }
         & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+          @addonFlags `
           "/DAppVersion=$ver" `
           "/DSourceDir=$(Resolve-Path "publish/mpv-upscale-2x_animejanai-v$ver")" `
           "/O$(Get-Location)" `
