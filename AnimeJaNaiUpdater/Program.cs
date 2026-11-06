@@ -71,7 +71,8 @@ string ajiRuntime = Path.Combine(installDir, OperatingSystem.IsWindows() ? "aji-
 string? runtimeIndexUrl = ReadManifestNested(localManifest, "runtime", "index_url");
 string? runtimeIndexSha = ReadManifestNested(localManifest, "runtime", "index_sha256");
 string? runtimeMirror = Environment.GetEnvironmentVariable("ANIMEJANAI_RUNTIME_MIRROR") is { Length: > 0 } mirror ? mirror : null;
-// Not in the AppImage, which keeps TensorRT in its read-only image (and carries no aji-runtime).
+// Not in the AppImage: its AppRun installs TensorRT into the store itself (ref
+// mpv-animejanai-appimage), and this updater runs from the read-only image there.
 bool storeMode = (runtimeIndexUrl is not null && runtimeIndexSha is not null || runtimeMirror is not null) && File.Exists(ajiRuntime) &&
                  Environment.GetEnvironmentVariable("ANIMEJANAI_APPIMAGE") != "1";
 const string StoreAppId = "mpv-animejanai";
@@ -1697,11 +1698,12 @@ int StoreUnref()
     return rc;
 }
 
-// libaji's own files ship in the core and always stay.
+// libaji's own files ship in the core and always stay, as do DirectML's (an older release's
+// trt-runtime pack listed DirectML_LICENSE.txt, which the core needs with DirectML.dll).
 static bool IsLibaji(string rel)
 {
     string n = Path.GetFileName(rel).ToLowerInvariant();
-    return (n.StartsWith("aji") && n.EndsWith(".dll")) || n.StartsWith("libaji");
+    return (n.StartsWith("aji") && n.EndsWith(".dll")) || n.StartsWith("libaji") || n.StartsWith("directml");
 }
 
 // Where a store pack's file sat in the install folder before the store.
