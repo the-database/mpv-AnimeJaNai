@@ -96,7 +96,7 @@ runtime release (`RuntimeTag`, animejanai-inference `runtime-<n>`, pinned by its
 `manifest.json` `runtime`), installed by `aji-runtime(.exe)` at the install root.
 
 - **Updater:** store mode is on when the manifest pins `runtime`, `aji-runtime` is beside it, and it
-  isn't running in the AppImage. Its `trt-*` packs come from the store (ref `mpv-animejanai`); RIFE
+  isn't running in the AppImage (whose AppRun manages its own ref). Its `trt-*` packs come from the store (ref `mpv-animejanai`); RIFE
   stays this release's component pack. Every change is one `aji-runtime ensure`, which writes
   `animejanai/inference/aji-runtime.json`. An older install's TensorRT files are adopted by SHA-256,
   then deleted. Pack names and `--components --json` are unchanged.
@@ -105,9 +105,14 @@ runtime release (`RuntimeTag`, animejanai-inference `runtime-<n>`, pinned by its
   `animejanai_backend.lua` (`trt_runtime_installed`) and the Manager (`RuntimePacks.TrtInstalled`)
   check for TensorRT there. Any new "is TensorRT installed" check must read it too: without it,
   TensorRT looks missing and the DirectML fallback kicks in.
-- **Not in the store:** the AppImage (TensorRT baked in, kernel packs fetched by AppRun; it carries
-  no `aji-runtime`), RIFE (its engines would land in the read-only pack: the video ABI needs an
-  engine cache dir first), and DirectML (in the core). Releases still build every component pack.
+- **The AppImage** carries no TensorRT. Before mpv starts, AppRun has the image's `aji-runtime` install
+  TensorRT and this PC's builder packs (ref `mpv-animejanai-appimage`, `app_path` = the AppImage file,
+  once per version, stamped in `$DATA/.aji-runtime.stamp`). It writes `$DATA/animejanai/inference/
+  aji-runtime.json`, which `AJI_RUNTIME_JSON` names for libaji.
+- **Releases build with `--store`:** no TensorRT is downloaded or packed, and RIFE is the only component
+  pack. Local builds without it keep TensorRT in the tree. `DirectML_LICENSE.txt` stays in the core.
+- **Not in the store:** RIFE (its engines would land in the read-only pack: the video ABI needs an
+  engine cache dir first), and DirectML (in the core).
 - **Uninstall:** Inno `[UninstallRun]` and `installer/linux/uninstall.sh` run `aji-runtime unref`.
 
 ## Building and releasing
