@@ -38,9 +38,6 @@ AT=$(fetch "https://github.com/AppImage/appimagetool/releases/download/continuou
 mkdir -p "$APPDIR/usr/lib" "$APPDIR/usr/bin"
 cp -a "$TREE/." "$APPDIR/"
 install -m755 "$HERE/AppRun" "$APPDIR/AppRun"
-# The AppImage keeps TensorRT in the image (AppRun fetches the kernel packs into its data folder),
-# so it carries no aji-runtime: the updater stays out of the shared pack store's mode in it.
-rm -f "$APPDIR/aji-runtime"
 
 # icon: reuse one from the tree if present, else generate a placeholder
 icon="$APPDIR/mpv-animejanai.png"
