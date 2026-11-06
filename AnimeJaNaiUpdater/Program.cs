@@ -928,7 +928,9 @@ async Task<PackIndex> GetReleasePackIndexAsync()
     List<Asset> assets;
     if (!string.IsNullOrEmpty(local))
     {
-        json = File.ReadAllText(Path.Combine(local, "packs.json"));
+        // the platform's index, as a release names it (packs-linux-x64.json on Linux)
+        string localIndex = Path.Combine(local, isWinRid ? "packs.json" : $"packs-{platformRid}.json");
+        json = File.ReadAllText(File.Exists(localIndex) ? localIndex : Path.Combine(local, "packs.json"));
         assets = Directory.GetFiles(local, "component-*.7z")
             .Select(f => new Asset(Path.GetFileName(f), f)).ToList();
     }
