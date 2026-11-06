@@ -1273,8 +1273,12 @@ async Task<List<string>> EmitComponentPacks()
                                n.StartsWith("nvonnxparser") || n.StartsWith("libnvonnxparser") ||
                                n.StartsWith("cudart64_") || n.StartsWith("libcudart") ||
                                n == "trtexec.exe" || n == "trtexec";
-                return (runtime && !builderResource) ||
-                       n.Contains("LICENSE", StringComparison.OrdinalIgnoreCase);
+                // DirectML's licence stays in the core with DirectML.dll, which needs it (and on
+                // AMD/Intel PCs no TensorRT pack is installed); likewise ffmpeg's.
+                bool license = n.Contains("LICENSE", StringComparison.OrdinalIgnoreCase) &&
+                               !n.StartsWith("DirectML", StringComparison.OrdinalIgnoreCase) &&
+                               !n.StartsWith("ffmpeg", StringComparison.OrdinalIgnoreCase);
+                return (runtime && !builderResource) || license;
             })
             .Select(f => Path.GetRelativePath(installDirectory, f)).ToArray()),
         ("rife", "rife", new[] { Path.GetRelativePath(installDirectory, rifePath) }),

@@ -1636,11 +1636,12 @@ int StoreUnref()
     return rc;
 }
 
-// libaji's own files ship in the core and always stay.
+// libaji's own files ship in the core and always stay, as do DirectML's (an older release's
+// trt-runtime pack listed DirectML_LICENSE.txt, which the core needs with DirectML.dll).
 static bool IsLibaji(string rel)
 {
     string n = Path.GetFileName(rel).ToLowerInvariant();
-    return (n.StartsWith("aji") && n.EndsWith(".dll")) || n.StartsWith("libaji");
+    return (n.StartsWith("aji") && n.EndsWith(".dll")) || n.StartsWith("libaji") || n.StartsWith("directml");
 }
 
 // Where a store pack's file sat in the install folder before the store.
