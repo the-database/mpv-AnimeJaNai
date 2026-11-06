@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "events": [
+    { "name": "start", "data": { "reason": "developer_replay" } },
+    { "name": "echo", "data": { "message": "Hello from a replay", "futureOptionalField": true } },
+    { "name": "action", "data": { "id": "status" } },
+    { "name": "settings.changed", "data": { "greeting": "Hello" } },
+    { "name": "stop", "data": { "reason": "replay_finished" } }
+  ]
+}

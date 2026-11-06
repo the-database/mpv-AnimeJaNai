@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.scene-detector-example",
+  "name": "Scene detector developer example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 8 },
+  "permissions": ["player.sceneDetection", "frames.read"],
+  "requiredCapabilities": { "sceneDetection": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "settings": {
+    "threshold": { "type": "number", "label": "Mean luma difference threshold", "default": 0.15, "minimum": 0, "maximum": 1 },
+    "decision": { "type": "choice", "label": "Developer test mode", "default": "analyze", "choices": ["analyze", "cut", "continuous", "default"] }
+  },
+  "actions": {
+    "attach": { "label": "Enable on available AJN players" },
+    "status": { "label": "Show detector status" },
+    "detach": { "label": "Restore AJN scene detection" }
+  }
+}
