@@ -121,6 +121,7 @@ internal sealed class NativePlayerObservations(string installRoot) : IDisposable
     {
         public FramePacket? ReadLatest() => model.Ready ? samples.ReadLatest() : null;
         public JsonObject Status() => model.Ready ? samples.Status() : model.Status();
+        public bool TrySetRate(FrameRequest request) => samples.TrySetRate(request);
         public void Dispose() { samples.Dispose(); resource.Dispose(); }
     }
 }

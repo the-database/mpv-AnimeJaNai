@@ -44,6 +44,7 @@ public interface IFrameSubscription : IDisposable
     // Latest unread sample, or null. This must not wait for GPU/consumer progress.
     FramePacket? ReadLatest();
     JsonObject Status() => new() { ["state"] = "ready" };
+    bool TrySetRate(FrameRequest request) => false;
 }
 
 public interface IFrameProcessingSession : IProcessingSession

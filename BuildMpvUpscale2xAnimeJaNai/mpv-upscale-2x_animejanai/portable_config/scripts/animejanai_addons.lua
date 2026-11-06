@@ -81,12 +81,20 @@ local function update_sample()
     local file = io.open(control, 'rb')
     local text = file and file:read(4097)
     if file then file:close() end
+    -- An atomic control-file replacement may briefly deny the CRT reader.
+    -- Keep the last approved taps until their existing heartbeat expires.
+    -- A failed read must not refresh that heartbeat or extend the native lease.
+    if not text and revision and mp.get_time() - changed <= 3 then return end
     local value = text and #text <= 4096 and utils.parse_json(text) or nil
     if type(value) ~= 'table' or value.schemaVersion ~= 1 or value.instance ~= instance
         or type(value.revision) ~= 'string' or #value.revision > 20
-        or not value.revision:match('^%d+$') then remove_tap(); update_scene(''); update_source_tap('source'); update_source_tap('analysis'); return end
+        or not value.revision:match('^%d+$') then
+        if desired_taps then msg.warn('Removing addon observations: control file unavailable or invalid.'); desired_taps = nil end
+        remove_tap(); update_scene(''); update_source_tap('source'); update_source_tap('analysis'); return
+    end
     if revision ~= value.revision then revision = value.revision; changed = mp.get_time() end
     if value.available ~= true or mp.get_time() - changed > 3 then
+        if desired_taps then msg.warn('Removing addon observations: player bridge heartbeat expired or attachment closed.'); desired_taps = nil end
         remove_tap(); update_scene(''); update_source_tap('source'); update_source_tap('analysis'); return
     end
     -- Guests may rapidly change subscriptions. The host disables retired
