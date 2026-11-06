@@ -119,10 +119,10 @@ done
 export ANIMEJANAI_DATA_DIR="$DATA/animejanai"
 export ANIMEJANAI_ROOT="$DATA"
 
-# Component packs fetched on demand into $DATA (writable). Like the Windows
-# slim-install model, the AppImage bakes in ONLY the base TensorRT runtime; the
-# heavy, situational pieces are pulled only when actually needed. A fetch failure
-# is non-fatal (e.g. offline, or a draft release whose assets need auth).
+# The AppImage carries no TensorRT: the TensorRT runtime and this PC's builder
+# kernels come from the shared pack store (below). RIFE is fetched on demand into
+# $DATA (writable), only when the config uses it. A fetch failure is non-fatal
+# (e.g. offline, or a draft release whose assets need auth).
 INFDATA="$DATA/animejanai/inference"
 RIFEDATA="$DATA/animejanai/rife"
 mkdir -p "$INFDATA" "$RIFEDATA"
@@ -141,15 +141,34 @@ fetch_pack() { # $1 = pack base (e.g. trt-sm120, rife); $2 = human note
     fi
 }
 
-# Per-SM TensorRT builder (needed to BUILD new engines; cached engines run
-# without it) - one per NVIDIA GPU generation present, on first run. Not just
-# the first GPU: aji builds engines on the GPU mpv renders on, which need not
-# be nvidia-smi's first.
-for sm in $(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | tr -d ' .' | sort -u); do
-    if ! ls "$INFDATA"/libnvinfer_builder_resource_sm${sm}.so* >/dev/null 2>&1; then
-        fetch_pack "trt-sm${sm}" "TensorRT kernels for sm${sm} (~250 MB)"
+# TensorRT (the runtime + a builder pack per NVIDIA GPU generation present: aji
+# builds engines on the GPU mpv renders on, which need not be the first) comes
+# from the shared pack store (~/.local/share/the-database/aji, shared with the
+# other libaji apps), installed by the image's aji-runtime from the runtime
+# release manifest.json pins: once per version, before mpv starts (the first time
+# a few hundred MB, which the other apps may already have). libaji, the scripts
+# and the Manager find the packs through $INFDATA/aji-runtime.json; libaji's own
+# folder is the read-only image, so AJI_RUNTIME_JSON names it. The store keeps
+# them while this AppImage file exists (its ref's app_path); packs no AppImage or
+# app uses any more are freed. A failure (offline) is non-fatal: it runs again on
+# the next launch.
+manifest="$HERE/manifest.json"
+url="$(sed -n 's/.*"index_url": *"\([^"]*\)".*/\1/p' "$manifest" 2>/dev/null | head -1)"
+sha="$(sed -n 's/.*"index_sha256": *"\([0-9a-f]*\)".*/\1/p' "$manifest" 2>/dev/null | head -1)"
+export AJI_RUNTIME_JSON="$INFDATA/aji-runtime.json"
+stamp="$DATA/.aji-runtime.stamp"
+if nvidia-smi -L >/dev/null 2>&1 && [ -x "$HERE/aji-runtime" ] && [ -n "$url" ] && [ -n "$sha" ] &&
+   { [ ! -f "$AJI_RUNTIME_JSON" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$ver" ]; }; then
+    echo "AnimeJaNai: installing TensorRT into the shared pack store (one-time)..." >&2
+    if "$HERE/aji-runtime" ensure --app-id mpv-animejanai-appimage --app-path "${APPIMAGE:-$HERE/AppRun}" \
+           --app-version "$ver" --index "$url" --index-sha256 "$sha" --want trt --aji-dir "$INFDATA" >&2; then
+        echo "$ver" > "$stamp"
+        # builder kernels an AppImage from before the store fetched here
+        rm -f "$INFDATA"/libnvinfer_builder_resource_*
+    else
+        echo "AnimeJaNai: the TensorRT install failed; it runs again on the next launch." >&2
     fi
-done
+fi
 
 # RIFE models (interpolation only) - fetched only when the user's config enables
 # a RIFE chain, so pure-upscaling users never download them.
