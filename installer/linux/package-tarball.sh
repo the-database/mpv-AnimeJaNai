@@ -19,7 +19,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 cp -f "$UPDATER" "$TREE/AnimeJaNaiUpdater"
 chmod +x "$TREE/AnimeJaNaiUpdater"
 cp -f "$HERE/install.sh" "$HERE/uninstall.sh" "$TREE/"
-chmod +x "$TREE/install.sh" "$TREE/uninstall.sh" "$TREE/mpv-animejanai" 2>/dev/null || true
+chmod +x "$TREE/install.sh" "$TREE/uninstall.sh" "$TREE/mpv-animejanai" "$TREE/aji-runtime" 2>/dev/null || true
 
 mkdir -p "$OUT"
 name="mpv-upscale-2x_animejanai-v${VER}-linux-x64.tar.zst"

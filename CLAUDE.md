@@ -82,6 +82,29 @@ When adding or changing build/runtime tooling, keep it portable:
   for Linux (`aji.dll`→`libaji.so`, `trtexec.exe`→`trtexec`, `'Segoe UI'`→`'sans-serif'`); add
   to it rather than forking the config files.
 
+## Shared runtime packs (store mode)
+
+The TensorRT runtime and the per-GPU builder packs live in the per-user pack store that the other
+libaji apps share (`%LOCALAPPDATA%\the-database\aji`, `~/.local/share/the-database/aji`; the
+design is `plans/shared-runtime-packs.md` in the-database/animejan.ai). They come from the shared
+runtime release (`RuntimeTag`, animejanai-inference `runtime-<n>`, pinned by its index SHA-256 in
+`manifest.json` `runtime`), installed by `aji-runtime(.exe)` at the install root.
+
+- **Updater:** store mode is on when the manifest pins `runtime`, `aji-runtime` is beside it, and it
+  isn't running in the AppImage. Its `trt-*` packs come from the store (ref `mpv-animejanai`); RIFE
+  stays this release's component pack. Every change is one `aji-runtime ensure`, which writes
+  `animejanai/inference/aji-runtime.json`. An older install's TensorRT files are adopted by SHA-256,
+  then deleted. Pack names and `--components --json` are unchanged.
+- **Readers of `aji-runtime.json`:** libaji loads TensorRT from the store pack by full path and runs
+  that pack's `trtexec` (ignoring the `trtexec=` in `mpv-animejanai.conf`).
+  `animejanai_backend.lua` (`trt_runtime_installed`) and the Manager (`RuntimePacks.TrtInstalled`)
+  check for TensorRT there. Any new "is TensorRT installed" check must read it too: without it,
+  TensorRT looks missing and the DirectML fallback kicks in.
+- **Not in the store:** the AppImage (TensorRT baked in, kernel packs fetched by AppRun; it carries
+  no `aji-runtime`), RIFE (its engines would land in the read-only pack: the video ABI needs an
+  engine cache dir first), and DirectML (in the core). Releases still build every component pack.
+- **Uninstall:** Inno `[UninstallRun]` and `installer/linux/uninstall.sh` run `aji-runtime unref`.
+
 ## Building and releasing
 
 ```powershell
