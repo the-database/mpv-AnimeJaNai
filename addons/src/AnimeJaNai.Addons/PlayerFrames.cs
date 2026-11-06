@@ -167,6 +167,11 @@ public sealed class PlayerFrameRegistry(TimeProvider? timeProvider = null, bool 
             FrameRequest? desired = requests.Length == 0 ? null : requests[0] with {
                 Width = requests.Max(r => r.Width), Height = requests.Max(r => r.Height), MaxFps = requests.Max(r => r.MaxFps) };
             if (desired == channel.Request && channel.Failure is null) continue;
+            if (desired is not null && channel.Failure is null && channel.Samples?.TrySetRate(desired) == true)
+            {
+                channel.Request = desired;
+                continue;
+            }
             channel.Samples?.Dispose(); channel.Samples = null; channel.Request = null;
             try
             {

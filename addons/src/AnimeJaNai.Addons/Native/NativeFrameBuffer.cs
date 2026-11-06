@@ -79,6 +79,25 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
         lock (sync) { Alive(); if (Name is not null) Exchange64(168, Environment.TickCount64 + 3000); }
     }
 
+    private bool TrySetRate(Lease lease, FrameRequest request)
+    {
+        request.Validate();
+        lock (sync)
+        {
+            Alive();
+            Contract.Require(active == lease, "subscription_not_found", "Frame subscription is closed.");
+            if (request.Stage != stage || request.CharacterMask != analysis ||
+                (lease.Config & 0xffffff) != ((long)request.Height << 12 | (uint)request.Width)) return false;
+            Contract.Require(generation < int.MaxValue, "capacity_exceeded", "Reopen the session to renew its sample generation.");
+            // Publish one enabled configuration. Clearing it between leases can
+            // retire the optional native worker during an ordinary rate change.
+            lease.Config = ((long)++generation << 32) | ((long)request.MaxFps << 24) | (lease.Config & 0xffffff);
+            lease.Cached = null;
+            Exchange64(16, lease.Config);
+            return true;
+        }
+    }
+
     public void InvalidateForSeek()
     {
         lock (sync)
@@ -159,7 +178,7 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
             x <= sourceWidth - cropWidth && y <= sourceHeight - cropHeight && I(120) is >= 0 and <= 359 && I(124) >= 0 && I(128) >= 0 && I(152) is 0 or 1,
             "invalid_frame", "Invalid native sample geometry.");
         string primaries = I(112) switch { 1 => "bt.709", 2 => "bt.601-525", 3 => "bt.601-625", _ => throw new AddonException("invalid_frame", "Invalid sample primaries.") };
-        string transfer = I(116) switch { 1 => "bt.1886", 2 => "srgb", 3 => "gamma2.2", 4 => "gamma2.4", _ => throw new AddonException("invalid_frame", "Invalid sample transfer.") };
+        string transfer = I(116) switch { 1 => "bt.1886", 2 => "srgb", 3 => "gamma2.2", 4 => "gamma2.4", 5 => "gamma2.8", _ => throw new AddonException("invalid_frame", "Invalid sample transfer.") };
         long pts = L(64);
         return new(new JsonObject {
             ["frameId"] = id.ToString(System.Globalization.CultureInfo.InvariantCulture), ["epoch"] = L(56).ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -221,12 +240,13 @@ internal sealed unsafe class NativeFrameBuffer : IDisposable
     }
     private sealed class Lease(NativeFrameBuffer owner, long config, bool repeatLatest) : IFrameSubscription
     {
-        internal long Config { get; } = config;
+        internal long Config { get; set; } = config;
         internal ulong LastId;
         internal bool RepeatLatest { get; } = repeatLatest;
         internal FramePacket? Cached;
         public FramePacket? ReadLatest() => owner.Read(this);
         public JsonObject Status() => owner.Status();
+        public bool TrySetRate(FrameRequest request) => owner.TrySetRate(this, request);
         public void Dispose() => owner.Unsubscribe(this);
     }
 

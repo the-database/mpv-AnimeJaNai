@@ -40,10 +40,11 @@ internal static partial class Checks
             using var lease = buffer.Subscribe(new(1, 1, 30), repeatLatest: true);
             buffer.RenewPlayerLease();
             long sequence = 0;
-            void Publish(long id, long epoch, long producer)
+            void Publish(long id, long epoch, long producer, int transfer = 1)
             {
                 view.Write(32, ++sequence); view.Write(24, epoch); view.Write(40, id); view.Write(48, view.ReadInt64(16)); view.Write(56, epoch);
                 foreach (var (offset, value) in new[] { (80, 1), (84, 1), (88, 4), (92, 4), (96, 1), (100, 1), (104, 3), (112, 1), (116, 1), (124, 1), (128, 1), (144, 1), (148, 1) }) view.Write(offset, value);
+                view.Write(116, transfer);
                 view.Write(160, producer); view.Write(176, (producer << 32) | 3); view.WriteArray(256, new byte[] { 20, 40, 60, 255 }, 0, 4); view.Write(32, ++sequence);
             }
             Publish(1, 1, 1);
@@ -55,6 +56,14 @@ internal static partial class Checks
             view.Write(160, 2L); view.Write(24, 3L); view.Write(176, (1L << 32) | 5);
             True(lease.ReadLatest() is null);
             Publish(3, 3, 2); True(lease.ReadLatest() is not null);
+            long config = view.ReadInt64(16), producer = view.ReadInt64(160);
+            True(lease.TrySetRate(new(1, 1, 12)));
+            True(view.ReadInt64(16) != config && (view.ReadInt64(16) & 0xffffff) != 0 &&
+                ((view.ReadInt64(16) >> 24) & 0xff) == 12 && view.ReadInt64(160) == producer);
+            True(lease.ReadLatest() is null); // discard the old-rate publication
+            Publish(4, 3, 2, 5);
+            True(lease.ReadLatest()!.Metadata["color"]!["transfer"]!.GetValue<string>() == "gamma2.8");
+            True(!lease.TrySetRate(new(2, 1, 12))); // geometry changes still need a new producer
         });
     }
     [DllImport("advapi32.dll", EntryPoint = "GetSecurityInfo")] private static extern uint GetPlayerTestSecurityInfo(IntPtr handle, int type, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);

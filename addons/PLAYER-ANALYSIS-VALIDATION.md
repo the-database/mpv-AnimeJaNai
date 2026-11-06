@@ -2,6 +2,27 @@
 
 This is API 1.12 on the 3.9.0 addon integration branch, not a claim that the public 3.9.0 release contains these APIs. The matched preview's `build-info/addon-preview.json` records its exact source commits and evidence. The lighting addon and physical light controllers are separate work.
 
+## November 6 follow-up
+
+The host now accepts native `gamma2.8` color metadata and changes the rate of an
+existing observation channel without briefly publishing a disabled mapping.
+The Lua bridge keeps its existing lease during a transient control-file read
+failure, still retiring invalid or expired control state. Neither change starts
+optional work without a subscriber.
+
+Validation: 186 host checks passed, including atomic rate changes and the new
+transfer tag. `luajit addons/tests/player-bridge.lua` passed from the repository
+root, covering a failed read, recovery, expiry and invalid content. The updated
+native player and compiled lighting addon produced 40 distinct BT.470BG samples
+in each of background-mask and whole-frame mode on RTX 5090; each steady phase
+kept one epoch. Stop followed by loading another file removed all observations.
+The compiled addon also preserved Stop across a Wasm worker restart.
+
+Jeff's two unlogged resets during the hour-long 8K run have not been reproduced.
+The fixes cover demonstrated teardown paths; a new field soak is still needed
+before attributing those resets to either one. Adaptive sampling and controller
+reachability are lighting-addon policies, not new normal-playback work.
+
 ## 3.9.0 integration preview
 
 The integration includes the exact public 3.9.0 main release, Manager 0.10.3 and inference v0.17.1. The Windows player base and optional runtime versions are unchanged from the previous preview, so its already-tested addon mpv build is reused. API 1.12, the SDK and host implementation are unchanged. Manager keeps the 3.9.0 interface and Temporal Fix controls alongside Addons and Troubleshooting. Optional component downloads use the public 3.9.0 component release.
