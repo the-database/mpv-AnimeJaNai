@@ -120,6 +120,14 @@ Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\shell\open"; ValueType: str
 {#Assoc(".mts")}
 {#Assoc(".m2v")}
 
+; First drop this install's ref in the shared pack store (%LOCALAPPDATA%\the-database\aji,
+; shared with other apps): the TensorRT runtime no other installed app uses is
+; removed with it. An install from before the store has no aji-runtime.exe;
+; without it the folder's deletion below leaves a dead ref that the store frees
+; later anyway.
+[UninstallRun]
+Filename: "{app}\aji-runtime.exe"; Parameters: "unref --app-id mpv-animejanai"; Flags: runhidden skipifdoesntexist waituntilterminated; RunOnceId: "mpv-animejanai-unref"
+
 ; Remove the whole per-user app folder on uninstall, including files created at
 ; runtime that the installer never tracked (built engines + timing caches in
 ; animejanai\onnx and animejanai\rife, downloaded component packs, components.json,
