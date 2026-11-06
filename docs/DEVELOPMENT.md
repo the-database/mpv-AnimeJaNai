@@ -88,6 +88,9 @@ These env vars are the actual dev hooks. All are read in
 | `TRT_LINUX_ROOT` | Linux TensorRT source root (e.g. `/usr`). Reads `$root/lib/x86_64-linux-gnu` and `$root/bin/trtexec`. Unset = download the `.deb`s from NVIDIA. |
 | `CUDA_LINUX_LIB` | Source dir for `libcudart.so*`. Unset = download the CUDA redistributable archive. |
 | `ANIMEJANAI_PACKS_DIR` | **Updater**, not the assembler (`AnimeJaNaiUpdater/Program.cs:857`). Point at a local dir holding `packs.json` + the pack archives so `--components` / `--install` / `--recommend` work against **unpublished** packs. Essential while a release is still a draft: the public releases API cannot see draft assets. |
+| `AJI_RUNTIME_LOCAL` | A local `aji-runtime(.exe)` (the shared pack store's tool) instead of the pinned the-database/aji-runtime release. |
+| `ANIMEJANAI_RUNTIME_MIRROR` | **Updater.** A local dir holding the shared runtime release's `packs-<platform>.json` + archives, so store mode installs without the network. |
+| `AJI_RUNTIME_STORE` | **aji-runtime** (the updater runs it). Points the shared pack store at a test folder. Use it for every test run: the real store is shared with the user's other apps. |
 | `ANIMEJANAI_ROOT` | **Benchmark tool** fallback for the install root when `--install-root` is not given. |
 | `AJI_ORT_VERBOSE=1` | Runtime, not build: makes ONNX Runtime log node placement to stderr. Use it to confirm no `Conv`/`PReLU` landed on `CPUExecutionProvider` on the DirectML backend. |
 

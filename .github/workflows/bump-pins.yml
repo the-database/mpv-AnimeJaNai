@@ -16,7 +16,7 @@ on:
       source:
         description: Which upstream to re-pin
         type: choice
-        options: [libaji, mpv-winbuild, mpv-linux, manager]
+        options: [libaji, mpv-winbuild, mpv-linux, manager, runtime-packs, aji-runtime]
       tag:
         description: 'Release tag: v0.22.2 (libaji), 2026-10-24-b4f9f5bfed (mpv-winbuild), 2026-10-24-c493f1c (mpv-linux), 0.10.4 (manager)'
         required: true

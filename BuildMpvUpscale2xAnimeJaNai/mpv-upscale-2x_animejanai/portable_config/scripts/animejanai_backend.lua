@@ -90,6 +90,74 @@ local function exists(rel)
     return false
 end
 
+-- The shared pack store's aji-runtime.json, which the updater has aji-runtime
+-- write beside libaji: the folders libaji loads TensorRT and its builder kernels
+-- from. nil without it (an install from before the store, or the AppImage):
+-- then they are in the inference folder.
+local function runtime_packs()
+    local inf = mp.command_native({'expand-path', '~~/../animejanai/inference'})
+    local f = io.open(utils.join_path(inf, 'aji-runtime.json'), 'rb')
+    if not f then
+        return nil
+    end
+    local text = f:read('*a')
+    f:close()
+    local t = utils.parse_json(text)
+    if type(t) ~= 'table' then
+        return nil
+    end
+    -- relative paths are relative to the file, as libaji reads them
+    local function dir(p)
+        return type(p) == 'string' and p ~= '' and utils.join_path(inf, p) or nil
+    end
+    local builders = {}
+    if type(t.trt_builder) == 'table' then
+        for _, p in ipairs(t.trt_builder) do
+            builders[#builders + 1] = dir(p)
+        end
+    end
+    return { trt = dir(t.trt), trt_builder = builders }
+end
+
+-- Whether the TensorRT runtime is installed: the store's TensorRT pack when
+-- aji-runtime.json names one, else the inference folder's.
+local function trt_runtime_installed()
+    -- the core library's name differs per platform (Windows DLL vs Linux
+    -- versioned .so)
+    local nvinfer = mp.get_property('platform') == 'windows'
+        and 'nvinfer_11.dll' or 'libnvinfer.so.11'
+    local packs = runtime_packs()
+    if packs and packs.trt then
+        return utils.file_info(utils.join_path(packs.trt, nvinfer)) ~= nil
+    end
+    return exists('animejanai/inference/' .. nvinfer)
+end
+
+-- Whether a TensorRT builder (kernel) pack is installed: in the store when
+-- aji-runtime.json names the TensorRT pack, else in the inference folder.
+local function trt_builder_installed()
+    local packs = runtime_packs()
+    if packs and packs.trt then
+        for _, d in ipairs(packs.trt_builder) do
+            if utils.file_info(d) ~= nil then
+                return true
+            end
+        end
+        return false
+    end
+    local inf = mp.command_native({
+        'expand-path', '~~/../animejanai/inference'})
+    local files = utils.readdir(inf, 'files') or {}
+    for _, n in ipairs(files) do
+        -- matches both nvinfer_builder_resource_* (Windows) and
+        -- libnvinfer_builder_resource_* (Linux)
+        if n:match('nvinfer_builder_resource_') then
+            return true
+        end
+    end
+    return false
+end
+
 -- Component-pack sanity: a slim install (or one slimmed with
 -- AnimeJaNaiUpdater --remove) may lack the pieces the conf asks for.
 -- The filter would fail with a loader error; say what to run instead.
@@ -99,30 +167,14 @@ local function check_components(backend, rife_configured, fallback_hint)
         hints[#hints + 1] = fallback_hint
     end
     if backend == 'tensorrt' then
-        -- TensorRT core library name differs per platform (Windows DLL vs
-        -- Linux versioned .so).
-        local nvinfer = mp.get_property('platform') == 'windows'
-            and 'nvinfer_11.dll' or 'libnvinfer.so.11'
-        if not exists('animejanai/inference/' .. nvinfer) then
+        if not trt_runtime_installed() then
             hints[#hints + 1] =
                 'TensorRT runtime not installed - press Ctrl+E to open ' ..
                 'AnimeJaNai Manager'
         else
             -- builder resources are only needed to build new engines; cached
             -- engines still run without them, so this is a soft warning
-            local inf = mp.command_native({
-                'expand-path', '~~/../animejanai/inference'})
-            local files = utils.readdir(inf, 'files') or {}
-            local has_builder = false
-            for _, n in ipairs(files) do
-                -- matches both nvinfer_builder_resource_* (Windows) and
-                -- libnvinfer_builder_resource_* (Linux)
-                if n:match('nvinfer_builder_resource_') then
-                    has_builder = true
-                    break
-                end
-            end
-            if not has_builder then
+            if not trt_builder_installed() then
                 hints[#hints + 1] =
                     'No TensorRT kernel pack for this GPU - new engine builds ' ..
                     'will fail; press Ctrl+E to open AnimeJaNai Manager'
@@ -178,7 +230,7 @@ local function trt_usable()
     if utils.file_info(sysroot .. '\\System32\\nvcuda.dll') == nil then
         return false, 'no NVIDIA GPU driver'
     end
-    if not exists('animejanai/inference/nvinfer_11.dll') then
+    if not trt_runtime_installed() then
         return false, 'TensorRT runtime not installed'
     end
     return true
