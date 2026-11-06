@@ -7,9 +7,13 @@ Sources (constants in BuildMpvUpscale2xAnimeJaNai/Program.cs):
                 MpvForkGitHash read from its archive filenames
   mpv-linux     the-database/mpv Linux bundle release: MpvForkLinuxVersion
   manager       the-database/AnimeJaNaiManager release: ManagerVersion
+  runtime-packs the shared runtime packs, a the-database/animejanai-inference runtime-<n> release:
+                RuntimeTag and the platforms' index SHA-256s (RuntimeIndexSha256Win/Linux)
+  aji-runtime   the-database/aji-runtime release (the pack store's tool): AjiRuntimeVersion,
+                AjiRuntimeSha256Win/Linux
 
-None of these carry a SHA-256 pin; each release is checked for every asset the assembler fetches
-from it. .github/workflows/bump-pins.yml runs this when an upstream release sends a
+The first four carry no SHA-256 pin; each release is checked for every asset the assembler fetches
+from it. runtime-packs and aji-runtime record the SHA-256 of each pinned asset. .github/workflows/bump-pins.yml runs this when an upstream release sends a
 repository_dispatch, then opens a PR; it also runs by hand. --out DIR writes the PR title and
 body. Standard library only. docs/RELEASE.md has the release order.
 """
@@ -256,8 +260,53 @@ def bump_manager(tag, changes, allow_downgrade):
     return [f], f"Bump AnimeJaNai Manager to {tag}", notes
 
 
+SHA = "[0-9a-f]{64}"
+
+
+def bump_runtime(tag, changes, allow_downgrade):
+    if not re.fullmatch(r"runtime-\d+", tag):
+        raise Fail(f"{tag} isn't a runtime-<n> tag")
+    f = File(PROGRAM, changes)
+    guard_downgrade("RuntimeTag", f.get("RuntimeTag", const("RuntimeTag")), tag, allow_downgrade)
+    rel = release("the-database/animejanai-inference", tag)
+    f.set("RuntimeTag", const("RuntimeTag"), tag)
+    for name, pin in (("packs-windows-x64.json", "RuntimeIndexSha256Win"),
+                      ("packs-linux-x64.json", "RuntimeIndexSha256Linux")):
+        sha, _ = digest(asset(rel, name))
+        f.set(pin, const(pin, SHA), sha)
+    notes = (
+        f"Pins the shared runtime packs on [{tag}]({rel['html_url']}) (animejanai-inference "
+        "`runtime-packs.yml`): TensorRT and the per-GPU builder packs, which the updater installs "
+        "into the shared pack store. Each `packs-<platform>.json` is checked against these SHA-256s, "
+        "and it pins every pack. After the update, `--auto` installs the new versions; the old ones "
+        "go once no other app uses them. The component packs this release still builds (the "
+        "AppImage, older updaters) come from `TrtVersion` and friends: bump those to the same "
+        "TensorRT."
+    )
+    return [f], f"Bump the runtime packs to {tag}", notes
+
+
+def bump_aji_runtime(tag, changes, allow_downgrade):
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+        raise Fail(f"{tag} isn't an aji-runtime release tag (vX.Y.Z)")
+    f = File(PROGRAM, changes)
+    guard_downgrade("AjiRuntimeVersion", f.get("AjiRuntimeVersion", const("AjiRuntimeVersion")), tag, allow_downgrade)
+    rel = release("the-database/aji-runtime", tag)
+    f.set("AjiRuntimeVersion", const("AjiRuntimeVersion"), tag)
+    for name, pin in (("aji-runtime-windows-x64.zip", "AjiRuntimeSha256Win"),
+                      ("aji-runtime-linux-x64.tar.gz", "AjiRuntimeSha256Linux")):
+        sha, _ = digest(asset(rel, name))
+        f.set(pin, const(pin, SHA), sha)
+    notes = (
+        f"Pins [aji-runtime {tag}]({rel['html_url']}), the shared pack store's tool that ships beside "
+        "the updater. Check its release notes for changes to the commands the updater runs (`ensure`, "
+        "`show`, `unref`)."
+    )
+    return [f], f"Bump aji-runtime to {tag}", notes
+
+
 SOURCES = {"libaji": bump_libaji, "mpv-winbuild": bump_winbuild, "mpv-linux": bump_mpv_linux,
-           "manager": bump_manager}
+           "manager": bump_manager, "runtime-packs": bump_runtime, "aji-runtime": bump_aji_runtime}
 
 if __name__ == "__main__":
     run(SOURCES, "mpv-AnimeJaNai")
