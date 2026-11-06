@@ -12,6 +12,11 @@
 // On Linux the DirectML/ONNX-Runtime backend and mpv.net are dropped (mpv.net
 // does not run on Linux; DirectML is Windows-only); the player becomes
 // upstream mpv/libmpv driven by portable_config via --config-dir.
+//
+// --store (what releases build): no TensorRT. Installs take the TensorRT runtime and the per-GPU
+// builder packs from the shared pack store (the updater's store mode on Windows and in the tarball,
+// AppRun in the AppImage), so the build neither downloads nor packs them; RIFE stays a component
+// pack. Without --store a local build carries TensorRT in the tree as before.
 using ICSharpCode.SharpZipLib.Core;
 using ICSharpCode.SharpZipLib.Zip;
 using SevenZipExtractor;
@@ -912,14 +917,22 @@ void WriteThirdPartyNotices()
           "        Software License Terms shipped alongside it as\n" +
           "        DirectML_LICENSE.txt (use on Windows and Xbox only).\n"
         : "";
+    // --store: the TensorRT runtime isn't in this folder but in the shared pack store, whose packs
+    // carry NVIDIA's notices.
+    var trtBlock = args.Contains("--store")
+        ? "The NVIDIA TensorRT runtime and CUDA runtime are not in this folder: they are\n" +
+          "        installed into the shared pack store (aji-runtime) from the-database/\n" +
+          "        animejanai-inference runtime packs, and NVIDIA's licence notices and\n" +
+          "        acknowledgements ship in each pack.\n"
+        : $"NVIDIA TensorRT runtime ({trtFiles},\n" +
+          "        redistributed under the NVIDIA TensorRT Software License Agreement\n" +
+          "        and CUDA Toolkit EULA:\n\n" +
+          "            This software contains source code provided by NVIDIA Corporation.\n\n" +
+          $"        {trtSource}\n";
     var notice =
         "Third-party components in this directory\n" +
         "========================================\n\n" +
-        $"NVIDIA TensorRT runtime ({trtFiles},\n" +
-        "        redistributed under the NVIDIA TensorRT Software License Agreement\n" +
-        "        and CUDA Toolkit EULA:\n\n" +
-        "            This software contains source code provided by NVIDIA Corporation.\n\n" +
-        $"        {trtSource}\n" +
+        trtBlock +
         dmlBlock + "\n" +
         $"        {ajiNames}:\n" +
         "        https://github.com/the-database/animejanai-inference\n\n" +
@@ -1160,7 +1173,10 @@ async Task Main()
     }
     Directory.CreateDirectory(installDirectory);
     await InstallSevenZip();
-    await InstallInferenceRuntime();
+    if (!args.Contains("--store"))
+    {
+        await InstallInferenceRuntime();
+    }
     await InstallAji();
     if (plat.HasDirectML)
         await InstallOrtDml();

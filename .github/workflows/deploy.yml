@@ -32,8 +32,9 @@ jobs:
 
     - name: Run the console app
       # --packs also emits component-*.7z + packs.json (publish/packs-v<ver>/) for the
-      # AnimeJaNai Manager (updater --components/--install/--remove/--auto).
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe ${{ github.event.inputs.release_version }} --packs
+      # AnimeJaNai Manager (updater --components/--install/--remove/--auto). --store: no
+      # TensorRT; installs take it from the shared pack store, so only RIFE is a pack.
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai.exe ${{ github.event.inputs.release_version }} --packs --store
 
     - name: Build updater and add it to the package
       shell: pwsh
@@ -136,8 +137,9 @@ jobs:
       # sibling repos' releases, and the TensorRT .debs from NVIDIA's CUDA repo
       # (TrtVersion in Program.cs) - the image's own TensorRT is only there for
       # the sibling repos' compiles, so assembly is independent of it.
-      # --packs emits component-*.7z + packs.json and slims the core tree.
-      run: ./publish/BuildMpvUpscale2xAnimeJaNai "$VER" --target linux-x64 --packs
+      # --packs emits component-*.7z + packs.json and slims the core tree; --store leaves
+      # TensorRT to the shared pack store.
+      run: ./publish/BuildMpvUpscale2xAnimeJaNai "$VER" --target linux-x64 --packs --store
 
     - name: Build updater (linux-x64, single file)
       run: |
@@ -175,7 +177,6 @@ jobs:
         cp -a "publish/mpv-upscale-2x_animejanai-v$VER/." "$full/"
         cp -f updater-publish/AnimeJaNaiUpdater "$full/AnimeJaNaiUpdater"
         chmod +x "$full/AnimeJaNaiUpdater"
-        7zz x -snl -y -o"$full" "publish/packs-v$VER/component-trt-runtime-linux-x64.7z"
         installer/linux/build-appimage.sh "$full" "$VER" .
 
     - name: Overlay archive + RID-suffixed manifest
