@@ -1,8 +1,8 @@
 # AnimeJaNai Addon Developer Guide
 
-**Development preview:** API 1.12 adds optional source observations and matched GPU character masks. It includes streaming readiness and RIFE scene detection from earlier versions. Use the matching build report for hardware qualification; Appendix F contains the complete lighting observation contract and example.
+**Development preview:** API 1.12 adds optional source observations and matched GPU character masks. It includes streaming readiness and RIFE scene detection from earlier versions. Use the matching build report for hardware qualification; Appendix G contains the complete lighting observation contract and example.
 
-**Edition:** 2026-10-29 · **Addon API:** 1.12 preview · **Platform:** Windows x64
+**Edition:** 2026-11-09 · **Addon API:** 1.12 preview · **Platform:** Windows x64
 
 Create, build, install, test and distribute an AnimeJaNai (AJN) addon using this
 document and the matching release tools. No previous conversation, maintainer
@@ -53,6 +53,9 @@ A. [Complete JavaScript editor declarations](#sdk)
 B. [Complete feature examples](#examples)
 C. [Release compatibility and documentation provenance](#provenance)
 D. [Custom RIFE scene detection and complete example](#scene-detection)
+E. [Native streaming readiness and preparation](#native-streaming-readiness)
+F. [Streaming preview validation](#streaming-validation)
+G. [Source observations and character masks](#player-analysis)
 
 
 <a id="overview"></a>
@@ -3911,6 +3914,8 @@ function onEvent(event, ajn) {
 ```
 
 
+<a id="native-streaming-readiness"></a>
+
 ## Appendix E - Native streaming readiness and preparation
 
 
@@ -4109,6 +4114,8 @@ longer playback, seeks, stalls, client decoding and sustained speed on the targe
 hardware before advertising a finished Plex integration.
 
 
+<a id="streaming-validation"></a>
+
 ## Appendix F - Streaming preview validation
 
 
@@ -4213,7 +4220,9 @@ The optional test environment variable `AJN_STREAM_TEST_BACKEND` selects
 restores a model for its negative test, so use an isolated test installation.
 
 
-## Appendix F. Source observations and character masks
+<a id="player-analysis"></a>
+
+## Appendix G. Source observations and character masks
 
 This optional Windows capability observes the video already playing in AJN. It opens no second decoder and does not need upscaling or RIFE enabled. The addon chooses when to subscribe, its sample dimensions and analysis rate. No observation filter, GPU model, download or analysis work is started without that request. The optional `aji_analysis.dll` is not imported by the normal inference backend.
 
@@ -4264,6 +4273,8 @@ The native worker takes a source CUDA image before user upscaling/interpolation,
 One seqlock publication contains the color and mask for one source frame, `frameId`, `epoch`, player/subscription identities, `ptsSeconds`, `producerTimeMs`, geometry, crop, pixel aspect ratio, rotation and vertical flip. Source geometry/transforms remain metadata; the samples are not final screen capture. Seeking/rebuilding the filter invalidates the old epoch. Slow readers get the newest completed pair, never a mask borrowed from a different frame. RIFE-generated output frames do not require separate segmentation.
 
 Color is full-range encoded RGB with declared source SDR transfer and primaries. BGRA8 does **not** imply sRGB. Apply the reported transfer/primaries when computing linear-light or OKLab values. The native worker does not apply display tone mapping or claim projector color matching. Media PTS and producer timing are processing observations, not measured display timestamps. `analysis.gpuTimeMs` measures the optional GPU work and readback; `sampleAgeMs` measures time from submission to publication, not display latency.
+
+The requested sample rate is a ceiling, not a throughput guarantee. Analysis drops do not mean the player dropped video frames. An addon can reduce its requested rate when sustained sample age and producer drops show that its optional workload is overloaded. Subscribe to the replacement at the same stage/dimensions before releasing the old subscription. The native channel updates a rate-only change atomically, keeping its worker alive; other subscribers retain their own limits. No adaptation runs in normal playback without an addon requesting it.
 
 Character masks currently require progressive, mono, SDR CUDA frames and the matching NVIDIA/TensorRT component. D3D11 color sampling remains supported; D3D11 character segmentation, software source frames, HDR, stereoscopic and interlaced analysis are unsupported and reported explicitly. No lights, device discovery, arbitrary DLL/model loading, image estimator or smoothing policy are built into this capability.
 
