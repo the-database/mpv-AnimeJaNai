@@ -184,7 +184,7 @@ internal sealed class NativeSessionProvider : IProcessingSessionProvider
             var profile = selected?.Profile ?? host.selections.ResolveProfile(package, grant, profileId);
             Contract.Require(stream is null || host.streamingAvailable, "native_update_required", "Install the matching native streaming runtime before opening, checking or preparing streams.");
             if (profile.Backend == "TensorRT")
-                Contract.Require(new[] { "nvinfer_11.dll", "trtexec.exe", "aji_trt.dll" }.All(name => File.Exists(Path.Combine(host.root, "animejanai", "inference", name))),
+                Contract.Require(NativeRuntimePacks.TensorRtInstalled(Path.Combine(host.root, "animejanai", "inference")),
                     "runtime_missing", "The selected TensorRT runtime is not installed. Install it through AJN Manager.");
             lock (host.gate)
             {
