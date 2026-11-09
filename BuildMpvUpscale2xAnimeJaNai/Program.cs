@@ -89,7 +89,7 @@ const string AjiRuntimeRepo       = "the-database/aji-runtime";
 const string AjiRuntimeVersion    = "v0.2.0";
 const string AjiRuntimeSha256Win   = "dc789dd4febdd4ddbb8f4763667c7fb1a1a87459585b9c845862ecca7243683d";
 const string AjiRuntimeSha256Linux = "4be991f04ebc12ad8f73acccec251538ef6f4cac740313362dafbb844dd79f20";
-const string AjiVersion           = "v0.24.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json)
+const string AjiVersion           = "v0.25.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json)
 
 // 7-Zip "extra" (Windows) / linux-x64 standalone console, from the
 // github.com/ip7z/7zip release (7-zip.org no longer hosts every version).
