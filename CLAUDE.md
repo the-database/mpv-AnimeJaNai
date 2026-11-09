@@ -148,7 +148,8 @@ All three csproj target **net10.0**, and `.github/workflows/deploy.yml` pins
 `dotnet-version: '10.x'` in both legs — keep them in sync after a TFM bump. There is no
 `global.json`.
 
-There is no test suite and no linter configured.
+There is no test suite and no linter configured, except `dotnet run --project tests/UpdaterGpu`
+(the updater's TensorRT GPU rules, `AnimeJaNaiUpdater/GpuSupport.cs`).
 
 See `docs/DEVELOPMENT.md` for the full assembler CLI (`--target`, `--packs`, `--packs-only`)
 and the local-component override env vars, and `docs/RELEASE.md` for the release runbook.
@@ -206,8 +207,16 @@ filter calling the `aji` engine. The chain when a user plays a video:
    forced). `scripts/animejanai_backend.lua` aligns mpv's `hwdec` + render API to the configured
    backend on startup. (`ncnn` is retired and treated as DirectML by the shim.)
    On Windows it also rewrites a `TensorRT` conf to `backend=DirectML` + `backend_auto_fallback=yes`
-   when TensorRT can't run (no `nvcuda.dll` in System32, or no `nvinfer_11.dll`), the same keys the
-   Manager writes, so the Manager switches back once TensorRT is usable.
+   when TensorRT can't run (no `nvcuda.dll` in System32, only NVIDIA GPUs too old for TensorRT, or
+   no `nvinfer_11.dll`), the same keys the Manager writes, so the Manager switches back once
+   TensorRT is usable. **TensorRT needs compute capability 7.5+** (GeForce RTX 20 / GTX 16 series
+   and newer; the shipped TensorRT 11 on CUDA 13 and aji's kernels start at sm75, and `trt-ptx`
+   can't JIT backwards): the script asks `nvidia-smi --query-gpu=uuid,compute_cap,name` (only while
+   the backend is TensorRT) and treats a PC with only older NVIDIA GPUs like one without an NVIDIA
+   GPU. On Linux, where there is nothing to fall back to, it takes the filter out with an OSD
+   message. Next to a newer GPU, TensorRT is pointed at the newer one (`vulkan-device`). The same
+   threshold is `TRT_MIN_COMPUTE` there, `GpuSupport.TrtMinComputeCapability` in the updater and
+   `trt_min_compute` in `installer/linux/AppRun`; keep them together.
    **GPU choice:** the Manager writes `[global] gpu_tensorrt=<Vulkan device UUID>` and
    `gpu_directml=pci:<bus>:<device>.<function>` (the adapter's PCI slot, which needs the fork's
    `--d3d11-adapter=pci:...`; an adapter name when Windows reports no slot) (absent = Auto); the script sets `vulkan-device` (CUDA

@@ -80,7 +80,7 @@ string inferenceDir = Path.Combine(installDir, "animejanai", "inference");
 
 // NVML ships in the NVIDIA driver as nvml.dll on Windows and libnvidia-ml.so.1
 // on Linux; remap the DllImport library name on non-Windows so GPU detection
-// (DetectGpu) works cross-platform without per-OS P/Invoke declarations.
+// (ListNvidiaGpus) works cross-platform without per-OS P/Invoke declarations.
 if (!OperatingSystem.IsWindows())
 {
     NativeLibrary.SetDllImportResolver(typeof(Nvml).Assembly, (name, asm, search) =>
@@ -1118,59 +1118,14 @@ string? PackVersionMismatch(PackIndex index)
 // NVIDIA detection via NVML (ships with the driver); its absence means a
 // non-NVIDIA GPU, which is exactly the DirectML recommendation.
 //
-// Every NVIDIA GPU is reported (Sm "sm89, sm120", names joined with " + "):
-// NVML enumerates in PCI order while CUDA picks the fastest GPU first, and aji
-// builds engines on the GPU mpv renders on, so recommending only NVML's
-// device 0 could leave the building GPU without its builder kernels.
-static (bool HasNvidia, string Sm, string GpuName) DetectGpu()
+// Every NVIDIA GPU NVML sees, in its order, with its compute capability and device UUID (NVML's
+// without its "GPU-" prefix, lowercased: the CUDA/Vulkan device UUID mpv's --vulkan-device takes).
+// Empty without an NVIDIA driver. NVML enumerates in PCI order while CUDA picks the fastest GPU
+// first, and aji builds engines on the GPU mpv renders on, so the recommendations cover every GPU
+// TensorRT can use (GpuSupport.Summary), not just NVML's device 0.
+static List<NvidiaGpu> ListNvidiaGpus()
 {
-    try
-    {
-        if (Nvml.nvmlInit_v2() != 0)
-        {
-            return (false, "", "");
-        }
-        try
-        {
-            if (Nvml.nvmlDeviceGetCount_v2(out uint count) != 0 || count == 0)
-            {
-                return (false, "", "");
-            }
-            var sms = new List<string>();
-            var names = new List<string>();
-            for (uint i = 0; i < count; i++)
-            {
-                if (Nvml.nvmlDeviceGetHandleByIndex_v2(i, out var dev) != 0)
-                {
-                    continue;
-                }
-                Nvml.nvmlDeviceGetCudaComputeCapability(dev, out int major, out int minor);
-                var name = new byte[96];
-                Nvml.nvmlDeviceGetName(dev, name, (uint)name.Length);
-                names.Add(System.Text.Encoding.ASCII.GetString(name).TrimEnd('\0'));
-                var sm = $"sm{major}{minor}";
-                if (!sms.Contains(sm))
-                {
-                    sms.Add(sm);
-                }
-            }
-            return sms.Count == 0
-                ? (false, "", "")
-                : (true, string.Join(", ", sms), string.Join(" + ", names));
-        }
-        finally { Nvml.nvmlShutdown(); }
-    }
-    catch
-    {
-        return (false, "", "");
-    }
-}
-
-// Every NVIDIA GPU NVML sees, in its order, with the device UUID. Empty without
-// an NVIDIA driver.
-static List<(string Name, string Uuid)> ListNvidiaGpus()
-{
-    var gpus = new List<(string, string)>();
+    var gpus = new List<NvidiaGpu>();
     try
     {
         if (Nvml.nvmlInit_v2() != 0)
@@ -1189,19 +1144,18 @@ static List<(string Name, string Uuid)> ListNvidiaGpus()
                 {
                     continue;
                 }
+                bool known = Nvml.nvmlDeviceGetCudaComputeCapability(dev, out int major, out int minor) == 0;
                 var name = new byte[96];
+                Nvml.nvmlDeviceGetName(dev, name, (uint)name.Length);
                 var uuid = new byte[96];
-                if (Nvml.nvmlDeviceGetName(dev, name, (uint)name.Length) != 0 ||
-                    Nvml.nvmlDeviceGetUUID(dev, uuid, (uint)uuid.Length) != 0)
-                {
-                    continue;
-                }
-                var u = System.Text.Encoding.ASCII.GetString(uuid).TrimEnd('\0');
+                var u = Nvml.nvmlDeviceGetUUID(dev, uuid, (uint)uuid.Length) == 0
+                    ? System.Text.Encoding.ASCII.GetString(uuid).TrimEnd('\0') : "";
                 if (u.StartsWith("GPU-", StringComparison.OrdinalIgnoreCase))
                 {
                     u = u[4..];
                 }
-                gpus.Add((System.Text.Encoding.ASCII.GetString(name).TrimEnd('\0'), u.ToLowerInvariant()));
+                gpus.Add(new NvidiaGpu(System.Text.Encoding.ASCII.GetString(name).TrimEnd('\0'),
+                    known ? major : 0, known ? minor : 0, u.ToLowerInvariant(), known));
             }
         }
         finally { Nvml.nvmlShutdown(); }
@@ -1216,25 +1170,8 @@ static List<(string Name, string Uuid)> ListNvidiaGpus()
 // it is preselected on installs that have never managed components (fresh or
 // legacy-full), and once the user has made any component decision their
 // choice stands - no nagging after a deliberate removal.
-List<string> RecommendedPacks(PackIndex index, bool hasNvidia, string sm)
-{
-    var rec = new List<string>();
-    if (hasNvidia)
-    {
-        rec.Add("trt-runtime");
-        // per GPU generation: the exact pack if published, else the PTX
-        // fallback pack (JIT-compiles for newer GPUs than this TensorRT knows)
-        foreach (var s in sm.Split(", ", StringSplitOptions.RemoveEmptyEntries))
-        {
-            var pack = index.Packs.Any(p => p.Name == $"trt-{s}") ? $"trt-{s}" : "trt-ptx";
-            if (!rec.Contains(pack))
-            {
-                rec.Add(pack);
-            }
-        }
-    }
-    return rec;
-}
+List<string> RecommendedPacks(PackIndex index, List<NvidiaGpu> gpus) =>
+    GpuSupport.RecommendedPacks(index.Packs.Select(p => p.Name), gpus);
 
 bool ComponentsNeverManaged() => !File.Exists(Path.Combine(installDir, "components.json"));
 
@@ -1246,20 +1183,27 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
 {
     var index = prefetched ?? await GetPackIndexAsync();
     var installed = ReadInstalledComponents(index);
-    var (hasNvidia, sm, gpu) = DetectGpu();
-    var rec = RecommendedPacks(index, hasNvidia, sm);
+    var gpus = ListNvidiaGpus();
+    var (hasNvidia, sm, gpu) = GpuSupport.Summary(gpus);
+    var tooOld = GpuSupport.TooOld(gpus);
+    var rec = RecommendedPacks(index, gpus);
     if (json)
     {
-        // consumed by the AnimeJaNai Manager GUI; keep keys stable
+        // consumed by the AnimeJaNai Manager GUI; keep keys stable. gpu.nvidia, gpu.sm and gpus
+        // cover only the NVIDIA GPUs TensorRT can use: a GPU too old for it (GpuSupport) is in
+        // unsupported_gpus instead, so a Manager from before that key treats a PC with only such
+        // GPUs as one without an NVIDIA GPU (DirectML).
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             package_version = index.PackageVersion,
             version_mismatch = PackVersionMismatch(index),
             gpu = new { nvidia = hasNvidia, sm, name = gpu },
-            // each NVIDIA GPU, for the Manager's TensorRT GPU choice; the uuid is the
-            // CUDA/Vulkan device UUID (NVML's without its "GPU-" prefix), which mpv's
+            // each NVIDIA GPU TensorRT can use, for the Manager's TensorRT GPU choice; the uuid is
+            // the CUDA/Vulkan device UUID (NVML's without its "GPU-" prefix), which mpv's
             // --vulkan-device takes and CUDA decoding follows
-            gpus = ListNvidiaGpus().Select(g => new { name = g.Name, uuid = g.Uuid }),
+            gpus = GpuSupport.Capable(gpus).Where(g => g.Uuid.Length > 0).Select(g => new { name = g.Name, uuid = g.Uuid }),
+            // NVIDIA GPUs too old for TensorRT (compute capability below 7.5), which run on DirectML
+            unsupported_gpus = tooOld.Select(g => new { name = g.Name, uuid = g.Uuid, compute = g.Compute }),
             packs = index.Packs.Select(p => new
             {
                 name = p.Name,
@@ -1278,7 +1222,15 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
     }
     Console.WriteLine(hasNvidia
         ? $"GPU: {gpu} ({sm}) - TensorRT recommended"
-        : "GPU: no NVIDIA device detected - DirectML (in the core install) covers AMD/Intel");
+        : tooOld.Count > 0
+            ? $"GPU: {GpuSupport.Describe(tooOld)} - " + (OperatingSystem.IsWindows()
+                ? "too old for TensorRT; the DirectML engine (in the core install) runs on it"
+                : "too old for TensorRT, which needs a GeForce RTX 20 / GTX 16 series or newer GPU; upscaling on Linux needs TensorRT")
+            : "GPU: no NVIDIA device detected - DirectML (in the core install) covers AMD/Intel");
+    if (hasNvidia && tooOld.Count > 0)
+    {
+        Console.WriteLine($"     {GpuSupport.Describe(tooOld)}: too old for TensorRT (compute capability 7.5+ needed), ignored");
+    }
     Console.WriteLine($"Recommended packs: {string.Join(", ", rec)}");
     Console.WriteLine();
     foreach (var pack in index.Packs)
@@ -1304,6 +1256,12 @@ async Task<int> InstallComponentAsync(string name)
     {
         Console.WriteLine($"Unknown pack '{name}'. Available: {string.Join(", ", index.Packs.Select(p => p.Name))}");
         return 2;
+    }
+    if (pack.Name.StartsWith("trt-", StringComparison.Ordinal) && ListNvidiaGpus() is { Count: > 0 } nv &&
+        GpuSupport.Capable(nv).Count == 0)
+    {
+        // installed as asked (it may be for another PC), but it won't run here
+        Console.WriteLine($"Note: {GpuSupport.TooOldMessage(GpuSupport.TooOld(nv))}, so {pack.Name} won't be used on this PC.");
     }
     if (pack.Store)
     {
@@ -1446,8 +1404,9 @@ int RemoveComponent(string name)
 async Task<int> AutoComponentsAsync()
 {
     var index = await GetPackIndexAsync();
-    var (hasNvidia, sm, gpu) = DetectGpu();
-    var rec = RecommendedPacks(index, hasNvidia, sm);
+    var gpus = ListNvidiaGpus();
+    var (hasNvidia, _, gpu) = GpuSupport.Summary(gpus);
+    var rec = RecommendedPacks(index, gpus);
     if (storeMode)
     {
         return await AutoStoreAsync(index, rec, hasNvidia, gpu);
@@ -1489,15 +1448,19 @@ async Task<int> AutoComponentsAsync()
 // falls back to a generic TensorRT toggle.
 async Task<int> RecommendAsync()
 {
-    var (hasNvidia, sm, gpu) = DetectGpu();
+    var gpus = ListNvidiaGpus();
+    var (hasNvidia, _, gpu) = GpuSupport.Summary(gpus);
+    // NVIDIA=1 only for a GPU TensorRT can use; NVIDIA_TOO_OLD names the NVIDIA GPUs too old for it
+    // (the installer says why TensorRT is off)
     Console.WriteLine($"NVIDIA={(hasNvidia ? 1 : 0)}");
     Console.WriteLine($"GPU={gpu}");
+    Console.WriteLine($"NVIDIA_TOO_OLD={GpuSupport.Describe(GpuSupport.TooOld(gpus))}");
     string trtPacks = "";
     string rife = "rife";
     try
     {
         var index = await GetPackIndexAsync();
-        trtPacks = string.Join(",", RecommendedPacks(index, hasNvidia, sm));
+        trtPacks = string.Join(",", RecommendedPacks(index, gpus));
         if (!index.Packs.Any(p => p.Name == "rife"))
         {
             rife = "";

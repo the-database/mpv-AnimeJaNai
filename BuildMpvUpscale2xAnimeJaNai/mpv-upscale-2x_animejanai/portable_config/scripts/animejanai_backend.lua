@@ -274,12 +274,123 @@ local function check_components(backend, rife_configured, fallback_hint)
     end)
 end
 
+-- TensorRT needs an NVIDIA GPU with compute capability 7.5+ (GeForce RTX 20 /
+-- GTX 16 series and newer): the shipped TensorRT 11 on CUDA 13 supports nothing
+-- older, and aji's CUDA kernels start at sm75. The trt-ptx pack can't help an
+-- older GPU (PTX only JIT-compiles forward), so such a GPU counts as no NVIDIA
+-- GPU for TensorRT: DirectML on Windows. The updater (GpuSupport.cs,
+-- TrtMinComputeCapability) and installer/linux/AppRun apply the same rule.
+local TRT_MIN_COMPUTE = { 7, 5 }
+
+local function trt_capable(g)
+    return g.major > TRT_MIN_COMPUTE[1] or
+        (g.major == TRT_MIN_COMPUTE[1] and g.minor >= TRT_MIN_COMPUTE[2])
+end
+
+-- Parses `nvidia-smi --query-gpu=uuid,compute_cap,name --format=csv,noheader`:
+-- { {uuid, name, major, minor}, ... }, the uuid as the Manager writes
+-- gpu_tensorrt (no "GPU-" prefix, lowercase). nil when a line can't be read
+-- (a driver too old to report compute_cap): then nothing is decided from it.
+local function parse_nvidia_gpus(text)
+    local list = {}
+    for line in (text or ''):gmatch('[^\r\n]+') do
+        if line:match('%S') then
+            local uuid, major, minor, name =
+                line:match('^%s*([^,]-)%s*,%s*(%d+)%.(%d+)%s*,%s*(.-)%s*$')
+            if not uuid then
+                return nil
+            end
+            list[#list + 1] = {
+                uuid = uuid:gsub('^[Gg][Pp][Uu]%-', ''):lower(),
+                name = name,
+                major = tonumber(major),
+                minor = tonumber(minor),
+            }
+        end
+    end
+    return #list > 0 and list or nil
+end
+
+-- This PC's NVIDIA GPUs (parse_nvidia_gpus), from nvidia-smi, which the driver
+-- installs; nil without it. Asked once, only while the backend is TensorRT.
+-- ANIMEJANAI_NVIDIA_GPUS stands in for nvidia-smi's output (testing).
+local nvidia_gpus_checked, nvidia_gpus_list
+local function nvidia_gpus()
+    if nvidia_gpus_checked then
+        return nvidia_gpus_list
+    end
+    nvidia_gpus_checked = true
+    local fake = os.getenv('ANIMEJANAI_NVIDIA_GPUS')
+    if fake then
+        nvidia_gpus_list = parse_nvidia_gpus(fake:gsub(';', '\n'))
+        return nvidia_gpus_list
+    end
+    local exe = 'nvidia-smi'
+    if mp.get_property('platform') == 'windows' then
+        local sysroot = os.getenv('SystemRoot') or 'C:\\Windows'
+        exe = sysroot .. '\\System32\\nvidia-smi.exe'
+        if utils.file_info(exe) == nil then
+            -- drivers before the DCH layout
+            local pf = os.getenv('ProgramFiles') or 'C:\\Program Files'
+            exe = pf .. '\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe'
+            if utils.file_info(exe) == nil then
+                return nil
+            end
+        end
+    end
+    local r = mp.command_native({
+        name = 'subprocess',
+        args = {exe, '--query-gpu=uuid,compute_cap,name', '--format=csv,noheader'},
+        capture_stdout = true,
+        capture_stderr = true,
+        playback_only = false,
+    })
+    if r and r.status == 0 then
+        nvidia_gpus_list = parse_nvidia_gpus(r.stdout)
+    end
+    return nvidia_gpus_list
+end
+
+-- The NVIDIA GPUs TensorRT can use and the ones too old for it, or nil when
+-- that isn't known.
+local function trt_gpus()
+    local all = nvidia_gpus()
+    if not all then
+        return nil
+    end
+    local ok, old = {}, {}
+    for _, g in ipairs(all) do
+        if trt_capable(g) then
+            ok[#ok + 1] = g
+        else
+            old[#old + 1] = g
+        end
+    end
+    return ok, old
+end
+
+local function too_old_message(old)
+    local names = {}
+    for _, g in ipairs(old) do
+        names[#names + 1] = string.format('%s is compute %d.%d', g.name, g.major, g.minor)
+    end
+    return string.format('TensorRT needs an NVIDIA GeForce RTX 20 / GTX 16 series ' ..
+        'or newer GPU (compute capability %d.%d+); %s',
+        TRT_MIN_COMPUTE[1], TRT_MIN_COMPUTE[2], table.concat(names, ', '))
+end
+
 -- Whether TensorRT can run on this Windows PC: it needs NVIDIA's driver
--- (nvcuda.dll is installed with it) and the TensorRT runtime component.
+-- (nvcuda.dll is installed with it), an NVIDIA GPU new enough for it, and the
+-- TensorRT runtime component. The second value says why not; the third is the
+-- GPUs too old for TensorRT when that is the reason.
 local function trt_usable()
     local sysroot = os.getenv('SystemRoot') or 'C:\\Windows'
     if utils.file_info(sysroot .. '\\System32\\nvcuda.dll') == nil then
         return false, 'no NVIDIA GPU driver'
+    end
+    local ok, old = trt_gpus()
+    if ok and #ok == 0 and #old > 0 then
+        return false, 'NVIDIA GPU too old for TensorRT', old
     end
     if not trt_runtime_installed() then
         return false, 'TensorRT runtime not installed'
@@ -362,8 +473,12 @@ local backend = (backend_raw or 'TensorRT'):lower()
 -- users got no upscaling until they opened it. Make that switch here, at
 -- startup, before the filter reads the conf.
 local fallback_hint
+-- A GPU too old for TensorRT where nothing else can upscale (Linux has no
+-- DirectML, or the conf couldn't be switched): the filter is taken out at
+-- startup with this message, rather than failing at the engine build.
+local trt_unavailable
 if backend == 'tensorrt' and mp.get_property('platform') == 'windows' then
-    local ok, why = trt_usable()
+    local ok, why, old = trt_usable()
     -- TensorRT on a drive that isn't connected is still installed: no switch
     -- (check_components says what to do)
     local away = why == 'TensorRT runtime not installed' and trt_store_missing()
@@ -374,8 +489,24 @@ if backend == 'tensorrt' and mp.get_property('platform') == 'windows' then
             -- an NVIDIA GPU: TensorRT is faster, so say how to get it
             fallback_hint = 'Using DirectML: the TensorRT runtime is not installed - ' ..
                 'press Ctrl+E to open AnimeJaNai Manager'
+        elseif old then
+            fallback_hint = 'Using DirectML: ' .. too_old_message(old)
         end
+    elseif old then
+        trt_unavailable = too_old_message(old) .. '. Select DirectML in AnimeJaNai Manager (Ctrl+E)'
     end
+elseif backend == 'tensorrt' then
+    -- Linux: TensorRT is the only backend, so a GPU too old for it can't upscale
+    local ok, old = trt_gpus()
+    if ok and #ok == 0 and #old > 0 then
+        trt_unavailable = too_old_message(old) .. ', the only upscaling engine on Linux'
+    end
+end
+if trt_unavailable then
+    msg.error(trt_unavailable)
+    mp.commandv('vf', 'remove', '@aji')
+    -- shown by check_components, without its TensorRT install hints
+    fallback_hint = 'Upscaling is off: ' .. trt_unavailable
 end
 
 local hwdec = 'nvdec'
@@ -408,8 +539,26 @@ local function apply_gpu(opt, value)
     end
 end
 if hwdec == 'nvdec' then
-    if gpu_choice.tensorrt and unset('vulkan-device') then
+    -- Next to a GPU too old for TensorRT, TensorRT runs on one it supports: the
+    -- chosen GPU unless it is the old one (a choice from before the Manager left
+    -- such GPUs out), else the first. Without an old GPU, Auto stays mpv's pick.
+    local ok, old = trt_gpus()
+    local choice = gpu_choice.tensorrt and gpu_choice.tensorrt:lower()
+    local new_enough = ok and #ok > 0 and #old > 0 and ok[1]
+    if new_enough and choice then
+        for _, g in ipairs(old) do
+            if g.uuid == choice then
+                -- check_components logs it and shows it on the OSD
+                fallback_hint = too_old_message({g}) .. '; upscaling on ' .. new_enough.name .. ' instead'
+                choice = nil
+                break
+            end
+        end
+    end
+    if choice and unset('vulkan-device') then
         apply_gpu('vulkan-device', gpu_choice.tensorrt)
+    elseif new_enough and unset('vulkan-device') then
+        apply_gpu('vulkan-device', new_enough.uuid)
     end
 elseif unset('d3d11-adapter') then
     if gpu_choice.directml then
@@ -521,4 +670,4 @@ mp.register_event('file-loaded', function()
     end
 end)
 
-check_components(backend, rife_configured, fallback_hint)
+check_components(trt_unavailable and 'none' or backend, rife_configured, fallback_hint)
