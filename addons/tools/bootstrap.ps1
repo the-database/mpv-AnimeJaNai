@@ -11,7 +11,9 @@ $downloads = Join-Path $toolsRoot 'downloads'
 function Get-VerifiedArchive([string]$Name, [string]$Url, [string]$Sha256) {
     $target = Join-Path $downloads $Name
     if (-not (Test-Path -LiteralPath $target)) {
-        Invoke-WebRequest -Uri $Url -OutFile $target
+        # GitHub release downloads intermittently return 504 to CI runners; the hash check below
+        # still rejects anything wrong.
+        Invoke-WebRequest -Uri $Url -OutFile $target -MaximumRetryCount 6 -RetryIntervalSec 20
     }
     $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $Sha256) { throw "Checksum mismatch for $Name. Remove this download and retry." }
