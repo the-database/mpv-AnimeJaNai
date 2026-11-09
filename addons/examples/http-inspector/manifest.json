@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "org.animejanai.http-inspector",
+  "name": "Local HTTP listener example",
+  "version": "0.1.0",
+  "api": { "major": 1, "minMinor": 7 },
+  "permissions": ["network.listen"],
+  "requiredCapabilities": { "httpServer": { "major": 1, "minMinor": 0 } },
+  "activation": ["manual"],
+  "actions": {
+    "open": { "label": "Open approved listener" },
+    "status": { "label": "Show listener status" },
+    "close": { "label": "Close listener" }
+  }
+}
