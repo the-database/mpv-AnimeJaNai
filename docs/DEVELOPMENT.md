@@ -92,6 +92,7 @@ These env vars are the actual dev hooks. All are read in
 | `ANIMEJANAI_RUNTIME_MIRROR` | **Updater.** A local dir holding the shared runtime release's `packs-<platform>.json` + archives, so store mode installs without the network. |
 | `AJI_RUNTIME_STORE` | **aji-runtime** (the updater runs it). Points the shared pack store at a test folder. Use it for every test run: the real store is shared with the user's other apps. |
 | `ANIMEJANAI_ROOT` | **Benchmark tool** fallback for the install root when `--install-root` is not given. |
+| `ANIMEJANAI_NVIDIA_GPUS` | **`animejanai_backend.lua`** (testing). Stands in for `nvidia-smi --query-gpu=uuid,compute_cap,name --format=csv,noheader`, lines separated by `;`, e.g. `GPU-1234, 6.1, NVIDIA GeForce GTX 1080`, to try the pre-Turing rules without such a GPU. |
 | `AJI_ORT_VERBOSE=1` | Runtime, not build: makes ONNX Runtime log node placement to stderr. Use it to confirm no `Conv`/`PReLU` landed on `CPUExecutionProvider` on the DirectML backend. |
 
 ## The other three projects
@@ -111,7 +112,14 @@ AnimeJaNaiUpdater.exe [--check|--apply|--components|--install <pack>|--remove <p
 `--check` prints `UPDATE_AVAILABLE <ver>` or `UP_TO_DATE <ver>` (consumed by
 `scripts/animejanai_update.lua`). `--components` also accepts `--json`. `--recommend` is what
 the Inno Setup wizard shells out to for the GPU-aware component picker, parsing `NVIDIA=`,
-`GPU=`, `TRT_PACKS=`, `RIFE=` lines back out of stdout.
+`GPU=`, `NVIDIA_TOO_OLD=`, `TRT_PACKS=`, `RIFE=` lines back out of stdout.
+
+TensorRT needs compute capability 7.5+ (GeForce RTX 20 / GTX 16 series and newer;
+`GpuSupport.TrtMinComputeCapability` in `AnimeJaNaiUpdater/GpuSupport.cs`). An older NVIDIA GPU
+counts as no NVIDIA GPU: `NVIDIA=0`, `gpu.nvidia` false, no TensorRT packs, and it is left out
+of `gpus`; it is listed in `NVIDIA_TOO_OLD=` and `unsupported_gpus` instead. A mixed PC ignores
+only the old GPU. `dotnet run --project tests/UpdaterGpu` checks these rules on made-up GPU
+lists.
 
 ```powershell
 dotnet publish AnimeJaNaiUpdater/AnimeJaNaiUpdater.csproj -c Release -o updater-publish
