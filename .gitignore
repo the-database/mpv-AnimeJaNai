@@ -22,4 +22,6 @@ BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/core/currentani
 /AnimeJaNaiBenchmark/obj
 /tests/BenchmarkTiming/bin
 /tests/BenchmarkTiming/obj
+/tests/UpdaterGpu/bin
+/tests/UpdaterGpu/obj
 benchmark-proxy/node_modules/.cache/wrangler/wrangler-account.json
