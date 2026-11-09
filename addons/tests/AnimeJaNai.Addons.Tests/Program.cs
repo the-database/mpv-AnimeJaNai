@@ -94,6 +94,7 @@ internal static partial class Checks
         await LifecycleChecks();
         await LoginChecks();
         await StartupPathChecks();
+        await RuntimePackChecks();
         await UpdateChecks();
         await ReleaseSupportChecks();
         if (OperatingSystem.IsWindows()) await ManagementChecks();
