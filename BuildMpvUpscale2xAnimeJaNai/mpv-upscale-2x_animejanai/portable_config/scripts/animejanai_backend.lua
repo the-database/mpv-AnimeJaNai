@@ -133,6 +133,56 @@ local function trt_runtime_installed()
     return exists('animejanai/inference/' .. nvinfer)
 end
 
+-- The shared pack store's folder when it has been moved and is missing (a
+-- drive that isn't connected): then TensorRT only looks uninstalled, its packs
+-- are on that drive. From `aji-runtime location --json` (aji-runtime 0.2.0+,
+-- at the install root, or in the AppImage), asked only when aji-runtime.json
+-- names a TensorRT pack that isn't there. nil otherwise; checked once.
+local store_missing_checked, store_missing_folder
+local function trt_store_missing()
+    if store_missing_checked then
+        return store_missing_folder
+    end
+    store_missing_checked = true
+    local packs = runtime_packs()
+    if not (packs and packs.trt) or trt_runtime_installed() then
+        return nil
+    end
+    local name = mp.get_property('platform') == 'windows'
+        and 'aji-runtime.exe' or 'aji-runtime'
+    local exe = mp.command_native({'expand-path', '~~/../' .. name})
+    if utils.file_info(exe) == nil then
+        local appdir = os.getenv('APPDIR')
+        exe = appdir and utils.join_path(appdir, name)
+        if not exe or utils.file_info(exe) == nil then
+            return nil
+        end
+    end
+    local r = mp.command_native({
+        name = 'subprocess',
+        args = {exe, 'location', '--json'},
+        capture_stdout = true,
+        capture_stderr = true,
+        playback_only = false,
+    })
+    if not r or r.status ~= 0 then
+        return nil
+    end
+    local t = utils.parse_json(r.stdout or '')
+    if type(t) == 'table' and t.moved == true and t.available == false then
+        store_missing_folder = type(t.target) == 'string' and t.target or '?'
+    end
+    return store_missing_folder
+end
+
+local function store_missing_hint(folder)
+    local where = os.getenv('ANIMEJANAI_APPIMAGE') == '1'
+        and 'the JaNai app you moved it with'
+        or 'AnimeJaNai Manager (Ctrl+E) > Components > Storage'
+    return 'The shared runtime\'s folder ' .. folder .. ' isn\'t available. ' ..
+        'Is its drive connected? Reconnect it, or reset the location in ' .. where
+end
+
 -- Whether a TensorRT builder (kernel) pack is installed: in the store when
 -- aji-runtime.json names the TensorRT pack, else in the inference folder.
 local function trt_builder_installed()
@@ -168,7 +218,8 @@ local function check_components(backend, rife_configured, fallback_hint)
     end
     if backend == 'tensorrt' then
         if not trt_runtime_installed() then
-            hints[#hints + 1] =
+            local missing = trt_store_missing()
+            hints[#hints + 1] = missing and store_missing_hint(missing) or
                 'TensorRT runtime not installed - press Ctrl+E to open ' ..
                 'AnimeJaNai Manager'
         else
@@ -313,7 +364,10 @@ local backend = (backend_raw or 'TensorRT'):lower()
 local fallback_hint
 if backend == 'tensorrt' and mp.get_property('platform') == 'windows' then
     local ok, why = trt_usable()
-    if not ok and switch_conf_to_directml() then
+    -- TensorRT on a drive that isn't connected is still installed: no switch
+    -- (check_components says what to do)
+    local away = why == 'TensorRT runtime not installed' and trt_store_missing()
+    if not ok and not away and switch_conf_to_directml() then
         msg.warn('TensorRT can\'t run here (' .. why .. '); switched animejanai.conf to DirectML')
         backend = 'directml'
         if why == 'TensorRT runtime not installed' then

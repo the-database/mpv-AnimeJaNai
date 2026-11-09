@@ -114,6 +114,12 @@ runtime release (`RuntimeTag`, animejanai-inference `runtime-<n>`, pinned by its
 - **Not in the store:** RIFE (its engines would land in the read-only pack: the video ABI needs an
   engine cache dir first), and DirectML (in the core).
 - **Uninstall:** Inno `[UninstallRun]` and `installer/linux/uninstall.sh` run `aji-runtime unref`.
+- **A moved store:** AnimeJaNai Manager > Components > Storage moves it to another drive
+  (`aji-runtime move`; the default path becomes a link, so `aji-runtime.json` stays valid). While the
+  moved folder is missing (an unplugged drive), TensorRT only looks uninstalled: `animejanai_backend.lua`
+  asks `aji-runtime location --json`, keeps `backend=TensorRT` and says so on the OSD instead of
+  switching to DirectML, and the updater's store changes stop with the same message. Engine caches
+  stay next to the ONNX in the install folder.
 
 ## Building and releasing
 
