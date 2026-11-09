@@ -157,7 +157,18 @@ url="$(sed -n 's/.*"index_url": *"\([^"]*\)".*/\1/p' "$manifest" 2>/dev/null | h
 sha="$(sed -n 's/.*"index_sha256": *"\([0-9a-f]*\)".*/\1/p' "$manifest" 2>/dev/null | head -1)"
 export AJI_RUNTIME_JSON="$INFDATA/aji-runtime.json"
 stamp="$DATA/.aji-runtime.stamp"
-if nvidia-smi -L >/dev/null 2>&1 && [ -x "$HERE/aji-runtime" ] && [ -n "$url" ] && [ -n "$sha" ] &&
+# An NVIDIA GPU TensorRT can use: compute capability 7.5+ (GeForce RTX 20 / GTX 16
+# series and newer; the updater's GpuSupport.TrtMinComputeCapability and the
+# Lua's TRT_MIN_COMPUTE). Older GPUs get no TensorRT (animejanai_backend.lua says
+# why on the OSD). A driver too old to report compute_cap counts any NVIDIA GPU.
+trt_min_compute=75
+trt_gpu() {
+    caps="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null)" ||
+        { nvidia-smi -L >/dev/null 2>&1; return; }
+    echo "$caps" | awk -F. -v min="$trt_min_compute" \
+        '$1 ~ /^ *[0-9]+$/ { if ($1 * 10 + $2 >= min) ok = 1 } END { exit !ok }'
+}
+if trt_gpu && [ -x "$HERE/aji-runtime" ] && [ -n "$url" ] && [ -n "$sha" ] &&
    { [ ! -f "$AJI_RUNTIME_JSON" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$ver" ]; }; then
     echo "AnimeJaNai: installing TensorRT into the shared pack store (one-time)..." >&2
     if "$HERE/aji-runtime" ensure --app-id mpv-animejanai-appimage --app-path "${APPIMAGE:-$HERE/AppRun}" \
