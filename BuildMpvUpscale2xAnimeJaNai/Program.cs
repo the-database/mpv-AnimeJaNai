@@ -120,9 +120,9 @@ const string RifeModelsAsset      = "rife-fp16-2.7z";     // that release's arch
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
 // v9); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-10-24-b4f9f5bfed"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20261024";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "b4f9f5bfed";   // git short hash (master; aji ABI v9)
+const string MpvForkVersion       = "2026-11-09-484611bce0"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20261109";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "484611bce0";   // git short hash (master; aji ABI v9)
 // Fill these only after the reviewed addon commits have official releases.
 // Addon natives have a separate release; ordinary MpvFork* pins stay independent.
 // ManagerVersion/AjiVersion above must point to matching official releases.
