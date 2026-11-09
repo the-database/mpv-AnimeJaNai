@@ -98,7 +98,7 @@ const string SevenZipVersion      = "2605";         // the version in the asset 
 const string SevenZipTag          = "26.05";        // the release tag
 const string SevenZipSha256Win    = "f27a8f103c84785026edcba1f67faf1357225df9d19ddb0b7760d55947141bc7";
 const string SevenZipSha256Linux  = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089d6833dc30f8350a3b232e";
-const string MpvNetVersion        = "v7.1.2.0";
+const string MpvNetVersion        = "v7.1.2.0-ajn.1";
 const string ManagerVersion       = "0.10.4";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
@@ -660,7 +660,7 @@ async Task InstallRife()
 // Windows player: mpv.net portable + the custom libmpv-2.dll fork.
 async Task InstallMpvnet()
 {
-    var downloadUrl = $"https://github.com/mpvnet-player/mpv.net/releases/download/{MpvNetVersion}/mpv.net-{MpvNetVersion}-portable-x64.zip";
+    var downloadUrl = $"https://github.com/422415/mpv.net/releases/download/{MpvNetVersion}/mpv.net-{MpvNetVersion}-portable-x64.zip";
     var targetPath = Path.GetFullPath("mpvnet.zip");
     await DownloadFileAsync(downloadUrl, targetPath, (progress) =>
     {
