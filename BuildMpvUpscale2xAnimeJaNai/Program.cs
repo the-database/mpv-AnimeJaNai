@@ -100,7 +100,7 @@ const string SevenZipSha256Win    = "f27a8f103c84785026edcba1f67faf1357225df9d19
 const string SevenZipSha256Linux  = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089d6833dc30f8350a3b232e";
 const string MpvNetVersion        = "v7.1.2.0-ajn.2";
 const string MpvNetSha256         = "b3a6938a8b73f83ecc6eb65ba65a95051ff3c02f1bea7c90e0ec80f8ce41ec38";
-const string ManagerVersion       = "0.11.0";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
+const string ManagerVersion       = "0.12.0";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
