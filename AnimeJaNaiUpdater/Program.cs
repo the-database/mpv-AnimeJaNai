@@ -1662,6 +1662,10 @@ HashSet<string> StoreWanted(PackIndex index)
 // `check`, only the plan (its AJI_* lines are returned).
 (int, string) StoreEnsure(PackIndex index, HashSet<string> want, bool check = false)
 {
+    if (StoreMissing())
+    {
+        return (1, "");
+    }
     string indexArg = runtimeMirror is not null ? StoreIndexPath() : runtimeIndexUrl!;
     string sha = runtimeMirror is not null ? Sha256Hex(File.ReadAllBytes(indexArg)) : runtimeIndexSha!;
     // install order as the index lists them
@@ -1693,6 +1697,10 @@ HashSet<string> StoreWanted(PackIndex index)
 
 int StoreUnref()
 {
+    if (StoreMissing())
+    {
+        return 1;
+    }
     var (rc, _) = RunAjiRuntime(["unref", "--app-id", StoreAppId], quiet: false);
     TryDelete(() => File.Delete(Path.Combine(inferenceDir, "aji-runtime.json")));
     return rc;
@@ -1741,6 +1749,34 @@ void RemovePrivatePackFiles(PackIndex index)
     {
         Console.WriteLine($"Removed {gone} file(s) from the install folder that the shared pack store now holds.");
     }
+}
+
+// A store moved to another drive (AnimeJaNai Manager > Components > Storage) whose folder is missing,
+// e.g. an unplugged drive, can't be opened: aji-runtime refuses to start an empty one in its place. Say
+// so instead of passing on its error. Asks `aji-runtime location --json` (0.2.0+); an older one can't
+// move the store.
+bool StoreMissing()
+{
+    var (rc, stdout) = RunAjiRuntime(["location", "--json"], quiet: true);
+    if (rc != 0)
+    {
+        return false;
+    }
+    try
+    {
+        using var doc = JsonDocument.Parse(stdout);
+        var r = doc.RootElement;
+        if (r.TryGetProperty("moved", out var moved) && moved.ValueKind == JsonValueKind.True &&
+            r.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.False)
+        {
+            string folder = r.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() ?? "" : "";
+            Console.WriteLine($"The shared runtime's folder {folder} isn't available. Is its drive connected? " +
+                              "Reconnect it, or reset the location in AnimeJaNai Manager > Components > Storage.");
+            return true;
+        }
+    }
+    catch (JsonException) { /* unreadable: as if it were there */ }
+    return false;
 }
 
 // Runs aji-runtime. Its human output (stderr) is passed on line by line, as the Manager shows this
