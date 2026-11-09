@@ -127,12 +127,12 @@ const string MpvForkGitHash       = "484611bce0";   // git short hash (master; a
 // Addon natives have a separate release; ordinary MpvFork* pins stay independent.
 // ManagerVersion/AjiVersion above must point to matching official releases.
 // Public deployment fails before downloading anything until this gate is set.
-const string AddonMpvForkVersion = "";
-const string AddonMpvForkBuildDate = "";
-const string AddonMpvForkGitHash = "";
-const string AddonNativeMetadataSha256 = "";
-const string AddonManagerSource = "";
-const string AddonInferenceSource = "";
+const string AddonMpvForkVersion = "2026-11-09-484611bce0-addons-42608288980";
+const string AddonMpvForkBuildDate = "20261109";
+const string AddonMpvForkGitHash = "484611bce0";
+const string AddonNativeMetadataSha256 = "510bd4677bd145b18d12645123046eed5cc0f2585394fadc8e34e263629d71e8";
+const string AddonManagerSource = "d641038b8d597991fea25c5128a6ae6a71e82484";   // AnimeJaNaiManager 0.11.0
+const string AddonInferenceSource = "458c2f08a2f4dd5fa863adac38b957ee503ce9c4"; // animejanai-inference v0.25.0
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
 // Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
