@@ -168,10 +168,27 @@ trt_gpu() {
     echo "$caps" | awk -F. -v min="$trt_min_compute" \
         '$1 ~ /^ *[0-9]+$/ { if ($1 * 10 + $2 >= min) ok = 1 } END { exit !ok }'
 }
+app_path="${APPIMAGE:-$HERE/AppRun}"
+# Whether the store's ref for this app names this AppImage and all its packs are
+# there. The ref keeps the packs only while its app_path exists, so a moved or
+# renamed AppImage (AppImageLauncher moves them to ~/Applications) leaves a dead
+# ref, and the next cleanup by any app frees the packs: then this installs again,
+# at the same version. `show` reads the store (no network, no lock, no index), so
+# it's cheap at every launch. An aji-runtime too old to print app_path leaves it
+# to the version stamp, as before.
+ref_current() {
+    out="$("$HERE/aji-runtime" show --app-id mpv-animejanai-appimage 2>/dev/null)" || return 1
+    case "$out" in *'"has_ref": true'*) ;; *) return 1 ;; esac
+    case "$out" in *'"installed": false'*) return 1 ;; esac
+    case "$out" in *'"app_path": '*) ;; *) return 0 ;; esac
+    esc="$(printf '%s' "$app_path" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    case "$out" in *"\"app_path\": \"$esc\""*) return 0 ;; esac
+    return 1
+}
 if trt_gpu && [ -x "$HERE/aji-runtime" ] && [ -n "$url" ] && [ -n "$sha" ] &&
-   { [ ! -f "$AJI_RUNTIME_JSON" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$ver" ]; }; then
+   { [ ! -f "$AJI_RUNTIME_JSON" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$ver" ] || ! ref_current; }; then
     echo "AnimeJaNai: installing TensorRT into the shared pack store (one-time)..." >&2
-    if "$HERE/aji-runtime" ensure --app-id mpv-animejanai-appimage --app-path "${APPIMAGE:-$HERE/AppRun}" \
+    if "$HERE/aji-runtime" ensure --app-id mpv-animejanai-appimage --app-path "$app_path" \
            --app-version "$ver" --index "$url" --index-sha256 "$sha" --want trt --aji-dir "$INFDATA" >&2; then
         echo "$ver" > "$stamp"
         # builder kernels an AppImage from before the store fetched here
