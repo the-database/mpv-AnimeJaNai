@@ -369,11 +369,13 @@ begin
   // The pre-upgrade manifest snapshot has served its purpose (the updater consulted it above).
   DeleteFile(ExpandConstant('{app}\manifest.prev.json'));
 
+  // Suppressible: /SUPPRESSMSGBOXES (silent and unattended installs) answers
+  // it with OK instead of blocking until someone clicks it.
   if failed > 0 then
-    MsgBox('Some components could not be downloaded (you may be offline). ' +
+    SuppressibleMsgBox('Some components could not be downloaded (you may be offline). ' +
            'AnimeJaNai will still play video; open the AnimeJaNai Manager ' +
            '(Ctrl+E in the player) later to finish installing them.',
-           mbInformation, MB_OK);
+           mbInformation, MB_OK, IDOK);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
