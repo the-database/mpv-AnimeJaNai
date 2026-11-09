@@ -26,14 +26,23 @@
 
 ; The player application is "mpv-AnimeJaNai" (AnimeJaNai alone is the upscaling
 ; model family; this is the mpv-based player that runs it).
-#define AppName "mpv-AnimeJaNai"
+#ifdef InstallerTest
+  ; A lifecycle test must never share registration with a user's installation.
+  #define AppName "mpv-AnimeJaNai Installer Test"
+#else
+  #define AppName "mpv-AnimeJaNai"
+#endif
 #define Publisher "the-database"
 #define PlayerExe "mpvnet.exe"
 #define ManagerExe "AnimeJaNaiManager.exe"
 #define UpdaterExe "AnimeJaNaiUpdater.exe"
 
 [Setup]
+#ifdef InstallerTest
+AppId={{78315E8B-A449-4D53-940F-452A227D80AA}
+#else
 AppId={{8B2F4E1A-9C3D-4A7E-B5F6-AJANAI340MPV}
+#endif
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#Publisher}
@@ -58,10 +67,13 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: unchecked
 Name: "assocvideo"; Description: "Associate common &video file types with {#AppName}"
 
 [Files]
+; An addon install, including a downgrade to a normal build, must use the
+; updater's transaction. A fresh normal install keeps the direct copy path.
+Source: "{#SourceDir}\*"; DestDir: "{tmp}\ajn-staged"; Flags: recursesubdirs createallsubdirs ignoreversion; Check: UseTransaction
 ; The updater needs its own entry (not just the wildcard) so ExtractTemporaryFile
 ; can run it for GPU detection during the wizard; exclude it from the wildcard to
 ; avoid listing it twice.
-Source: "{#SourceDir}\{#UpdaterExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\{#UpdaterExe}"; DestDir: "{app}"; Flags: ignoreversion; Check: DirectInstall
 
 ; User-owned files: write the shipped default only on a FRESH install; never clobber an
 ; existing user copy on a reinstall-over (mirrors the updater's manifest "user_preserve"
@@ -69,14 +81,15 @@ Source: "{#SourceDir}\{#UpdaterExe}"; DestDir: "{app}"; Flags: ignoreversion
 ; wildcard below would reset the user's profiles, keybindings, mpv settings, and mpv.net
 ; state (last-played video / window / volume) to the package defaults on every reinstall.
 ; Keep this list in sync with that manifest's user_preserve array.
-Source: "{#SourceDir}\animejanai\animejanai.conf";       DestDir: "{app}\animejanai";       Flags: onlyifdoesntexist
-Source: "{#SourceDir}\portable_config\mpv.conf";         DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
-Source: "{#SourceDir}\portable_config\input.conf";       DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
-Source: "{#SourceDir}\portable_config\saved-props.json"; DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
-Source: "{#SourceDir}\portable_config\settings.xml";     DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist
+Source: "{#SourceDir}\animejanai\animejanai.conf";       DestDir: "{app}\animejanai";       Flags: onlyifdoesntexist; Check: DirectInstall
+Source: "{#SourceDir}\portable_config\mpv.conf";         DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist; Check: DirectInstall
+Source: "{#SourceDir}\portable_config\input.conf";       DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist; Check: DirectInstall
+Source: "{#SourceDir}\portable_config\saved-props.json"; DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist; Check: DirectInstall
+Source: "{#SourceDir}\portable_config\settings.xml";     DestDir: "{app}\portable_config";  Flags: onlyifdoesntexist; Check: DirectInstall
 
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#UpdaterExe},animejanai\animejanai.conf,portable_config\mpv.conf,portable_config\input.conf,portable_config\saved-props.json,portable_config\settings.xml"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#UpdaterExe},animejanai\animejanai.conf,portable_config\mpv.conf,portable_config\input.conf,portable_config\saved-props.json,portable_config\settings.xml"; Flags: recursesubdirs createallsubdirs ignoreversion; Check: DirectInstall
 
+#ifndef InstallerTest
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#PlayerExe}"
 ; The companion tool keeps its own name ("AnimeJaNai Manager" - it manages the
@@ -84,12 +97,14 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#PlayerExe}"
 Name: "{group}\AnimeJaNai Manager"; Filename: "{app}\{#ManagerExe}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#PlayerExe}"; Tasks: desktopicon
+#endif
 
 ; Per-user (HKCU) video file associations, gated on the assocvideo task. Registers
 ; an AnimeJaNai.mpv ProgID and adds it to each extension's Open-with list plus the
 ; per-user default. (Win10+ protects the *effective* default behind a UserChoice
 ; hash setup can't forge; this is the standard achievable registration - it makes
 ; AnimeJaNai available and the per-user fallback default.)
+#ifndef InstallerTest
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv"; ValueType: string; ValueName: ""; ValueData: "{#AppName} Video"; Flags: uninsdeletekey; Tasks: assocvideo
 ; FriendlyAppName is what the "Open with" / default-app picker shows, instead of
@@ -119,6 +134,7 @@ Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\shell\open"; ValueType: str
 {#Assoc(".3gp")}
 {#Assoc(".mts")}
 {#Assoc(".m2v")}
+#endif
 
 ; First drop this install's ref in the shared pack store (%LOCALAPPDATA%\the-database\aji,
 ; shared with other apps): the TensorRT runtime no other installed app uses is
@@ -142,6 +158,55 @@ var
   HasNvidia: Boolean;
   TrtPacks: String;   // comma-separated, detected at wizard start (best-effort)
   RifePack: String;
+  TransactionalInstall: Boolean;
+
+function UseTransaction: Boolean;
+begin
+  Result := TransactionalInstall;
+end;
+
+function DirectInstall: Boolean;
+begin
+  Result := not TransactionalInstall;
+end;
+
+// Preserve the updater's actual diagnostic instead of replacing every failure
+// (permissions, a damaged journal, a locked file) with a generic close-app hint.
+function RunUpdater(ExePath, Params, WorkingDir: String): String;
+var
+  Output: TExecOutput;
+  rc, i: Integer;
+begin
+  Result := '';
+  if not ExecAndCaptureOutput(ExePath, Params, WorkingDir, SW_HIDE,
+    ewWaitUntilTerminated, rc, Output) then
+  begin
+    Result := 'Could not start the updater: ' + SysErrorMessage(rc);
+    Exit;
+  end;
+  if rc = 0 then Exit;
+  Result := 'Updater exited with code ' + IntToStr(rc) + '.';
+  for i := 0 to GetArrayLength(Output.StdOut) - 1 do
+    Result := Result + #13#10 + Output.StdOut[i];
+  for i := 0 to GetArrayLength(Output.StdErr) - 1 do
+    Result := Result + #13#10 + Output.StdErr[i];
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+#ifdef EnableAddons
+  TransactionalInstall := True;
+#else
+  TransactionalInstall := FileExists(ExpandConstant('{app}\addon-package.json'));
+#endif
+  Result := '';
+  if TransactionalInstall then
+  begin
+    ExtractTemporaryFile('{#UpdaterExe}');
+    Result := RunUpdater(ExpandConstant('{tmp}\{#UpdaterExe}'),
+      '--check-install "' + ExpandConstant('{app}') + '"', ExpandConstant('{tmp}'));
+  end;
+end;
 
 procedure SHChangeNotify(wEventId: Integer; uFlags: Cardinal; dwItem1, dwItem2: Cardinal);
   external 'SHChangeNotify@shell32.dll stdcall';
@@ -190,7 +255,9 @@ begin
 
   ExtractTemporaryFile('{#UpdaterExe}');
   ExePath := ExpandConstant('{tmp}\{#UpdaterExe}');
+#ifndef InstallerTest
   RunRecommend(ExePath);
+#endif
 
   CompPage := CreateInputOptionPage(wpSelectTasks,
     'Components', 'Choose which AI components to install for your hardware.',
@@ -209,7 +276,11 @@ begin
   // engine (already in the core), so disable and uncheck it there.
   CompPage.Values[0] := HasNvidia;
   CompPage.CheckListBox.ItemEnabled[0] := HasNvidia;
+#ifdef InstallerTest
+  CompPage.Values[1] := False;
+#else
   CompPage.Values[1] := True;
+#endif
 end;
 
 // Install the comma-separated packs in CSV via the installed updater. Updates the
@@ -250,6 +321,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   failed: Integer;
   packsToInstall: String;
+  updateError: String;
 begin
   // Before the new core overwrites manifest.json, snapshot the existing one so the updater's
   // --install can tell whether an already-present component (TensorRT/RIFE) is unchanged across
@@ -266,12 +338,22 @@ begin
   if CurStep <> ssPostInstall then
     Exit;
 
+  if TransactionalInstall then
+  begin
+    WizardForm.StatusLabel.Caption := 'Updating AnimeJaNai and preserving addon settings...';
+    updateError := RunUpdater(ExpandConstant('{tmp}\ajn-staged\{#UpdaterExe}'),
+      '--apply-staged "' + ExpandConstant('{app}') + '" "' + ExpandConstant('{tmp}\ajn-staged') + '"', ExpandConstant('{tmp}'));
+    if updateError <> '' then RaiseException(updateError);
+  end;
+
   // Refresh the shell so the new file associations take effect.
   SHChangeNotify($08000000, $0000, 0, 0);
 
   // Re-detect from the now-installed updater: network may be available now even
   // if it wasn't at wizard start, giving authoritative GPU-matched pack names.
+#ifndef InstallerTest
   RunRecommend(ExpandConstant('{app}\{#UpdaterExe}'));
+#endif
 
   failed := 0;
   if CompPage.Values[0] and (TrtPacks <> '') then
@@ -292,4 +374,28 @@ begin
            'AnimeJaNai will still play video; open the AnimeJaNai Manager ' +
            '(Ctrl+E in the player) later to finish installing them.',
            mbInformation, MB_OK);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  i: Integer;
+  names: TArrayOfString;
+  current, prefix, updateError: String;
+begin
+  if CurUninstallStep <> usUninstall then Exit;
+  if FileExists(ExpandConstant('{app}\addon-package.json')) and
+    FileExists(ExpandConstant('{app}\{#UpdaterExe}')) then
+  begin
+    updateError := RunUpdater(ExpandConstant('{app}\{#UpdaterExe}'), '--prepare-uninstall', ExpandConstant('{app}'));
+    if updateError <> '' then RaiseException(updateError);
+  end;
+  // A data directory may have been shared or moved. Compare the complete
+  // quoted executable and login verb, rather than deleting a name by itself.
+  prefix := '"' + ExpandConstant('{app}\addon-host\ajn-addon-launcher.exe') + '" "login"';
+  if RegGetValueNames(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', names) then
+    for i := 0 to GetArrayLength(names) - 1 do
+      if Pos('AnimeJaNai.Addons.', names[i]) = 1 then
+        if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', names[i], current) then
+          if (CompareText(current, prefix) = 0) or (CompareText(Copy(current, 1, Length(prefix) + 1), prefix + ' ') = 0) then
+            RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', names[i]);
 end;

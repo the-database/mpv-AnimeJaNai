@@ -122,6 +122,16 @@ const string RifeModelsAsset      = "rife-fp16-2.7z";     // that release's arch
 const string MpvForkVersion       = "2026-10-24-b4f9f5bfed"; // release tag (Windows winbuild)
 const string MpvForkBuildDate     = "20261024";     // build date in the Windows dev archive filename
 const string MpvForkGitHash       = "b4f9f5bfed";   // git short hash (master; aji ABI v9)
+// Fill these only after the reviewed addon commits have official releases.
+// Addon natives have a separate release; ordinary MpvFork* pins stay independent.
+// ManagerVersion/AjiVersion above must point to matching official releases.
+// Public deployment fails before downloading anything until this gate is set.
+const string AddonMpvForkVersion = "";
+const string AddonMpvForkBuildDate = "";
+const string AddonMpvForkGitHash = "";
+const string AddonNativeMetadataSha256 = "";
+const string AddonManagerSource = "";
+const string AddonInferenceSource = "";
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
 // Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
@@ -148,6 +158,27 @@ TargetOs SelectTarget(string[] a)
 var target = SelectTarget(args);
 var plat = target == TargetOs.Windows ? Platform.Win : Platform.Linux;
 Console.WriteLine($"Target: {plat.Rid}");
+bool includeAddons = args.Contains("--addons");
+string? addonBundle = Environment.GetEnvironmentVariable("AJN_ADDON_BUNDLE");
+if (includeAddons && !plat.IsWindows)
+{
+    Console.Error.WriteLine("Addon support is Windows only in this preview. The Linux package excludes the addon runtime.");
+    Environment.ExitCode = 2;
+    return;
+}
+if (includeAddons && (string.IsNullOrWhiteSpace(AddonMpvForkVersion) ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonMpvForkBuildDate, "^[0-9]{8}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonMpvForkGitHash, "^[0-9a-f]{10}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonNativeMetadataSha256, "^[0-9a-f]{64}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonManagerSource, "^[0-9a-f]{40}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(AddonInferenceSource, "^[0-9a-f]{40}$")))
+    throw new InvalidOperationException("Public addon release pins are not set. Publish the separate official addon-native release, then set AddonMpvForkVersion/BuildDate/GitHash, its metadata SHA-256 and the Manager/inference source pins. Use tools/assemble-addon-preview.py for pre-merge testing.");
+if (includeAddons && (string.IsNullOrWhiteSpace(addonBundle) || !File.Exists(Path.Combine(addonBundle, "host-build.json"))))
+{
+    Console.Error.WriteLine("--addons requires AJN_ADDON_BUNDLE built from this checkout by addons/tools/package.ps1.");
+    Environment.ExitCode = 2;
+    return;
+}
 
 if (args.Length < 1 || args[0].StartsWith("--"))
 {
@@ -673,6 +704,28 @@ async Task InstallCustomLibmpv()
     File.Delete(targetPath);
 }
 
+async Task<System.Text.Json.Nodes.JsonObject> InstallAddonNative()
+{
+    string release = $"https://github.com/the-database/mpv-winbuild/releases/download/{AddonMpvForkVersion}";
+    string metadata = Path.GetFullPath("mpv-addon-native-x86_64.json");
+    await DownloadFileAsync(release + "/mpv-addon-native-x86_64.json", metadata, _ => { });
+    if (AddonRelease.Hash(metadata) != AddonNativeMetadataSha256)
+        throw new InvalidDataException("Official native producer metadata checksum mismatch.");
+    var record = AddonRelease.ReadNative(metadata);
+    var names = record["files"]!.AsObject().Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+    foreach (string prefix in new[] { "mpv-dev", "mpv" })
+    {
+        string asset = $"{prefix}-x86_64-{AddonMpvForkBuildDate}-git-{AddonMpvForkGitHash}.7z";
+        string archive = Path.GetFullPath(asset);
+        await DownloadFileAsync(release + "/" + asset, archive, _ => { });
+        using (var zip = new ArchiveFile(archive))
+            foreach (var entry in zip.Entries.Where(e => names.Contains(e.FileName)))
+                entry.Extract(Path.Combine(installDirectory, entry.FileName));
+        File.Delete(archive);
+    }
+    return record;
+}
+
 // Windows standalone player: mpv.exe from the SAME fork build as the libmpv
 // above (mpv-winbuild's player archive vs. its dev archive). This mpv.exe is
 // fully self-contained - statically linked, no libmpv-2.dll dependency - and
@@ -950,6 +1003,27 @@ void WriteVersionAndManifest()
 {
     var version = args[0];
     File.WriteAllText(Path.Combine(installDirectory, "version.txt"), version);
+    string? addonMpvRevision = null;
+    if (includeAddons)
+    {
+        using var native = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-host", "native-capabilities.json")));
+        addonMpvRevision = native.RootElement.GetProperty("sources").GetProperty("mpv").GetString();
+        if (addonMpvRevision is null || !System.Text.RegularExpressions.Regex.IsMatch(addonMpvRevision, "^[0-9a-f]{40}$"))
+            throw new InvalidDataException("The addon bundle does not identify its native player revision.");
+        using var inventory = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installDirectory, "addon-package.json")));
+        var sources = inventory.RootElement.GetProperty("sources");
+        string Revision(string name)
+        {
+            string? value = sources.GetProperty(name).GetString();
+            if (value is null || !System.Text.RegularExpressions.Regex.IsMatch(value, "^[0-9a-f]{40}$"))
+                throw new InvalidDataException("The addon bundle lacks a source revision for " + name);
+            return value;
+        }
+        if (Revision("mpv") != addonMpvRevision) throw new InvalidDataException("Addon native source inventories disagree.");
+        _ = Revision("manager");
+        if (inventory.RootElement.GetProperty("files").EnumerateObject().Any(p => p.Name.StartsWith("animejanai/inference/", StringComparison.Ordinal)))
+            _ = Revision("inference");
+    }
 
     // Platform-specific managed program files for the overlay update. aji and
     // its tools are small and update often, so they ride the overlay; the
@@ -967,6 +1041,7 @@ void WriteVersionAndManifest()
     overlayPaths.AddRange(plat.AjiLibs.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.AjiTools.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.ManagerOverlay);
+    if (includeAddons) overlayPaths.AddRange(new[] { "addon-host", "addon-development", "addon-package.json", "build-info" });
     overlayPaths.Add("portable_config/scripts");
     overlayPaths.Add("portable_config/shaders");
     // Managed defaults files, overwritten on update. The user-facing
@@ -991,7 +1066,7 @@ void WriteVersionAndManifest()
         deps = new
         {
             mpvnet = plat.IsWindows ? MpvNetVersion : (string?)null,
-            mpvfork = plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
+            mpvfork = includeAddons ? AnimeJaNai.Updates.AddonUpdateTransaction.NativeDependencyIdentity(installDirectory) : plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
                                      : $"{MpvForkLinuxVersion}",
             inference_runtime = $"trt-{TrtVersion}",
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,
@@ -1012,6 +1087,7 @@ void WriteVersionAndManifest()
         user_preserve = new[]
         {
             "animejanai/animejanai.conf",
+            "animejanai/addons",
             "animejanai/currentanimejanai.log",
             "animejanai/manager-ui.json",
             // written by the shared pack store for this install
@@ -1181,11 +1257,16 @@ async Task Main()
     if (plat.HasDirectML)
         await InstallOrtDml();
     await InstallRife();
+    System.Text.Json.Nodes.JsonObject? addonNative = null;
     if (plat.IsWindows)
     {
         await InstallMpvnet();
-        await InstallCustomLibmpv();
-        await InstallCustomMpvExe();
+        if (includeAddons) addonNative = await InstallAddonNative();
+        else
+        {
+            await InstallCustomLibmpv();
+            await InstallCustomMpvExe();
+        }
     }
     else
     {
@@ -1197,6 +1278,13 @@ async Task Main()
     GenerateInputConf();
     await InstallAnimeJaNaiManager();
     await InstallAjiRuntime();
+    if (includeAddons)
+    {
+        AddonRelease.InstallSupport(addonBundle!, installDirectory, addonNative!, AddonManagerSource, AddonInferenceSource);
+        AnimeJaNai.Updates.AddonUpdateTransaction.ValidatePackage(installDirectory, installDirectory);
+    }
+    if (!plat.IsWindows)
+        File.Delete(Path.Combine(installDirectory, "portable_config", "scripts", "animejanai_addons.lua"));
     WriteThirdPartyNotices();
     WriteLinuxLauncher();
     WriteVersionAndManifest();
