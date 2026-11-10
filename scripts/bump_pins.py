@@ -2,11 +2,13 @@
 """Re-pin the releases the mpv-AnimeJaNai assembler downloads: scripts/bump_pins.py <source> <tag>.
 
 Sources (constants in BuildMpvUpscale2xAnimeJaNai/Program.cs):
-  libaji        the-database/animejanai-inference release: AjiVersion
+  libaji        the-database/animejanai-inference release: AjiVersion, plus AddonInferenceSource
+                (the tag's commit)
   mpv-winbuild  the-database/mpv-winbuild release: MpvForkVersion, plus MpvForkBuildDate and
                 MpvForkGitHash read from its archive filenames
   mpv-linux     the-database/mpv Linux bundle release: MpvForkLinuxVersion
-  manager       the-database/AnimeJaNaiManager release: ManagerVersion
+  manager       the-database/AnimeJaNaiManager release: ManagerVersion, plus AddonManagerSource
+                (the tag's commit)
   runtime-packs the shared runtime packs, a the-database/animejanai-inference runtime-<n> release:
                 RuntimeTag and the platforms' index SHA-256s (RuntimeIndexSha256Win/Linux)
   aji-runtime   the-database/aji-runtime release (the pack store's tool): AjiRuntimeVersion,
@@ -60,6 +62,19 @@ def release(repo, tag):
     if rel.get("draft"):
         raise Fail(f"{repo} {tag} is still a draft; its assets 404 for the builds")
     return rel
+
+
+def tag_commit(repo, tag):
+    """The full commit SHA a tag points at (peels an annotated tag)."""
+    ref = gh(f"repos/{repo}/git/ref/tags/{tag}")
+    if ref is None:
+        raise Fail(f"{repo} has no tag {tag}")
+    obj = ref["object"]
+    while obj["type"] == "tag":
+        obj = gh(f"repos/{repo}/git/tags/{obj['sha']}")["object"]
+    if obj["type"] != "commit":
+        raise Fail(f"{repo} tag {tag} points at a {obj['type']}, not a commit")
+    return obj["sha"]
 
 
 def asset(rel, name):
@@ -129,6 +144,13 @@ class File:
             self.path.write_bytes(self.text.encode("utf-8"))
 
 
+def set_source(f, name, repo, tag, label):
+    """Point an addon provenance pin (a full commit, written into addon-package.json) at the tag's
+    commit, and its trailing `// <label> <version>` comment at the tag."""
+    f.set(name, const(name, "[0-9a-f]{40}|"), tag_commit(repo, tag))
+    f.set(f"{name} comment", rf'const string {name}\s*=\s*"[0-9a-f]*"; *// {label} (\S+)', tag)
+
+
 def guard_downgrade(what, old, new, allow):
     if version_key(new) < version_key(old) and not allow:
         raise Fail(f"{what}: {new} is older than the pinned {old} (pass --allow-downgrade to pin it anyway)")
@@ -193,6 +215,7 @@ def bump_libaji(tag, changes, allow_downgrade):
     for name in ("aji-windows-x64.zip", "aji-linux-x64.tar.zst"):
         asset(rel, name)
     f.set("AjiVersion", const("AjiVersion"), tag)
+    set_source(f, "AddonInferenceSource", "the-database/animejanai-inference", tag, "animejanai-inference")
     notes = (
         f"Pins [libaji {tag}]({rel['html_url']}). Update the comment after `AjiVersion` by hand. If "
         "`include/aji.h`'s `AJI_API_VERSION` changed, this needs an mpv fork build with the matching "
@@ -252,6 +275,7 @@ def bump_manager(tag, changes, allow_downgrade):
     for name in ("AnimeJaNaiManager-portable-x64.zip", "AnimeJaNaiManager-portable-linux-x64.tar.zst"):
         asset(rel, name)
     f.set("ManagerVersion", const("ManagerVersion"), tag)
+    set_source(f, "AddonManagerSource", "the-database/AnimeJaNaiManager", tag, "AnimeJaNaiManager")
     notes = (
         f"Pins [AnimeJaNai Manager {tag}]({rel['html_url']}). Update the comment after "
         "`ManagerVersion` by hand. To test it, run the assembler from this branch and open the Manager "
