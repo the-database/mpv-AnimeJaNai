@@ -31,7 +31,7 @@ Every pin is a `const string` near the top of `BuildMpvUpscale2xAnimeJaNai/Progr
 Values below are the current ones; read the file for truth.
 
 **Bump PRs.** `AjiVersion`, the three `MpvFork*` Windows constants, `MpvForkLinuxVersion` and
-`ManagerVersion` don't need hand edits: each upstream release sends a `repository_dispatch` and
+`ManagerVersion` (with `AddonInferenceSource` / `AddonManagerSource`, the tag's commit) don't need hand edits: each upstream release sends a `repository_dispatch` and
 `.github/workflows/bump-pins.yml` opens a PR on `bump/<source>` (`libaji`, `mpv-winbuild`,
 `mpv-linux`, `manager`). `scripts/bump_pins.py <source> <tag>` does the edit and checks that the
 release has every asset the assembler fetches; run it locally to bump by hand. The aji release
