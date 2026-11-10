@@ -33,8 +33,12 @@ Values below are the current ones; read the file for truth.
 **Bump PRs.** `AjiVersion`, the three `MpvFork*` Windows constants, `MpvForkLinuxVersion` and
 `ManagerVersion` (with `AddonInferenceSource` / `AddonManagerSource`, the tag's commit) don't need hand edits: each upstream release sends a `repository_dispatch` and
 `.github/workflows/bump-pins.yml` opens a PR on `bump/<source>` (`libaji`, `mpv-winbuild`,
-`mpv-linux`, `manager`). `scripts/bump_pins.py <source> <tag>` does the edit and checks that the
-release has every asset the assembler fetches; run it locally to bump by hand. The aji release
+`mpv-linux`, `manager`). `scripts/bump_pins.py <source> <tag>` does the edit, downloads every
+asset the assembler fetches from the release and records its SHA-256 (`AjiSha256Win/Linux`,
+`MpvForkDevSha256` / `MpvForkPlayerSha256`, `MpvForkLinuxSha256`, `ManagerSha256Win/Linux`), which
+the assembler checks each download against; run it locally to bump by hand. A RIFE model set has no
+upstream dispatch: bump it with `scripts/bump_pins.py rife-models <tag>` (`RifeModelsVersion`,
+`RifeModelsAsset`, `RifeModelsSha256`). The aji release
 sends nothing until its Windows zips are up: run its `notify-downstream.yml` after the upload
 (step 4). Both directions need the `JANAI_BUMP_TOKEN` secret. The other pins are still bumped by
 hand.
