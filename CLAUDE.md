@@ -270,8 +270,10 @@ The `aji` engine parses `animejanai.conf` (the old Python `animejanai_config.rea
 chain, models, and engine-build status.
 
 The filter doesn't rewrite that file when it fails at runtime: mpv's filter chain logs `Disabling
-filter aji because it has failed.` and plays on without it until the chain is rebuilt (the next
-file, or upscaling turned off and on; a seek doesn't re-enable it). `animejanaistats.lua` watches
+filter aji because it has failed.` and plays on without it until the filter is rebuilt (the next
+file, upscaling turned off and on, or a profile key: `animejanai_slot.lua` watches for the same
+line and rebuilds `@aji` with the chosen slot instead of sending a `vf-command`; re-applying the
+same `vf` or a seek doesn't re-enable it). `animejanaistats.lua` watches
 the log for that line (`mp.enable_messages`), shows the filter's last error on the OSD, and
 `Ctrl+J` shows it instead of the stale stats.
 
