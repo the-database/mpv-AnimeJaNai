@@ -47,6 +47,26 @@ shipped keybindings are refreshed.)
 
 ## Customizing Profiles and Other Settings
 
+### Enhanced RIFE Scene Detection (Experimental, Windows)
+
+In a build containing the matching player, inference, and Manager updates, enable
+**Enhanced scene detection (experimental)** under a chain's **RIFE** settings.
+This built-in option uses motion and image structure to reduce interpolation
+across cuts, including dark edits with similar colors. It requires no addon or
+VapourSynth installation and uses the existing RIFE models.
+
+The option is off by default. Disabled playback creates no detector worker,
+loads no detector DLL, and adds no frame downloads, motion analysis, or queue
+lookahead. Enabling it adds CPU motion analysis and two frames of lookahead.
+Unsupported frames or decisions that arrive too late use the existing scene
+detection threshold. Results remain experimental; it can still miss cuts or
+hold interpolation during continuous motion.
+
+The per-chain configuration key is `chain_N_rife_scene_detect_enhanced=yes`.
+Omitting it or setting it to `no` preserves the normal RIFE path. The original
+3.10.0 binaries do not implement this built-in option; updating the addon alone
+does not enable it.
+
 ### Automatic Display Refresh Rate (Experimental, Windows)
 
 Enable this option in Manager's **Profiles** tab and restart the player. With a

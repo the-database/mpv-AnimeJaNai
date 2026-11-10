@@ -701,6 +701,15 @@ async Task InstallCustomLibmpv()
             Path.Combine(installDirectory, "libmpv-2.dll"),
             true // overwrite the stock mpv.net libmpv-2.dll
         );
+        // New x64 GPL builds include the optional built-in RIFE detector.
+        // Older pinned releases omit it. Merely shipping it does not load it.
+        if (File.Exists(Path.Combine(targetExtractPath, "ajn-mvtools.dll")))
+        {
+            File.Copy(Path.Combine(targetExtractPath, "ajn-mvtools.dll"),
+                Path.Combine(installDirectory, "ajn-mvtools.dll"), true);
+            CopyDirectory(Path.Combine(targetExtractPath, "licenses", "mvtools"),
+                Path.Combine(installDirectory, "licenses", "mvtools"));
+        }
     }
     Directory.Delete(targetExtractPath, true);
     File.Delete(targetPath);
