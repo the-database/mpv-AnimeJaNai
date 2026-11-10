@@ -2,20 +2,23 @@
 """Re-pin the releases the mpv-AnimeJaNai assembler downloads: scripts/bump_pins.py <source> <tag>.
 
 Sources (constants in BuildMpvUpscale2xAnimeJaNai/Program.cs):
-  libaji        the-database/animejanai-inference release: AjiVersion, plus AddonInferenceSource
-                (the tag's commit)
+  libaji        the-database/animejanai-inference release: AjiVersion, AjiSha256Win/Linux, plus
+                AddonInferenceSource (the tag's commit)
   mpv-winbuild  the-database/mpv-winbuild release: MpvForkVersion, plus MpvForkBuildDate and
-                MpvForkGitHash read from its archive filenames
-  mpv-linux     the-database/mpv Linux bundle release: MpvForkLinuxVersion
-  manager       the-database/AnimeJaNaiManager release: ManagerVersion, plus AddonManagerSource
-                (the tag's commit)
+                MpvForkGitHash read from its archive filenames, MpvForkDevSha256/PlayerSha256
+  mpv-linux     the-database/mpv Linux bundle release: MpvForkLinuxVersion, MpvForkLinuxSha256
+  manager       the-database/AnimeJaNaiManager release: ManagerVersion, ManagerSha256Win/Linux, plus
+                AddonManagerSource (the tag's commit)
+  rife-models   a the-database/animejanai-inference models-rife-* release (by hand; no upstream
+                workflow sends it): RifeModelsVersion, RifeModelsAsset (its one .7z), RifeModelsSha256
   runtime-packs the shared runtime packs, a the-database/animejanai-inference runtime-<n> release:
                 RuntimeTag and the platforms' index SHA-256s (RuntimeIndexSha256Win/Linux)
   aji-runtime   the-database/aji-runtime release (the pack store's tool): AjiRuntimeVersion,
                 AjiRuntimeSha256Win/Linux
 
-The first four carry no SHA-256 pin; each release is checked for every asset the assembler fetches
-from it. runtime-packs and aji-runtime record the SHA-256 of each pinned asset. .github/workflows/bump-pins.yml runs this when an upstream release sends a
+Every source records the SHA-256 of each asset the assembler fetches from the release, computed
+from the downloaded file (and cross-checked against GitHub's recorded digest); the assembler checks
+each download against it. .github/workflows/bump-pins.yml runs this when an upstream release sends a
 repository_dispatch, then opens a PR; it also runs by hand. --out DIR writes the PR title and
 body. Standard library only. docs/RELEASE.md has the release order.
 """
@@ -212,9 +215,10 @@ def bump_libaji(tag, changes, allow_downgrade):
     f = File(PROGRAM, changes)
     guard_downgrade("AjiVersion", f.get("AjiVersion", const("AjiVersion")), tag, allow_downgrade)
     rel = release("the-database/animejanai-inference", tag)
-    for name in ("aji-windows-x64.zip", "aji-linux-x64.tar.zst"):
-        asset(rel, name)
     f.set("AjiVersion", const("AjiVersion"), tag)
+    for name, pin in (("aji-windows-x64.zip", "AjiSha256Win"), ("aji-linux-x64.tar.zst", "AjiSha256Linux")):
+        sha, _ = digest(asset(rel, name))
+        f.set(pin, const(pin, SHA), sha)
     set_source(f, "AddonInferenceSource", "the-database/animejanai-inference", tag, "animejanai-inference")
     notes = (
         f"Pins [libaji {tag}]({rel['html_url']}). Update the comment after `AjiVersion` by hand. If "
@@ -236,11 +240,13 @@ def bump_winbuild(tag, changes, allow_downgrade):
     if len(dev) != 1:
         raise Fail(f"{tag} should carry one mpv-dev-x86_64-<date>-git-<hash>.7z, found {len(dev)}")
     date, githash = dev[0].groups()
-    asset(rel, dev[0].group(0))
-    asset(rel, f"mpv-x86_64-{date}-git-{githash}.7z")
     f.set("MpvForkVersion", const("MpvForkVersion"), tag)
     f.set("MpvForkBuildDate", const("MpvForkBuildDate"), date)
     f.set("MpvForkGitHash", const("MpvForkGitHash"), githash)
+    for name, pin in ((dev[0].group(0), "MpvForkDevSha256"),
+                      (f"mpv-x86_64-{date}-git-{githash}.7z", "MpvForkPlayerSha256")):
+        sha, _ = digest(asset(rel, name))
+        f.set(pin, const(pin, SHA), sha)
     notes = (
         f"Pins the Windows mpv fork build [{tag}]({rel['html_url']}). The Linux bundle "
         "(`MpvForkLinuxVersion`) is its own release and PR; ship both from the same fork commit. "
@@ -256,8 +262,9 @@ def bump_mpv_linux(tag, changes, allow_downgrade):
     guard_downgrade("MpvForkLinuxVersion", f.get("MpvForkLinuxVersion", const("MpvForkLinuxVersion")),
                     tag, allow_downgrade)
     rel = release("the-database/mpv", tag)
-    asset(rel, f"mpv-linux-x64-{tag}.tar.zst")
     f.set("MpvForkLinuxVersion", const("MpvForkLinuxVersion"), tag)
+    sha, _ = digest(asset(rel, f"mpv-linux-x64-{tag}.tar.zst"))
+    f.set("MpvForkLinuxSha256", const("MpvForkLinuxSha256", SHA), sha)
     notes = (
         f"Pins the Linux mpv fork bundle [{tag}]({rel['html_url']}). The Windows build "
         "(`MpvForkVersion`) is its own release and PR; ship both from the same fork commit, and update "
@@ -272,9 +279,11 @@ def bump_manager(tag, changes, allow_downgrade):
     f = File(PROGRAM, changes)
     guard_downgrade("ManagerVersion", f.get("ManagerVersion", const("ManagerVersion")), tag, allow_downgrade)
     rel = release("the-database/AnimeJaNaiManager", tag)
-    for name in ("AnimeJaNaiManager-portable-x64.zip", "AnimeJaNaiManager-portable-linux-x64.tar.zst"):
-        asset(rel, name)
     f.set("ManagerVersion", const("ManagerVersion"), tag)
+    for name, pin in (("AnimeJaNaiManager-portable-x64.zip", "ManagerSha256Win"),
+                      ("AnimeJaNaiManager-portable-linux-x64.tar.zst", "ManagerSha256Linux")):
+        sha, _ = digest(asset(rel, name))
+        f.set(pin, const(pin, SHA), sha)
     set_source(f, "AddonManagerSource", "the-database/AnimeJaNaiManager", tag, "AnimeJaNaiManager")
     notes = (
         f"Pins [AnimeJaNai Manager {tag}]({rel['html_url']}). Update the comment after "
@@ -329,8 +338,30 @@ def bump_aji_runtime(tag, changes, allow_downgrade):
     return [f], f"Bump aji-runtime to {tag}", notes
 
 
+def bump_rife(tag, changes, allow_downgrade):
+    if not re.fullmatch(r"models-rife-[A-Za-z0-9._-]+", tag):
+        raise Fail(f"{tag} isn't a RIFE model release tag (models-rife-<set>)")
+    f = File(PROGRAM, changes)
+    guard_downgrade("RifeModelsVersion", f.get("RifeModelsVersion", const("RifeModelsVersion")), tag, allow_downgrade)
+    rel = release("the-database/animejanai-inference", tag)
+    archives = [a["name"] for a in rel["assets"] if a["name"].endswith(".7z")]
+    if len(archives) != 1:
+        raise Fail(f"{tag} should carry one .7z model archive, found {len(archives)}")
+    f.set("RifeModelsVersion", const("RifeModelsVersion"), tag)
+    f.set("RifeModelsAsset", const("RifeModelsAsset"), archives[0])
+    sha, _ = digest(asset(rel, archives[0]))
+    f.set("RifeModelsSha256", const("RifeModelsSha256", SHA), sha)
+    notes = (
+        f"Pins the RIFE models [{tag}]({rel['html_url']}). Update the comments after `RifeModelsVersion` "
+        "and `RifeModelsAsset` by hand. New file names mean new TensorRT engines on first play. To test "
+        "it, run the assembler from this branch and play a clip with a RIFE profile."
+    )
+    return [f], f"Bump the RIFE models to {tag}", notes
+
+
 SOURCES = {"libaji": bump_libaji, "mpv-winbuild": bump_winbuild, "mpv-linux": bump_mpv_linux,
-           "manager": bump_manager, "runtime-packs": bump_runtime, "aji-runtime": bump_aji_runtime}
+           "manager": bump_manager, "runtime-packs": bump_runtime, "aji-runtime": bump_aji_runtime,
+           "rife-models": bump_rife}
 
 if __name__ == "__main__":
     run(SOURCES, "mpv-AnimeJaNai")

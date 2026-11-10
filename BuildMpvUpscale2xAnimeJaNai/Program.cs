@@ -90,6 +90,11 @@ const string AjiRuntimeVersion    = "v0.2.0";
 const string AjiRuntimeSha256Win   = "dc789dd4febdd4ddbb8f4763667c7fb1a1a87459585b9c845862ecca7243683d";
 const string AjiRuntimeSha256Linux = "4be991f04ebc12ad8f73acccec251538ef6f4cac740313362dafbb844dd79f20";
 const string AjiVersion           = "v0.25.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json)
+// The SHA-256s of the release assets the build downloads (aji-windows-x64.zip, aji-linux-x64.tar.zst),
+// like every GitHub-hosted pin below: computed from the downloaded file by scripts/bump_pins.py (which
+// cross-checks GitHub's recorded digest) and enforced on every build.
+const string AjiSha256Win         = "0c946356e515edb0f1365287650d5ad3cb9a460a6eca385912aa502e6e165ab3";
+const string AjiSha256Linux       = "7c4e33eac46ef07af016a304dfde0f14c25ff3017fcec96e80d9797fc6f800b1";
 
 // 7-Zip "extra" (Windows) / linux-x64 standalone console, from the
 // github.com/ip7z/7zip release (7-zip.org no longer hosts every version).
@@ -101,6 +106,8 @@ const string SevenZipSha256Linux  = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089
 const string MpvNetVersion        = "v7.1.2.0-ajn.2";
 const string MpvNetSha256         = "b3a6938a8b73f83ecc6eb65ba65a95051ff3c02f1bea7c90e0ec80f8ce41ec38";
 const string ManagerVersion       = "0.12.0";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
+const string ManagerSha256Win     = "b1656f7ca2a6d0610202717b81808d3814f74f248a028b8d77a8920896b66481";
+const string ManagerSha256Linux   = "5c498b89d115222603a1e0b788331d69e2d646a9c52959c4523a95612ea42c04";
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -110,6 +117,7 @@ const string OrtDmlVersion        = "1.24.4";       // Microsoft.ML.OnnxRuntime.
 const string DirectMLVersion      = "1.15.4";       // Microsoft.AI.DirectML (NuGet)
 const string RifeModelsVersion    = "models-rife-fp16-2"; // animejanai-inference release tag (fp16 conversions; set 2 names the H/W dims for DirectML)
 const string RifeModelsAsset      = "rife-fp16-2.7z";     // that release's archive; its name carries the set number too
+const string RifeModelsSha256     = "85fa8aa7408f82636f53a3179998e021708746ff85c7468ae11a0d3157af1451";
 
 // Custom libmpv fork build. On Windows from the github.com/the-database/
 // mpv-winbuild release; on Linux from a github.com/the-database/mpv release
@@ -123,6 +131,8 @@ const string RifeModelsAsset      = "rife-fp16-2.7z";     // that release's arch
 const string MpvForkVersion       = "2026-11-09-484611bce0"; // release tag (Windows winbuild)
 const string MpvForkBuildDate     = "20261109";     // build date in the Windows dev archive filename
 const string MpvForkGitHash       = "484611bce0";   // git short hash (master; aji ABI v9)
+const string MpvForkDevSha256     = "cd6acd8eb8a78dfad66a55ff2b1bbb2474b77b945311b3919824c3ef83ce6490"; // mpv-dev-x86_64-<date>-git-<hash>.7z
+const string MpvForkPlayerSha256  = "40e84b3632d855c488713939044bbd2a0d8f547aae9f364015b399b89bc46ef0"; // mpv-x86_64-<date>-git-<hash>.7z
 // Fill these only after the reviewed addon commits have official releases.
 // Addon natives have a separate release; ordinary MpvFork* pins stay independent.
 // ManagerVersion/AjiVersion above must point to matching official releases.
@@ -139,6 +149,7 @@ const string AddonInferenceSource = "458c2f08a2f4dd5fa863adac38b957ee503ce9c4"; 
 // tags <yyyy-mm-dd>-<7-char hash> by default and the asset filename embeds the
 // tag, so pin it exactly as published.
 const string MpvForkLinuxVersion  = "2026-11-09-484611b";
+const string MpvForkLinuxSha256   = "ec6fe73d019fb962572b41506d8bb90396b4e9575f8098f962ac0901bdac6faf";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor
@@ -534,6 +545,7 @@ async Task InstallAji()
         {
             Console.WriteLine($"Downloading aji ({progress}%)...");
         });
+        VerifySha256(targetPath, plat.IsWindows ? AjiSha256Win : AjiSha256Linux);
     }
 
     if (plat.IsWindows)
@@ -641,6 +653,7 @@ async Task InstallRife()
     {
         Console.WriteLine($"Downloading RIFE fp16 models ({progress}%)...");
     });
+    VerifySha256(targetPath, RifeModelsSha256);
 
     Directory.CreateDirectory(rifePath);
     // SevenZipExtractor wraps the Windows 7z.dll and is not cross-platform;
@@ -687,6 +700,7 @@ async Task InstallCustomLibmpv()
     {
         Console.WriteLine($"Downloading custom libmpv fork ({progress}%)...");
     });
+    VerifySha256(targetPath, MpvForkDevSha256);
 
     Console.WriteLine("Extracting custom libmpv fork...");
     var targetExtractPath = Path.Combine(installDirectory, "temp-libmpv");
@@ -745,6 +759,7 @@ async Task InstallCustomMpvExe()
     {
         Console.WriteLine($"Downloading custom mpv.exe fork ({progress}%)...");
     });
+    VerifySha256(targetPath, MpvForkPlayerSha256);
 
     Console.WriteLine("Extracting custom mpv.exe fork...");
     // Just the player entry points: mpv.exe (GUI) + mpv.com (console wrapper).
@@ -803,6 +818,7 @@ async Task InstallLinuxMpv()
         {
             Console.WriteLine($"Downloading Linux mpv ({progress}%)...");
         });
+        VerifySha256(targetPath, MpvForkLinuxSha256);
         await RunProcess("tar", $"--zstd -xf \"{targetPath}\" -C \"{mpvRoot}\"");
         File.Delete(targetPath);
     }
@@ -929,6 +945,7 @@ async Task InstallAnimeJaNaiManager()
         Console.WriteLine($"  WARNING: Linux Manager not available ({e.Message}); skipping.");
         return;
     }
+    VerifySha256(targetPath, plat.IsWindows ? ManagerSha256Win : ManagerSha256Linux);
 
     Console.WriteLine("Extracting AnimeJaNai Manager...");
     if (plat.IsWindows)
@@ -1437,12 +1454,19 @@ async Task<List<string>> EmitComponentPacks()
             var fi = new FileInfo(Path.Combine(installDirectory, f));
             return fi.Exists ? fi.Length : 0L;
         });
+        string sha256;
+        using (var stream = File.OpenRead(archive))
+        {
+            sha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        }
         index.Add(new
         {
             name,
             dep,
             asset = Path.GetFileName(archive),
             bytes = new FileInfo(archive).Length,
+            // the updater checks each download against it (older indexes have none)
+            sha256,
             installed_bytes = installedBytes,
             files = allFiles,
         });
