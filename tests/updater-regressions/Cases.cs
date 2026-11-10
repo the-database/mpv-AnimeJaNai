@@ -125,6 +125,37 @@ try
             "Normal package accepted a different release");
         Pass("normal-version-validation");
     }
+    {
+        // The non-journaled update's preflight: a replaced file held open by another program stops
+        // the update before anything changes; preserved files, the running updater, files the update
+        // doesn't replace and read-only files don't.
+        string src = Path.Combine(root, "preflight-src"), dst = Path.Combine(root, "preflight-dst");
+        foreach (var rel in new[] { "a.dll", "sub/b.txt", "animejanai/animejanai.conf", "AnimeJaNaiUpdater.exe", "new.txt" })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(src, rel))!);
+            File.WriteAllText(Path.Combine(src, rel), "new");
+            if (rel == "new.txt") continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dst, rel))!);
+            File.WriteAllText(Path.Combine(dst, rel), "old");
+        }
+        var preserve = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "animejanai/animejanai.conf" };
+        File.SetAttributes(Path.Combine(dst, "a.dll"), FileAttributes.ReadOnly);
+        using (new FileStream(Path.Combine(dst, "animejanai/animejanai.conf"), FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (new FileStream(Path.Combine(dst, "AnimeJaNaiUpdater.exe"), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Production.Preflight(src, dst, preserve, "AnimeJaNaiUpdater.exe");
+            string? error = null;
+            using (new FileStream(Path.Combine(dst, "sub", "b.txt"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                try { Production.Preflight(src, dst, preserve, "AnimeJaNaiUpdater.exe"); }
+                catch (IOException e) { error = e.Message; }
+            }
+            Check(error != null && error.StartsWith("sub/b.txt is in use"), "Preflight missed a file in use: " + error);
+            Check(File.ReadAllText(Path.Combine(dst, "sub", "b.txt")) == "old", "Preflight changed a file");
+            Production.Preflight(src, dst, preserve, "AnimeJaNaiUpdater.exe");
+        }
+        Pass("preflight-in-use");
+    }
     Console.WriteLine($"Completed {passed} updater regression cases.");
     return 0;
 }
