@@ -8,8 +8,9 @@ local MAX_DURATION = 2147483
 -- chain logs "Disabling filter aji because it has failed." and plays the rest
 -- of the file without it. Nothing else reports that, and the stats log still
 -- describes the last chain, so this watches the log for that line and keeps
--- the filter's last error as the reason. The failed filter stays off until the
--- filter chain is rebuilt: the next file, or upscaling turned off and on.
+-- the filter's last error as the reason. The failed filter stays off until it
+-- is rebuilt: the next file, a profile key (animejanai_slot.lua rebuilds it),
+-- or upscaling turned off and on.
 local stopped = nil
 local last_error = nil
 
@@ -23,7 +24,8 @@ end
 
 local function stopped_message()
     return "Upscaling stopped: " .. stopped ..
-           "\nOpen the file again to retry. Press ~ for the console log."
+           "\nPress a profile key (Shift+1-3, Ctrl+1-9) or open the file again to retry." ..
+           "\nPress ~ for the console log."
 end
 
 mp.enable_messages("error")
