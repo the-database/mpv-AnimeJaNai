@@ -692,6 +692,26 @@ async Task DownloadWithProgress(Asset asset, string dest)
     });
 }
 
+// A downloaded pack against packs.json's sha256 (older indexes have none).
+static void VerifyPackSha256(Pack pack, string archive)
+{
+    if (string.IsNullOrEmpty(pack.Sha256))
+    {
+        return;
+    }
+    string actual;
+    using (var stream = File.OpenRead(archive))
+    {
+        actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+    }
+    if (!actual.Equals(pack.Sha256, StringComparison.OrdinalIgnoreCase))
+    {
+        TryDelete(() => File.Delete(archive));
+        throw new InvalidOperationException(
+            $"{pack.Asset}: the download doesn't match its SHA-256 (got {actual.ToLowerInvariant()}, expected {pack.Sha256.ToLowerInvariant()}); try again");
+    }
+}
+
 // ---- extraction / apply --------------------------------------------------------------------
 
 void Extract(string archiveEntry, string outDir)
@@ -1004,7 +1024,8 @@ async Task<PackIndex> GetReleasePackIndexAsync()
             e.GetProperty("bytes").GetInt64(),
             files,
             e.TryGetProperty("dep", out var d) ? d.GetString() : null,
-            e.TryGetProperty("installed_bytes", out var ib) ? ib.GetInt64() : 0));
+            e.TryGetProperty("installed_bytes", out var ib) ? ib.GetInt64() : 0,
+            Sha256: e.TryGetProperty("sha256", out var sha) ? sha.GetString() : null));
     }
     return new PackIndex(
         doc.RootElement.TryGetProperty("package_version", out var v)
@@ -1326,6 +1347,7 @@ async Task<int> InstallComponentAsync(string name)
     {
         File.Copy(pack.Url, archive, true); // ANIMEJANAI_PACKS_DIR dev path
     }
+    VerifyPackSha256(pack, archive);
     Console.WriteLine($"Installing {pack.Name}...");
     if (addonUpdate)
     {
@@ -1869,7 +1891,7 @@ record Asset(string Name, string Url);
 // Store: one of the shared runtime release's packs (aji-runtime installs it into the pack store; Files
 // are paths inside the pack).
 record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files, string? Dep,
-            long InstalledBytes = 0, bool Store = false);
+            long InstalledBytes = 0, bool Store = false, string? Sha256 = null);
 // Replaced (store mode): this release's own packs that the store's replace, for the files an older
 // version installed.
 record PackIndex(string PackageVersion, List<Pack> Packs, List<Pack>? Replaced = null);
