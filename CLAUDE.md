@@ -269,6 +269,12 @@ The `aji` engine parses `animejanai.conf` (the old Python `animejanai_config.rea
 `stats=` path in the `vf=` option, surfaced via `aji_current_log`) — it carries the active profile,
 chain, models, and engine-build status.
 
+The filter doesn't rewrite that file when it fails at runtime: mpv's filter chain logs `Disabling
+filter aji because it has failed.` and plays on without it until the chain is rebuilt (the next
+file, or upscaling turned off and on; a seek doesn't re-enable it). `animejanaistats.lua` watches
+the log for that line (`mp.enable_messages`), shows the filter's last error on the OSD, and
+`Ctrl+J` shows it instead of the stale stats.
+
 ### `AnimeJaNaiManager.exe` (the editor)
 
 Downloaded at build time by `InstallAnimeJaNaiManager()` from a release of
