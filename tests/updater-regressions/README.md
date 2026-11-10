@@ -10,7 +10,7 @@ in-memory response handler; filesystem operations are real and confined to new
 fixtures under the test output directory. No download, installer or user
 configuration is used. Failed assertions return a nonzero exit code.
 
-The replacement/deletion lock cases require Windows sharing semantics. Cases
+The replacement/deletion lock cases and the update preflight case require Windows sharing semantics. Cases
 cover preserved bindings after replacement failure, retry after retirement
 failure, idempotence, CRLF, empty/absent legacy files, managed-block refresh, exact installed-release selection,
 missing version/release, and application-update, local-pack and Linux-index controls.

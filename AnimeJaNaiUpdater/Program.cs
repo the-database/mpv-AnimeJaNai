@@ -749,6 +749,9 @@ void ApplyOver(string sourceRoot, string targetRoot, bool overlay)
     string ownExe = Environment.ProcessPath ?? "";
     string ownName = string.IsNullOrEmpty(ownExe) ? "" : Path.GetFileName(ownExe);
     string newUpdater = Path.Combine(sourceRoot, ownName);
+
+    EnsureReplaceable(sourceRoot, targetRoot, preserve, ownName);
+
     if (!string.IsNullOrEmpty(ownExe) && File.Exists(newUpdater) &&
         Path.GetFullPath(ownExe).Equals(Path.GetFullPath(Path.Combine(targetRoot, ownName)), StringComparison.OrdinalIgnoreCase))
     {
@@ -758,6 +761,43 @@ void ApplyOver(string sourceRoot, string targetRoot, bool overlay)
     }
 
     CopyTree(sourceRoot, targetRoot, sourceRoot, preserve);
+}
+
+// Fails before anything is changed when a file the update replaces is in use (another program has it
+// open: a second player window, the Manager, mpv.exe), so a failed update leaves the old version intact
+// instead of half-updated. The journaled addon path above has its own preflight. Windows sharing
+// semantics: on Linux an open file never refuses this, and replacing it is safe anyway.
+static void EnsureReplaceable(string sourceRoot, string targetRoot, HashSet<string> preserve, string ownName)
+{
+    foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+    {
+        string rel = NormalizeRel(Path.GetRelativePath(sourceRoot, file));
+        string dst = Path.Combine(targetRoot, rel);
+        if (IsPreserved(rel, preserve) || rel.Equals(ownName, StringComparison.OrdinalIgnoreCase) || !File.Exists(dst))
+        {
+            continue;
+        }
+        // CopyTree clears the read-only bit before replacing a file; clear it first here too, or the
+        // write probe below would fail on it.
+        TryDelete(() =>
+        {
+            var attrs = File.GetAttributes(dst);
+            if (attrs.HasFlag(FileAttributes.ReadOnly)) File.SetAttributes(dst, attrs & ~FileAttributes.ReadOnly);
+        });
+        try
+        {
+            using var _ = new FileStream(dst, FileMode.Open, FileAccess.ReadWrite,
+                FileShare.ReadWrite | FileShare.Delete);
+        }
+        catch (IOException e)
+        {
+            throw new IOException($"{rel} is in use by another program. Close it and try again.", e);
+        }
+        catch (UnauthorizedAccessException e)
+        {
+            throw new IOException($"{rel} can't be replaced (access denied). Nothing was changed.", e);
+        }
+    }
 }
 
 void CopyTree(string srcDir, string dstDir, string sourceRoot, HashSet<string> preserve)
