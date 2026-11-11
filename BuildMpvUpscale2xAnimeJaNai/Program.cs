@@ -147,8 +147,8 @@ const string AddonInferenceSource = "513febececcfce2645588d1c04cc9932661a0ee0"; 
 // Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
 // tags <yyyy-mm-dd>-<7-char hash> by default and the asset filename embeds the
 // tag, so pin it exactly as published.
-const string MpvForkLinuxVersion  = "2026-11-11-096b120";
-const string MpvForkLinuxSha256   = "f090487bd642b78145286b142fd94d68bc237dd468132adb2b22389f8c66de8c";
+const string MpvForkLinuxVersion  = "2026-11-11-0426134";
+const string MpvForkLinuxSha256   = "e977cf943f1fc530117040587d10c7ad4f64f28b38bc3dd38a52e240a3698692";
 
 // ---------------------------------------------------------------------------
 // Target / platform descriptor
