@@ -4,8 +4,10 @@
 Sources (constants in BuildMpvUpscale2xAnimeJaNai/Program.cs):
   libaji        the-database/animejanai-inference release: AjiVersion, AjiSha256Win/Linux, plus
                 AddonInferenceSource (the tag's commit)
-  mpv-winbuild  the-database/mpv-winbuild release: MpvForkVersion, plus MpvForkBuildDate and
-                MpvForkGitHash read from its archive filenames, MpvForkDevSha256/PlayerSha256
+  mpv-winbuild  an addon release of the-database/mpv-winbuild (<date>-<hash>-addons-<run id>; the
+                only Windows build): MpvForkVersion, plus MpvForkBuildDate and MpvForkGitHash read
+                from its archive filenames, and MpvForkNativeMetadataSha256 (its native metadata,
+                which pins every file the assembler takes from the archives)
   mpv-linux     the-database/mpv Linux bundle release: MpvForkLinuxVersion, MpvForkLinuxSha256
   manager       the-database/AnimeJaNaiManager release: ManagerVersion, ManagerSha256Win/Linux, plus
                 AddonManagerSource (the tag's commit)
@@ -231,29 +233,34 @@ def bump_libaji(tag, changes, allow_downgrade):
 
 
 def bump_winbuild(tag, changes, allow_downgrade):
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}-[0-9a-f]{7,40}", tag):
-        raise Fail(f"{tag} isn't an mpv-winbuild release tag (<yyyy-mm-dd>-<hash>)")
+    m = re.fullmatch(r"\d{4}-\d{2}-\d{2}-([0-9a-f]{10})-addons-\d+", tag)
+    if not m:
+        raise Fail(f"{tag} isn't an mpv-winbuild addon release tag (<yyyy-mm-dd>-<hash>-addons-<run id>); "
+                   "only the addon build ships on Windows")
     f = File(PROGRAM, changes)
     guard_downgrade("MpvForkVersion", f.get("MpvForkVersion", const("MpvForkVersion")), tag, allow_downgrade)
     rel = release("the-database/mpv-winbuild", tag)
-    dev = [m for a in rel["assets"] if (m := re.fullmatch(r"mpv-dev-x86_64-(\d{8})-git-([0-9a-f]+)\.7z", a["name"]))]
+    dev = [d for a in rel["assets"] if (d := re.fullmatch(r"mpv-dev-x86_64-(\d{8})-git-([0-9a-f]+)\.7z", a["name"]))]
     if len(dev) != 1:
         raise Fail(f"{tag} should carry one mpv-dev-x86_64-<date>-git-<hash>.7z, found {len(dev)}")
     date, githash = dev[0].groups()
+    if githash != m.group(1):
+        raise Fail(f"{tag}: the archives are for {githash}, the tag names {m.group(1)}")
+    asset(rel, dev[0].group(0))
+    asset(rel, f"mpv-x86_64-{date}-git-{githash}.7z")
+    sha, _ = digest(asset(rel, "mpv-addon-native-x86_64.json"))
     f.set("MpvForkVersion", const("MpvForkVersion"), tag)
     f.set("MpvForkBuildDate", const("MpvForkBuildDate"), date)
     f.set("MpvForkGitHash", const("MpvForkGitHash"), githash)
-    for name, pin in ((dev[0].group(0), "MpvForkDevSha256"),
-                      (f"mpv-x86_64-{date}-git-{githash}.7z", "MpvForkPlayerSha256")):
-        sha, _ = digest(asset(rel, name))
-        f.set(pin, const(pin, SHA), sha)
+    f.set("MpvForkNativeMetadataSha256", const("MpvForkNativeMetadataSha256", SHA), sha)
     notes = (
-        f"Pins the Windows mpv fork build [{tag}]({rel['html_url']}). The Linux bundle "
-        "(`MpvForkLinuxVersion`) is its own release and PR; ship both from the same fork commit. "
-        "To test it, run the assembler (or `Deploy`) from this branch and play a clip with upscaling on."
+        f"Pins the Windows mpv fork build [{tag}]({rel['html_url']}), the addon build: the assembler "
+        "takes every file its `mpv-addon-native-x86_64.json` lists (each pinned by SHA-256) from the "
+        "dev and player archives. The Linux bundle (`MpvForkLinuxVersion`) is its own release and PR; "
+        "ship both from the same fork commit. To test it, run the assembler (or `Deploy`) from this "
+        "branch and play a clip with upscaling on."
     )
     return [f], f"Bump the Windows mpv fork build to {tag}", notes
-
 
 def bump_mpv_linux(tag, changes, allow_downgrade):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", tag):

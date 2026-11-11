@@ -9,10 +9,6 @@ on:
       linux_only:
         description: 'Build only the Linux artifacts (skip the Windows leg)'
         default: 'false'
-      addons:
-        description: 'Include Windows addon support (preview)'
-        type: boolean
-        default: false
       windows_only:
         description: 'Build only the Windows artifacts (skip the Linux leg)'
         default: 'false'
@@ -35,7 +31,6 @@ jobs:
       run: dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
 
     - name: Build addon support from the release checkout
-      if: ${{ inputs.addons }}
       shell: pwsh
       run: |
         ./addons/tools/bootstrap.ps1
@@ -48,13 +43,9 @@ jobs:
       # TensorRT; installs take it from the shared pack store, so only RIFE is a pack.
       shell: pwsh
       env:
-        ADDONS: ${{ inputs.addons }}
         RELEASE_VERSION: ${{ inputs.release_version }}
       run: |
         $arguments = @($env:RELEASE_VERSION, '--packs', '--store')
-        if ($env:ADDONS -eq 'true') {
-          $arguments += '--addons'
-        }
         & ./publish/BuildMpvUpscale2xAnimeJaNai.exe @arguments
         if ($LASTEXITCODE -ne 0) { throw 'Package assembly failed.' }
 
@@ -82,10 +73,8 @@ jobs:
       run: |
         choco install innosetup -y
         $ver = "${{ github.event.inputs.release_version }}"
-        $addonFlags = @()
-        if ('${{ inputs.addons }}' -eq 'true') { $addonFlags += '/DEnableAddons' }
         & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
-          @addonFlags `
+          /DEnableAddons `
           "/DAppVersion=$ver" `
           "/DSourceDir=$(Resolve-Path "publish/mpv-upscale-2x_animejanai-v$ver")" `
           "/O$(Get-Location)" `
