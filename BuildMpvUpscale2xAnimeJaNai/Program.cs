@@ -105,9 +105,9 @@ const string SevenZipSha256Win    = "f27a8f103c84785026edcba1f67faf1357225df9d19
 const string SevenZipSha256Linux  = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089d6833dc30f8350a3b232e";
 const string MpvNetVersion        = "v7.1.2.0-ajn.2";
 const string MpvNetSha256         = "b3a6938a8b73f83ecc6eb65ba65a95051ff3c02f1bea7c90e0ec80f8ce41ec38";
-const string ManagerVersion       = "0.12.0";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
-const string ManagerSha256Win     = "b1656f7ca2a6d0610202717b81808d3814f74f248a028b8d77a8920896b66481";
-const string ManagerSha256Linux   = "5c498b89d115222603a1e0b788331d69e2d646a9c52959c4523a95612ea42c04";
+const string ManagerVersion       = "0.13.0";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
+const string ManagerSha256Win     = "3ffc18b6a3f3f2d5f3f79d3a25fbb406251a150e1d8cc941594b7501a01b628f";
+const string ManagerSha256Linux   = "3c3f679974c4486213d3554e42c8abfdf7267aa3887a087d265ee8cc2d9c8335";
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -141,7 +141,7 @@ const string AddonMpvForkVersion = "2026-11-09-484611bce0-addons-42608288980";
 const string AddonMpvForkBuildDate = "20261109";
 const string AddonMpvForkGitHash = "484611bce0";
 const string AddonNativeMetadataSha256 = "510bd4677bd145b18d12645123046eed5cc0f2585394fadc8e34e263629d71e8";
-const string AddonManagerSource = "431e77263a4016aa03c068e919205a8ca7367c9f";   // AnimeJaNaiManager 0.12.0
+const string AddonManagerSource = "74b3133f26db07a619882d700a64dce1c5ffabb3";   // AnimeJaNaiManager 0.13.0
 const string AddonInferenceSource = "458c2f08a2f4dd5fa863adac38b957ee503ce9c4"; // animejanai-inference v0.25.0
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
