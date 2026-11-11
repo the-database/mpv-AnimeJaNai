@@ -137,10 +137,10 @@ const string MpvForkPlayerSha256  = "3cb8f181c8cbcde9e3dee324282d707e6a3a1629264
 // Addon natives have a separate release; ordinary MpvFork* pins stay independent.
 // ManagerVersion/AjiVersion above must point to matching official releases.
 // Public deployment fails before downloading anything until this gate is set.
-const string AddonMpvForkVersion = "2026-11-09-484611bce0-addons-42608288980";
-const string AddonMpvForkBuildDate = "20261109";
-const string AddonMpvForkGitHash = "484611bce0";
-const string AddonNativeMetadataSha256 = "510bd4677bd145b18d12645123046eed5cc0f2585394fadc8e34e263629d71e8";
+const string AddonMpvForkVersion = "2026-11-11-5bbd4c1618-addons-43069134102";
+const string AddonMpvForkBuildDate = "20261111";
+const string AddonMpvForkGitHash = "5bbd4c1618";
+const string AddonNativeMetadataSha256 = "07a3e15cf1dfa484a16248ada860d73ddeaa7da857d12ad797b6b958dd658121";
 const string AddonManagerSource = "74b3133f26db07a619882d700a64dce1c5ffabb3";   // AnimeJaNaiManager 0.13.0
 const string AddonInferenceSource = "513febececcfce2645588d1c04cc9932661a0ee0"; // animejanai-inference v0.27.0
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
