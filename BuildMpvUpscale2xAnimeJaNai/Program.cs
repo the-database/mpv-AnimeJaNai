@@ -128,11 +128,11 @@ const string RifeModelsSha256     = "85fa8aa7408f82636f53a3179998e021708746ff85c
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
 // v9); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-11-09-484611bce0"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20261109";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "484611bce0";   // git short hash (master; aji ABI v9)
-const string MpvForkDevSha256     = "cd6acd8eb8a78dfad66a55ff2b1bbb2474b77b945311b3919824c3ef83ce6490"; // mpv-dev-x86_64-<date>-git-<hash>.7z
-const string MpvForkPlayerSha256  = "40e84b3632d855c488713939044bbd2a0d8f547aae9f364015b399b89bc46ef0"; // mpv-x86_64-<date>-git-<hash>.7z
+const string MpvForkVersion       = "2026-11-11-5bbd4c1618"; // release tag (Windows winbuild)
+const string MpvForkBuildDate     = "20261111";     // build date in the Windows dev archive filename
+const string MpvForkGitHash       = "5bbd4c1618";   // git short hash (master; aji ABI v9)
+const string MpvForkDevSha256     = "dd42bf7f60474e7e06fd4489a7d1388e86ffb9f0cb42334c48c8652e38fbb85a"; // mpv-dev-x86_64-<date>-git-<hash>.7z
+const string MpvForkPlayerSha256  = "3cb8f181c8cbcde9e3dee324282d707e6a3a16292649d5d465a6238b5ce36ae6"; // mpv-x86_64-<date>-git-<hash>.7z
 // Fill these only after the reviewed addon commits have official releases.
 // Addon natives have a separate release; ordinary MpvFork* pins stay independent.
 // ManagerVersion/AjiVersion above must point to matching official releases.
