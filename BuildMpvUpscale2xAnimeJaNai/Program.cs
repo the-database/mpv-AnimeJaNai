@@ -119,28 +119,27 @@ const string RifeModelsVersion    = "models-rife-fp16-2"; // animejanai-inferenc
 const string RifeModelsAsset      = "rife-fp16-2.7z";     // that release's archive; its name carries the set number too
 const string RifeModelsSha256     = "85fa8aa7408f82636f53a3179998e021708746ff85c7468ae11a0d3157af1451";
 
-// Custom libmpv fork build. On Windows from the github.com/the-database/
-// mpv-winbuild release; on Linux from a github.com/the-database/mpv release
-// (mpv + libmpv.so.2 carrying vf_animejanai, built in the old-baseline
-// container). The vf_animejanai filter lives inside this libmpv build; rebuild
+// Custom libmpv fork build. On Windows from the addon build of a
+// github.com/the-database/mpv-winbuild release; on Linux from a
+// github.com/the-database/mpv release (mpv + libmpv.so.2 carrying
+// vf_animejanai, built in the old-baseline container). The vf_animejanai filter lives inside this libmpv build; rebuild
 // + bump alongside AjiVersion when the filter changes.
 //
 // IMPORTANT: the filter now lives on the mpv fork's `master` branch (aji ABI
 // v9); the old standalone `vf-animejanai` branch is stale (ABI v4) and must
 // NOT be used. The pin below is a master commit.
-const string MpvForkVersion       = "2026-11-11-5bbd4c1618"; // release tag (Windows winbuild)
-const string MpvForkBuildDate     = "20261111";     // build date in the Windows dev archive filename
-const string MpvForkGitHash       = "5bbd4c1618";   // git short hash (master; aji ABI v9)
-const string MpvForkDevSha256     = "dd42bf7f60474e7e06fd4489a7d1388e86ffb9f0cb42334c48c8652e38fbb85a"; // mpv-dev-x86_64-<date>-git-<hash>.7z
-const string MpvForkPlayerSha256  = "3cb8f181c8cbcde9e3dee324282d707e6a3a16292649d5d465a6238b5ce36ae6"; // mpv-x86_64-<date>-git-<hash>.7z
-// Fill these only after the reviewed addon commits have official releases.
-// Addon natives have a separate release; ordinary MpvFork* pins stay independent.
-// ManagerVersion/AjiVersion above must point to matching official releases.
-// Public deployment fails before downloading anything until this gate is set.
-const string AddonMpvForkVersion = "2026-11-11-5bbd4c1618-addons-43069134102";
-const string AddonMpvForkBuildDate = "20261111";
-const string AddonMpvForkGitHash = "5bbd4c1618";
-const string AddonNativeMetadataSha256 = "07a3e15cf1dfa484a16248ada860d73ddeaa7da857d12ad797b6b958dd658121";
+//
+// Windows: the release of an addon run (`<date>-<hash>-addons-<run id>`).
+// Its mpv-addon-native-x86_64.json lists every file taken from the dev and
+// player archives (libmpv-2.dll, mpv.exe/mpv.com, ajn-mvtools.dll, the addon
+// natives) with its SHA-256; MpvForkNativeMetadataSha256 pins that file.
+// `scripts/bump_pins.py mpv-winbuild <tag>` sets all four from the release.
+const string MpvForkVersion = "2026-11-11-096b120ea3-addons-43101021549"; // release tag (Windows winbuild)
+const string MpvForkBuildDate = "20261111";   // build date in the archive filenames
+const string MpvForkGitHash = "096b120ea3";   // git short hash (master; aji ABI v9)
+const string MpvForkNativeMetadataSha256 = "8da35c58facdfaa64d0b3f6c387b66a391fc85be6eb074a9e69fb8095b76163c"; // mpv-addon-native-x86_64.json
+// The commits of the ManagerVersion/AjiVersion releases above, recorded in
+// addon-package.json (bump_pins.py sets them with those pins).
 const string AddonManagerSource = "74b3133f26db07a619882d700a64dce1c5ffabb3";   // AnimeJaNaiManager 0.13.0
 const string AddonInferenceSource = "513febececcfce2645588d1c04cc9932661a0ee0"; // animejanai-inference v0.27.0
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
@@ -170,24 +169,19 @@ TargetOs SelectTarget(string[] a)
 var target = SelectTarget(args);
 var plat = target == TargetOs.Windows ? Platform.Win : Platform.Linux;
 Console.WriteLine($"Target: {plat.Rid}");
-bool includeAddons = args.Contains("--addons");
+// Windows packages always carry addon support; the Linux package has none.
+bool includeAddons = plat.IsWindows;
 string? addonBundle = Environment.GetEnvironmentVariable("AJN_ADDON_BUNDLE");
-if (includeAddons && !plat.IsWindows)
-{
-    Console.Error.WriteLine("Addon support is Windows only in this preview. The Linux package excludes the addon runtime.");
-    Environment.ExitCode = 2;
-    return;
-}
-if (includeAddons && (string.IsNullOrWhiteSpace(AddonMpvForkVersion) ||
-    !System.Text.RegularExpressions.Regex.IsMatch(AddonMpvForkBuildDate, "^[0-9]{8}$") ||
-    !System.Text.RegularExpressions.Regex.IsMatch(AddonMpvForkGitHash, "^[0-9a-f]{10}$") ||
-    !System.Text.RegularExpressions.Regex.IsMatch(AddonNativeMetadataSha256, "^[0-9a-f]{64}$") ||
+if (includeAddons && (string.IsNullOrWhiteSpace(MpvForkVersion) ||
+    !System.Text.RegularExpressions.Regex.IsMatch(MpvForkBuildDate, "^[0-9]{8}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(MpvForkGitHash, "^[0-9a-f]{10}$") ||
+    !System.Text.RegularExpressions.Regex.IsMatch(MpvForkNativeMetadataSha256, "^[0-9a-f]{64}$") ||
     !System.Text.RegularExpressions.Regex.IsMatch(AddonManagerSource, "^[0-9a-f]{40}$") ||
     !System.Text.RegularExpressions.Regex.IsMatch(AddonInferenceSource, "^[0-9a-f]{40}$")))
-    throw new InvalidOperationException("Public addon release pins are not set. Publish the separate official addon-native release, then set AddonMpvForkVersion/BuildDate/GitHash, its metadata SHA-256 and the Manager/inference source pins. Use tools/assemble-addon-preview.py for pre-merge testing.");
+    throw new InvalidOperationException("The Windows mpv pins are not set. Run scripts/bump_pins.py mpv-winbuild <addon release tag> (and the manager/libaji bumps for the source pins). Use tools/assemble-addon-preview.py for pre-merge testing.");
 if (includeAddons && (string.IsNullOrWhiteSpace(addonBundle) || !File.Exists(Path.Combine(addonBundle, "host-build.json"))))
 {
-    Console.Error.WriteLine("--addons requires AJN_ADDON_BUNDLE built from this checkout by addons/tools/package.ps1.");
+    Console.Error.WriteLine("A Windows package needs AJN_ADDON_BUNDLE: the addon host bundle built from this checkout by addons/tools/package.ps1 (see docs/DEVELOPMENT.md).");
     Environment.ExitCode = 2;
     return;
 }
@@ -691,57 +685,22 @@ async Task InstallMpvnet()
     File.Delete(targetPath);
 }
 
-async Task InstallCustomLibmpv()
-{
-    Console.WriteLine("Downloading custom libmpv fork...");
-    var downloadUrl = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}/mpv-dev-x86_64-{MpvForkBuildDate}-git-{MpvForkGitHash}.7z";
-    var targetPath = Path.GetFullPath("mpv-dev.7z");
-    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
-    {
-        Console.WriteLine($"Downloading custom libmpv fork ({progress}%)...");
-    });
-    VerifySha256(targetPath, MpvForkDevSha256);
-
-    Console.WriteLine("Extracting custom libmpv fork...");
-    var targetExtractPath = Path.Combine(installDirectory, "temp-libmpv");
-    Directory.CreateDirectory(targetExtractPath);
-
-    using (ArchiveFile archiveFile = new(targetPath))
-    {
-        archiveFile.Extract(targetExtractPath);
-
-        File.Copy(
-            Path.Combine(targetExtractPath, "libmpv-2.dll"),
-            Path.Combine(installDirectory, "libmpv-2.dll"),
-            true // overwrite the stock mpv.net libmpv-2.dll
-        );
-        // New x64 GPL builds include the optional built-in RIFE detector.
-        // Older pinned releases omit it. Merely shipping it does not load it.
-        if (File.Exists(Path.Combine(targetExtractPath, "ajn-mvtools.dll")))
-        {
-            File.Copy(Path.Combine(targetExtractPath, "ajn-mvtools.dll"),
-                Path.Combine(installDirectory, "ajn-mvtools.dll"), true);
-            CopyDirectory(Path.Combine(targetExtractPath, "licenses", "mvtools"),
-                Path.Combine(installDirectory, "licenses", "mvtools"));
-        }
-    }
-    Directory.Delete(targetExtractPath, true);
-    File.Delete(targetPath);
-}
-
+// Windows player: libmpv-2.dll (replacing mpv.net's), the standalone
+// mpv.exe/mpv.com, ajn-mvtools.dll and the addon natives, all from the
+// MpvForkVersion release. Only the files its metadata lists are extracted.
 async Task<System.Text.Json.Nodes.JsonObject> InstallAddonNative()
 {
-    string release = $"https://github.com/the-database/mpv-winbuild/releases/download/{AddonMpvForkVersion}";
+    string release = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}";
     string metadata = Path.GetFullPath("mpv-addon-native-x86_64.json");
     await DownloadFileAsync(release + "/mpv-addon-native-x86_64.json", metadata, _ => { });
-    if (AddonRelease.Hash(metadata) != AddonNativeMetadataSha256)
+    if (AddonRelease.Hash(metadata) != MpvForkNativeMetadataSha256)
         throw new InvalidDataException("Official native producer metadata checksum mismatch.");
     var record = AddonRelease.ReadNative(metadata);
     var names = record["files"]!.AsObject().Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
     const string mvtoolsLicenses = "licenses/mvtools/";
     foreach (string prefix in new[] { "mpv-dev", "mpv" })
     {
-        string asset = $"{prefix}-x86_64-{AddonMpvForkBuildDate}-git-{AddonMpvForkGitHash}.7z";
+        string asset = $"{prefix}-x86_64-{MpvForkBuildDate}-git-{MpvForkGitHash}.7z";
         string archive = Path.GetFullPath(asset);
         await DownloadFileAsync(release + "/" + asset, archive, _ => { });
         using (var zip = new ArchiveFile(archive))
@@ -750,8 +709,7 @@ async Task<System.Text.Json.Nodes.JsonObject> InstallAddonNative()
                 string name = entry.FileName.Replace('\\', '/');
                 if (names.Contains(name))
                     entry.Extract(Path.Combine(installDirectory, name));
-                // The GPL detector's licence and provenance, as the ordinary
-                // libmpv install copies them (InstallCustomLibmpv).
+                // The GPL detector's licence and provenance.
                 else if (name.StartsWith(mvtoolsLicenses, StringComparison.Ordinal) && name.Length > mvtoolsLicenses.Length &&
                          name.IndexOf('/', mvtoolsLicenses.Length) < 0 && !entry.IsFolder)
                     entry.Extract(Path.Combine(installDirectory, "licenses", "mvtools", name[mvtoolsLicenses.Length..]));
@@ -762,42 +720,6 @@ async Task<System.Text.Json.Nodes.JsonObject> InstallAddonNative()
         !File.Exists(Path.Combine(installDirectory, "licenses", "mvtools", "LICENSE")))
         throw new InvalidDataException("The addon player release ships ajn-mvtools.dll without licenses/mvtools/LICENSE.");
     return record;
-}
-
-// Windows standalone player: mpv.exe from the SAME fork build as the libmpv
-// above (mpv-winbuild's player archive vs. its dev archive). This mpv.exe is
-// fully self-contained - statically linked, no libmpv-2.dll dependency - and
-// carries the vf_animejanai filter, so users who prefer plain mpv.exe over
-// mpv.net can launch it directly. Placed next to portable_config/ at the
-// install root, it auto-detects that config dir and runs the same managed
-// profiles/scripts/upscaling as mpvnet.exe. Shipped alongside mpv.net, not
-// instead of it (mpvnet.exe stays the default launcher in manifest.json).
-async Task InstallCustomMpvExe()
-{
-    Console.WriteLine("Downloading custom mpv.exe fork...");
-    var downloadUrl = $"https://github.com/the-database/mpv-winbuild/releases/download/{MpvForkVersion}/mpv-x86_64-{MpvForkBuildDate}-git-{MpvForkGitHash}.7z";
-    var targetPath = Path.GetFullPath("mpv-player.7z");
-    await Downloader.DownloadFileAsync(downloadUrl, targetPath, (progress) =>
-    {
-        Console.WriteLine($"Downloading custom mpv.exe fork ({progress}%)...");
-    });
-    VerifySha256(targetPath, MpvForkPlayerSha256);
-
-    Console.WriteLine("Extracting custom mpv.exe fork...");
-    // Just the player entry points: mpv.exe (GUI) + mpv.com (console wrapper).
-    // Skip the archive's docs, updater.bat and file-association scripts.
-    var want = new[] { "mpv.exe", "mpv.com" };
-    using (ArchiveFile archiveFile = new(targetPath))
-    {
-        foreach (var entry in archiveFile.Entries)
-        {
-            if (want.Contains(entry.FileName, StringComparer.OrdinalIgnoreCase))
-            {
-                entry.Extract(Path.Combine(installDirectory, entry.FileName));
-            }
-        }
-    }
-    File.Delete(targetPath);
 }
 
 // Linux player: the mpv fork bundle (mpv + libmpv.so.2 carrying vf_animejanai,
@@ -1107,7 +1029,7 @@ void WriteVersionAndManifest()
         deps = new
         {
             mpvnet = plat.IsWindows ? MpvNetVersion : (string?)null,
-            mpvfork = includeAddons ? AnimeJaNai.Updates.AddonUpdateTransaction.NativeDependencyIdentity(installDirectory) : plat.IsWindows ? $"{MpvForkVersion}-{MpvForkGitHash}"
+            mpvfork = plat.IsWindows ? AnimeJaNai.Updates.AddonUpdateTransaction.NativeDependencyIdentity(installDirectory)
                                      : $"{MpvForkLinuxVersion}",
             inference_runtime = $"trt-{TrtVersion}",
             ort_dml = plat.IsWindows ? $"{OrtDmlVersion}+{DirectMLVersion}" : (string?)null,
@@ -1302,12 +1224,7 @@ async Task Main()
     if (plat.IsWindows)
     {
         await InstallMpvnet();
-        if (includeAddons) addonNative = await InstallAddonNative();
-        else
-        {
-            await InstallCustomLibmpv();
-            await InstallCustomMpvExe();
-        }
+        addonNative = await InstallAddonNative();
     }
     else
     {
