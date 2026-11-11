@@ -30,9 +30,17 @@ downloads every component by pinned version and lays out the redistributable tre
 
 ```powershell
 dotnet publish BuildMpvUpscale2xAnimeJaNai/BuildMpvUpscale2xAnimeJaNai.csproj -c Release -o publish
+./addons/tools/bootstrap.ps1
+./addons/tools/package.ps1 -OutputDirectory "$env:TEMP/ajn-host"
+$env:AJN_ADDON_BUNDLE = "$env:TEMP/ajn-host"
 ./publish/BuildMpvUpscale2xAnimeJaNai.exe 3.6.0
 # -> ./publish/mpv-upscale-2x_animejanai-v3.6.0/
 ```
+
+Every Windows package carries addon support, so a Windows assembly needs `AJN_ADDON_BUNDLE`:
+the addon host bundle built from this checkout by `addons/tools/package.ps1` (what `deploy.yml`
+does). Without it the assembler stops before downloading anything. Linux packages have no addon
+support and don't need it.
 
 On Linux the same binary is invoked without the extension:
 `./publish/BuildMpvUpscale2xAnimeJaNai 3.6.0 --target linux-x64`.

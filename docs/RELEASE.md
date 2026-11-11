@@ -11,8 +11,9 @@ Local dev loop: [`DEVELOPMENT.md`](DEVELOPMENT.md). Orientation: [`../CLAUDE.md`
 
 ```
 the-database/libass  ──┐
-the-database/mpv  ─────┼──► mpv-winbuild "MPV"          → mpv-x86_64-<date>-git-<sha>.7z
+the-database/mpv  ─────┼──► mpv-winbuild "MPV" (addon)  → mpv-x86_64-<date>-git-<sha>.7z
                        │                                  mpv-dev-x86_64-<date>-git-<sha>.7z
+                       │                                  mpv-addon-native-x86_64.json
                        └──► mpv "Build Linux"            → mpv-linux-x64-<tag>.tar.zst
 
 animejanai-inference ──────► "Build Linux (aji)"         → aji-linux-x64.tar.zst
@@ -35,7 +36,7 @@ Values below are the current ones; read the file for truth.
 `.github/workflows/bump-pins.yml` opens a PR on `bump/<source>` (`libaji`, `mpv-winbuild`,
 `mpv-linux`, `manager`). `scripts/bump_pins.py <source> <tag>` does the edit, downloads every
 asset the assembler fetches from the release and records its SHA-256 (`AjiSha256Win/Linux`,
-`MpvForkDevSha256` / `MpvForkPlayerSha256`, `MpvForkLinuxSha256`, `ManagerSha256Win/Linux`), which
+`MpvForkNativeMetadataSha256` (the Windows native metadata, which pins each archived file), `MpvForkLinuxSha256`, `ManagerSha256Win/Linux`), which
 the assembler checks each download against; run it locally to bump by hand. A RIFE model set has no
 upstream dispatch: bump it with `scripts/bump_pins.py rife-models <tag>` (`RifeModelsVersion`,
 `RifeModelsAsset`, `RifeModelsSha256`). The aji release
@@ -47,9 +48,10 @@ hand.
 |---|---|---|
 | `AjiVersion` | `v0.22.1` | `the-database/animejanai-inference` release tag |
 | `RifeModelsVersion` | `models-rife-fp16-2` | an animejanai-inference release tag (fp16 conversions) |
-| `MpvForkVersion` | `2026-10-24-b4f9f5bfed` | `the-database/mpv-winbuild` release tag |
-| `MpvForkBuildDate` | `20261024` | the date **inside the archive filename** |
-| `MpvForkGitHash` | `b4f9f5bfed` | the short hash **inside the archive filename** |
+| `MpvForkVersion` | `2026-11-11-096b120ea3-addons-43101021549` | `the-database/mpv-winbuild` **addon** release tag |
+| `MpvForkBuildDate` | `20261111` | the date **inside the archive filename** |
+| `MpvForkGitHash` | `096b120ea3` | the short hash **inside the archive filename** |
+| `MpvForkNativeMetadataSha256` | `8da35c58…` | SHA-256 of that release's `mpv-addon-native-x86_64.json` |
 | `MpvForkLinuxVersion` | `2026-10-24-c493f1c` | `the-database/mpv` release tag (Linux bundle) |
 | `ManagerVersion` | `0.10.3` | `the-database/AnimeJaNaiManager` release tag |
 | `TrtVersion` | `11.4.0.106` | NVIDIA TensorRT release (runtime + `trtexec`, both platforms) |
@@ -60,9 +62,13 @@ hand.
 | `MpvNetVersion` | `v7.1.2.0` | `mpvnet-player/mpv.net` release tag |
 | `SevenZipVersion` | `2605` | ip7z/7zip release asset ("extra" / linux-x64 console); with `SevenZipTag` `26.05` and the SHA-256 pins |
 
-**Three constants describe one mpv-winbuild build.** `MpvForkVersion` is the release tag, while
-`MpvForkBuildDate` and `MpvForkGitHash` are the date and short hash embedded in the asset
-*filenames*. All three must be bumped together or the download 404s.
+**Four constants describe the Windows mpv build**, always an addon release (the only Windows
+build; every Windows package carries addon support). `MpvForkVersion` is the release tag
+(`<date>-<hash>-addons-<run id>`), `MpvForkBuildDate` and `MpvForkGitHash` are the date and short
+hash embedded in the asset *filenames*, and `MpvForkNativeMetadataSha256` pins the release's
+`mpv-addon-native-x86_64.json`, which in turn pins every file the assembler takes from the two
+archives (`libmpv-2.dll`, `mpv.exe`/`mpv.com`, `ajn-mvtools.dll`, the addon natives). The
+`bump/mpv-winbuild` PR sets all four.
 
 **The filter↔engine ABI couples mpv and aji.** `aji.h`'s `AJI_API_VERSION` is shared by
 `vf_animejanai` (in the mpv fork) and the engine. When it changes, rebuild **both** and bump
@@ -110,11 +116,15 @@ gh workflow run MPV -R the-database/mpv-winbuild \
   -f build_target=64bit -f compiler=clang -f release=true
 ```
 
-`workflow_dispatch` only. It resolves both fork refs to SHAs and redirects the toolchain's
-`packages/{mpv,libass}.cmake` at them (adding `-Dthreads=enabled` for libass). Tag format is
-`$(date +%Y-%m-%d)-$(head -c 10 <<< $sha)`. See that repo's `CLAUDE.md`.
+`workflow_dispatch` only. `addon_metadata` defaults to `true`, so this is the addon build: its
+release is marked Latest and its `notify_downstream` job opens the bump PR here. It resolves
+both fork refs to SHAs and redirects the toolchain's `packages/{mpv,libass}.cmake` at them
+(adding `-Dthreads=enabled` for libass). Tag format is
+`$(date +%Y-%m-%d)-$(head -c 10 <<< $sha)-addons-<run id>`. A run with `addon_metadata=false`
+publishes a plain build that is not Latest and is never pinned here. See that repo's `CLAUDE.md`.
 
-→ bump `MpvForkVersion`, `MpvForkBuildDate`, `MpvForkGitHash` (the `bump/mpv-winbuild` PR).
+→ bump `MpvForkVersion`, `MpvForkBuildDate`, `MpvForkGitHash`, `MpvForkNativeMetadataSha256`
+(the `bump/mpv-winbuild` PR).
 
 ### 3. mpv, Linux — `the-database/mpv`
 

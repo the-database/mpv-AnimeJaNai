@@ -51,8 +51,10 @@ A user-facing release is the C# app's output, not anything in source form.
 
 **Two sibling repos drive the actual upscaling (bump together):**
 - **`the-database/mpv`** — the `vf_animejanai` filter source. Shipped as a prebuilt **libmpv** via
-  the `the-database/mpv-winbuild` GitHub Actions build; pinned here by `MpvForkVersion`
-  (+ `MpvForkBuildDate` / `MpvForkGitHash` in the dev-archive filename).
+  the `the-database/mpv-winbuild` GitHub Actions build (always its addon release; every Windows
+  package carries addon support); pinned here by `MpvForkVersion` (+ `MpvForkBuildDate` /
+  `MpvForkGitHash` in the archive filenames, and `MpvForkNativeMetadataSha256`, which pins the
+  release's native metadata and through it every file taken from the archives).
 - **`the-database/animejanai-inference`** — the `aji` engine: `aji.dll` (a thin dispatcher) forwards
   to `aji_trt.dll` / `aji_dml.dll` over the `aji.h` C ABI. Released as `aji-windows-x64.zip`; pinned
   by `AjiVersion`. **Built-in upscale presets (slots 1001–1003, 1010–1013) are hardcoded in its
