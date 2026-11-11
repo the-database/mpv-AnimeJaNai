@@ -89,12 +89,12 @@ const string AjiRuntimeRepo       = "the-database/aji-runtime";
 const string AjiRuntimeVersion    = "v0.2.1";
 const string AjiRuntimeSha256Win   = "f51a6c00134ee74e818a759ec4bee14594fd8ccbf7a9e31de5eeb6919c2c4d0b";
 const string AjiRuntimeSha256Linux = "d596c211dfecdb2574a165834ee25f4b8d7424b9003740f98e19850a619479d7";
-const string AjiVersion           = "v0.25.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json)
+const string AjiVersion           = "v0.27.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json)
 // The SHA-256s of the release assets the build downloads (aji-windows-x64.zip, aji-linux-x64.tar.zst),
 // like every GitHub-hosted pin below: computed from the downloaded file by scripts/bump_pins.py (which
 // cross-checks GitHub's recorded digest) and enforced on every build.
-const string AjiSha256Win         = "0c946356e515edb0f1365287650d5ad3cb9a460a6eca385912aa502e6e165ab3";
-const string AjiSha256Linux       = "7c4e33eac46ef07af016a304dfde0f14c25ff3017fcec96e80d9797fc6f800b1";
+const string AjiSha256Win         = "1ae2a0d16be2a660d8197fe4f64e8be7cf7637d7842b19994636e42309ab17b2";
+const string AjiSha256Linux       = "044a9cc652fa7660218597c1faa01b7c0abdd97f10a644b0250a0a42321ac0f5";
 
 // 7-Zip "extra" (Windows) / linux-x64 standalone console, from the
 // github.com/ip7z/7zip release (7-zip.org no longer hosts every version).
@@ -142,7 +142,7 @@ const string AddonMpvForkBuildDate = "20261109";
 const string AddonMpvForkGitHash = "484611bce0";
 const string AddonNativeMetadataSha256 = "510bd4677bd145b18d12645123046eed5cc0f2585394fadc8e34e263629d71e8";
 const string AddonManagerSource = "74b3133f26db07a619882d700a64dce1c5ffabb3";   // AnimeJaNaiManager 0.13.0
-const string AddonInferenceSource = "458c2f08a2f4dd5fa863adac38b957ee503ce9c4"; // animejanai-inference v0.25.0
+const string AddonInferenceSource = "513febececcfce2645588d1c04cc9932661a0ee0"; // animejanai-inference v0.27.0
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
 // Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
