@@ -738,16 +738,29 @@ async Task<System.Text.Json.Nodes.JsonObject> InstallAddonNative()
         throw new InvalidDataException("Official native producer metadata checksum mismatch.");
     var record = AddonRelease.ReadNative(metadata);
     var names = record["files"]!.AsObject().Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+    const string mvtoolsLicenses = "licenses/mvtools/";
     foreach (string prefix in new[] { "mpv-dev", "mpv" })
     {
         string asset = $"{prefix}-x86_64-{AddonMpvForkBuildDate}-git-{AddonMpvForkGitHash}.7z";
         string archive = Path.GetFullPath(asset);
         await DownloadFileAsync(release + "/" + asset, archive, _ => { });
         using (var zip = new ArchiveFile(archive))
-            foreach (var entry in zip.Entries.Where(e => names.Contains(e.FileName)))
-                entry.Extract(Path.Combine(installDirectory, entry.FileName));
+            foreach (var entry in zip.Entries)
+            {
+                string name = entry.FileName.Replace('\\', '/');
+                if (names.Contains(name))
+                    entry.Extract(Path.Combine(installDirectory, name));
+                // The GPL detector's licence and provenance, as the ordinary
+                // libmpv install copies them (InstallCustomLibmpv).
+                else if (name.StartsWith(mvtoolsLicenses, StringComparison.Ordinal) && name.Length > mvtoolsLicenses.Length &&
+                         name.IndexOf('/', mvtoolsLicenses.Length) < 0 && !entry.IsFolder)
+                    entry.Extract(Path.Combine(installDirectory, "licenses", "mvtools", name[mvtoolsLicenses.Length..]));
+            }
         File.Delete(archive);
     }
+    if (names.Contains("ajn-mvtools.dll") &&
+        !File.Exists(Path.Combine(installDirectory, "licenses", "mvtools", "LICENSE")))
+        throw new InvalidDataException("The addon player release ships ajn-mvtools.dll without licenses/mvtools/LICENSE.");
     return record;
 }
 
