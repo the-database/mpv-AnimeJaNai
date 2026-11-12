@@ -134,10 +134,10 @@ const string RifeModelsSha256     = "85fa8aa7408f82636f53a3179998e021708746ff85c
 // player archives (libmpv-2.dll, mpv.exe/mpv.com, ajn-mvtools.dll, the addon
 // natives) with its SHA-256; MpvForkNativeMetadataSha256 pins that file.
 // `scripts/bump_pins.py mpv-winbuild <tag>` sets all four from the release.
-const string MpvForkVersion = "2026-11-11-096b120ea3-addons-43101021549"; // release tag (Windows winbuild)
+const string MpvForkVersion = "2026-11-12-042613482d-addons-43119200800"; // release tag (Windows winbuild)
 const string MpvForkBuildDate = "20261111";   // build date in the archive filenames
-const string MpvForkGitHash = "096b120ea3";   // git short hash (master; aji ABI v9)
-const string MpvForkNativeMetadataSha256 = "8da35c58facdfaa64d0b3f6c387b66a391fc85be6eb074a9e69fb8095b76163c"; // mpv-addon-native-x86_64.json
+const string MpvForkGitHash = "042613482d";   // git short hash (master; aji ABI v9)
+const string MpvForkNativeMetadataSha256 = "35fc6412a6a10e899315c428e0e13137c8bbc838d43609b95c03533a3773c10d"; // mpv-addon-native-x86_64.json
 // The commits of the ManagerVersion/AjiVersion releases above, recorded in
 // addon-package.json (bump_pins.py sets them with those pins).
 const string AddonManagerSource = "74b3133f26db07a619882d700a64dce1c5ffabb3";   // AnimeJaNaiManager 0.13.0
