@@ -103,10 +103,13 @@ runtime release (`RuntimeTag`, animejanai-inference `runtime-<n>`, pinned by its
   `animejanai/inference/aji-runtime.json`. An older install's TensorRT files are adopted by SHA-256,
   then deleted. Pack names and `--components --json` are unchanged.
 - **Which store, whose ref (aji-runtime 0.3.0+):** aji-runtime uses the store `aji-runtime.conf`
-  beside it names (`store = <folder>`, relative to the file), else the per-user one. A copy the setup
+  beside it names (`store = <folder>`, relative to the file), else the per-user one. The copy the setup
   installer made (`unins???.exe` beside the updater, or the `installed-by-setup.txt` the installer
-  writes before it first runs the updater) keeps the plain ref id `mpv-animejanai` and the per-user
-  store. Any other Windows copy (a portable zip) passes `--per-copy --app-path <launcher>` (ref
+  writes before it first runs the updater, AND the installer's uninstall entry, `HKCU\...\Uninstall\
+  <AppId>_is1` `InstallLocation`, names this folder or doesn't exist) keeps the plain ref id
+  `mpv-animejanai` and the per-user store; its uninstaller runs `unref --app-id mpv-animejanai
+  --app-path {app}\mpvnet.exe`, which leaves a plain ref naming another path alone. Any other Windows
+  copy (a portable zip, or a copy of the installed folder) passes `--per-copy --app-path <launcher>` (ref
   `mpv-animejanai-<8 hex>`), and a fresh one writes `store = animejanai\runtime`: TensorRT inside its
   own folder, with relative paths in `aji-runtime.json`, so the folder can be moved or copied to
   another PC. TensorRT counts as installed only when the ref `show` reads names this copy's launcher

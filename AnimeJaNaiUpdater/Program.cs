@@ -28,8 +28,9 @@
 // the other apps (%LOCALAPPDATA%\the-database\aji or ~/.local/share/the-database/aji). Every change to
 // them is one `aji-runtime ensure` with the install's full set, which also writes
 // animejanai/inference/aji-runtime.json (libaji, the Lua scripts and the Manager read it).
-// Each copy has its own ref: a copy the setup installer made (its unins000.exe, or the marker the
-// installer writes first) keeps the plain id "mpv-animejanai"; any other Windows copy (a portable zip)
+// Each copy has its own ref: the copy the setup installer made (its unins000.exe, or the marker the
+// installer writes first, in the folder the installer's uninstall entry names, or with no entry yet)
+// keeps the plain id "mpv-animejanai"; any other Windows copy (a portable zip, a copy of the installed folder)
 // passes --per-copy --app-path <its launcher>, so its ref is "mpv-animejanai-<8 hex>" of its path. The
 // packs count as installed only when the ref show reads names this copy's launcher and aji-runtime.json
 // is there; another copy's ref is never changed or dropped. A zip copy that has no settings file and no
@@ -94,7 +95,7 @@ string inferenceDir = Path.Combine(installDir, "animejanai", "inference");
 // uninstaller unrefs it); any other copy on Windows (a portable zip, maybe next to an installed copy or
 // an older zip) uses a per-copy id derived from its path, so copies never read or change each other's
 // ref. On Linux every install outside the AppImage keeps the plain id.
-bool zipCopy = OperatingSystem.IsWindows() && !IsSetupInstall(installDir);
+bool zipCopy = OperatingSystem.IsWindows() && !IsSetupInstall(installDir, SetupInstallLocations());
 string appPath = Path.Combine(installDir, playerLauncher);
 string[] StoreIdArgs() => zipCopy ? ["--app-id", StoreAppId, "--per-copy", "--app-path", appPath] : ["--app-id", StoreAppId];
 // A zip copy's default store: inside its own folder (relative to aji-runtime.conf at the install root).
@@ -1578,20 +1579,64 @@ async Task<int> RecommendAsync()
 // trt-ptx).
 static bool StorePackName(string pack) => pack.StartsWith("trt-", StringComparison.OrdinalIgnoreCase);
 
-// Whether the setup installer made this copy: its uninstaller (unins000.exe, unins001.exe, ...) is beside
-// this updater, or the marker the installer writes before it first runs the updater (Inno Setup writes
-// the uninstaller only at the end of its install step). Any other copy is a zip copy.
-static bool IsSetupInstall(string dir)
+// Whether this copy is the one the setup installer made: its uninstaller (unins000.exe, unins001.exe,
+// ...) or the marker the installer writes before it first runs the updater is beside this updater, AND
+// the installer's own record doesn't put the installed copy in another folder. `setupLocations` are the
+// folders that record names (SetupInstallLocations). Both files come along when someone copies the
+// installed folder, so a copy elsewhere on the same PC is a zip copy; with no record (a first install
+// before Inno writes it, another PC, an unreadable registry) the files decide. Any other copy is a zip
+// copy.
+static bool IsSetupInstall(string dir, IReadOnlyCollection<string> setupLocations)
 {
+    bool setupFiles;
     try
     {
-        return File.Exists(Path.Combine(dir, SetupMarker)) ||
-               Directory.EnumerateFiles(dir, "unins*.exe").Any(f => Regex.IsMatch(Path.GetFileName(f), @"^unins\d{3}\.exe$", RegexOptions.IgnoreCase));
+        setupFiles = File.Exists(Path.Combine(dir, SetupMarker)) ||
+                     Directory.EnumerateFiles(dir, "unins*.exe").Any(f => Regex.IsMatch(Path.GetFileName(f), @"^unins\d{3}\.exe$", RegexOptions.IgnoreCase));
     }
     catch (Exception e) when (e is IOException or UnauthorizedAccessException)
     {
         return false;
     }
+    return setupFiles && (setupLocations.Count == 0 || setupLocations.Any(l => SamePath(l, dir)));
+}
+
+// The folders the setup installer's uninstall entries name: Inno Setup writes InstallLocation ({app}\)
+// and "Inno Setup: App Path" ({app}) under HKCU\...\Uninstall\<AppId>_is1 (the installer is per-user:
+// PrivilegesRequired=lowest). Both AppIds of installer/animejanai.iss: the release one and the
+// /DInstallerTest one. Empty without an entry, off Windows, or on any registry error.
+// ANIMEJANAI_SETUP_LOCATION (tests) stands in for the registry: a folder, or empty for no entry.
+static List<string> SetupInstallLocations()
+{
+    var folders = new List<string>();
+    if (Environment.GetEnvironmentVariable("ANIMEJANAI_SETUP_LOCATION") is { } fake)
+    {
+        if (fake.Trim().Length > 0)
+        {
+            folders.Add(fake.Trim());
+        }
+        return folders;
+    }
+    if (!OperatingSystem.IsWindows())
+    {
+        return folders;
+    }
+    foreach (var appId in new[] { "{8B2F4E1A-9C3D-4A7E-B5F6-AJANAI340MPV}", "{78315E8B-A449-4D53-940F-452A227D80AA}" })
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey($@"Software\Microsoft\Windows\CurrentVersion\Uninstall\{appId}_is1");
+            foreach (var value in new[] { "InstallLocation", "Inno Setup: App Path" })
+            {
+                if (key?.GetValue(value) is string s && s.Trim().Length > 0)
+                {
+                    folders.Add(s.Trim());
+                }
+            }
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or IOException or UnauthorizedAccessException) { }
+    }
+    return folders;
 }
 
 static bool SamePath(string? a, string? b)
@@ -1826,7 +1871,8 @@ int StoreUnref()
     int rc = 0;
     if (ReadOwnRef() is not null)
     {
-        (rc, _) = RunAjiRuntime(["unref", .. StoreIdArgs()], quiet: false);
+        // the plain id with --app-path too: aji-runtime drops the plain ref only while it names this copy
+        (rc, _) = RunAjiRuntime(["unref", .. StoreIdArgs(), .. (zipCopy ? Array.Empty<string>() : ["--app-path", appPath])], quiet: false);
     }
     if (rc == 0)
     {

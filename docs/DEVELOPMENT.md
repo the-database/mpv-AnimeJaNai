@@ -100,6 +100,7 @@ These env vars are the actual dev hooks. All are read in
 | `ANIMEJANAI_RUNTIME_MIRROR` | **Updater.** A local dir holding the shared runtime release's `packs-<platform>.json` + archives, so store mode installs without the network. |
 | `AJI_RUNTIME_STORE` | **aji-runtime** (the updater runs it). Points the shared pack store at a test folder; it overrides `aji-runtime.conf`, so a zip copy then gets no default settings file. To test the per-copy and settings-file behaviour, set `LOCALAPPDATA` to a scratch folder instead (aji-runtime derives the per-user store from it). Use one or the other for every test run: the real store is shared with the user's other apps. |
 | `ANIMEJANAI_ROOT` | **Benchmark tool** fallback for the install root when `--install-root` is not given. |
+| `ANIMEJANAI_SETUP_LOCATION` | **Updater** (testing). Stands in for the setup installer's uninstall entry when it decides whether a copy with `unins???.exe` / `installed-by-setup.txt` is the installed copy: a folder, or empty for no entry. Needed to simulate an installed copy on a PC where mpv-AnimeJaNai is really installed (that entry names the real folder, so every other copy is a zip copy). |
 | `ANIMEJANAI_NVIDIA_GPUS` | **`animejanai_backend.lua`** (testing). Stands in for `nvidia-smi --query-gpu=uuid,compute_cap,name --format=csv,noheader`, lines separated by `;`, e.g. `GPU-1234, 6.1, NVIDIA GeForce GTX 1080`, to try the pre-Turing rules without such a GPU. |
 | `AJI_ORT_VERBOSE=1` | Runtime, not build: makes ONNX Runtime log node placement to stderr. Use it to confirm no `Conv`/`PReLU` landed on `CPUExecutionProvider` on the DirectML backend. |
 
@@ -123,9 +124,13 @@ AnimeJaNaiUpdater.exe --storage --json | --storage inside|shared|<folder>
 the Inno Setup wizard shells out to for the GPU-aware component picker, parsing `NVIDIA=`,
 `GPU=`, `NVIDIA_TOO_OLD=`, `TRT_PACKS=`, `RIFE=` lines back out of stdout.
 
-**Which pack store, and whose ref.** A copy the setup installer made (an `unins???.exe` beside the
-updater, or `installed-by-setup.txt`, which the installer writes before it first runs the updater)
-keeps the plain ref id `mpv-animejanai`; any other Windows copy (a portable zip) passes
+**Which pack store, and whose ref.** The copy the setup installer made keeps the plain ref id
+`mpv-animejanai`: it has an `unins???.exe` beside the updater or `installed-by-setup.txt` (which the
+installer writes before it first runs the updater), and the installer's uninstall entry
+(`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\<AppId>_is1`, `InstallLocation` /
+`Inno Setup: App Path`, for both AppIds in `animejanai.iss`) names this folder or doesn't exist. A
+copy of the installed folder elsewhere on the same PC has the files but not the entry, so it is a zip
+copy. Any other Windows copy (a portable zip) passes
 `--per-copy --app-path <launcher>` to every `ensure` / `show` / `unref` / `use`, so its ref is
 `mpv-animejanai-<8 hex>` of its path. TensorRT counts as installed only when the ref `show` reads
 names this copy's launcher and `animejanai/inference/aji-runtime.json` is there; another copy's ref
