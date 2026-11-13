@@ -136,11 +136,14 @@ Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\shell\open"; ValueType: str
 {#Assoc(".m2v")}
 #endif
 
-; First drop this install's ref in the shared pack store (%LOCALAPPDATA%\the-database\aji,
-; shared with other apps): the TensorRT runtime no other installed app uses is
-; removed with it. An install from before the store has no aji-runtime.exe;
-; without it the folder's deletion below leaves a dead ref that the store frees
-; later anyway.
+; First drop this install's ref in its pack store: the per-user one
+; (%LOCALAPPDATA%\the-database\aji, shared with other apps), or the folder
+; aji-runtime.conf beside aji-runtime.exe names (inside this install or one the
+; user chose in AnimeJaNai Manager > Components > Storage; aji-runtime reads it).
+; The TensorRT runtime no other installed app uses is removed with it. An
+; install from before the store has no aji-runtime.exe; without it, or with the
+; store's drive unplugged, the folder's deletion below leaves a dead ref that
+; the store frees later anyway. A store inside the install goes with the folder.
 [UninstallRun]
 Filename: "{app}\aji-runtime.exe"; Parameters: "unref --app-id mpv-animejanai"; Flags: runhidden skipifdoesntexist waituntilterminated; RunOnceId: "mpv-animejanai-unref"
 
@@ -343,6 +346,13 @@ begin
 
   if CurStep <> ssPostInstall then
     Exit;
+
+  // Mark this copy as installed by setup before the updater first runs in it: the updater keeps the
+  // plain shared-store ref id (mpv-animejanai, which [UninstallRun] drops) for a copy with this
+  // marker or an unins???.exe, and a per-copy id for a portable zip. The marker covers any point where
+  // the uninstaller isn't written yet. [UninstallDelete] removes it with the folder.
+  SaveStringToFile(ExpandConstant('{app}\installed-by-setup.txt'),
+    'Installed by the mpv-AnimeJaNai setup. AnimeJaNaiUpdater reads this file; keep it.' + #13#10, False);
 
   if TransactionalInstall then
   begin

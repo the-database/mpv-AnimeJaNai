@@ -156,6 +156,62 @@ try
         }
         Pass("preflight-in-use");
     }
+    {
+        // Installed copy vs zip copy: the setup's uninstaller (unins000.exe ...) or its marker.
+        string dir = Path.Combine(root, "copy-kind"); Directory.CreateDirectory(dir);
+        Check(!Production.SetupInstall(dir), "An empty folder counted as installed");
+        File.WriteAllText(Path.Combine(dir, "uninstall-notes.exe"), "");
+        File.WriteAllText(Path.Combine(dir, "unins.exe"), "");
+        Check(!Production.SetupInstall(dir), "Another exe named like an uninstaller counted as installed");
+        File.WriteAllText(Path.Combine(dir, "unins000.exe"), "");
+        Check(Production.SetupInstall(dir), "An install with unins000.exe counted as a zip copy");
+        File.Delete(Path.Combine(dir, "unins000.exe"));
+        File.WriteAllText(Path.Combine(dir, "installed-by-setup.txt"), "");
+        Check(Production.SetupInstall(dir), "The setup's marker was ignored");
+        Pass("copy-kind");
+    }
+    {
+        // Only this copy's ref counts: a plain ref naming another copy's launcher is another copy's.
+        string Show(string? appPath, bool hasRef = true) => JsonSerializer.Serialize(new
+        {
+            app_id = "mpv-animejanai", app_path = appPath, has_ref = hasRef, ref_id = "mpv-animejanai",
+            packs = new object[]
+            {
+                new { name = "trt-runtime", version = "11.4", dir = @"C:\s\packs\trt-runtime\11.4", installed = true },
+                new { name = "trt-sm89", version = "11.4", dir = @"C:\s\packs\trt-sm89\11.4", installed = false },
+            },
+        });
+        string me = @"C:\Apps\mpv-AnimeJaNai\mpvnet.exe";
+        var own = Production.OwnRef(Show(@"c:\apps\MPV-AnimeJaNai\.\mpvnet.exe"), me);
+        Check(own is not null && own.Packs.Count == 1 && own.Packs.ContainsKey("trt-runtime"), "Did not read this copy's ref");
+        Check(Production.OwnRef(Show(@"C:\Other\mpv-AnimeJaNai\mpvnet.exe"), me) is null, "Took another copy's ref as this copy's");
+        Check(Production.OwnRef(Show(null, hasRef: false), me) is null, "Took a missing ref as this copy's");
+        Check(Production.OwnRef("not json", me) is null, "Unreadable show output counted as a ref");
+        Pass("own-ref");
+    }
+    {
+        var loc = Production.Location("""
+            {"available": false, "default_root": "C:\\u\\aji", "moved": false, "relative": true,
+             "root": "D:\\p\\animejanai\\runtime", "setting": "animejanai\\runtime",
+             "settings_file": "D:\\p\\aji-runtime.conf", "source": "settings", "target": null}
+            """);
+        Check(loc is { Available: false, Source: "settings", Relative: true, Folder: @"D:\p\animejanai\runtime" }, "Misread location --json");
+        var moved = Production.Location("""{"available": false, "moved": true, "root": "C:\\u\\aji", "target": "E:\\aji"}""");
+        Check(moved is { Folder: @"E:\aji", Source: null }, "A moved store's folder isn't its target (or an old aji-runtime got a source)");
+        Pass("store-location");
+    }
+    {
+        // The package's user_preserve keeps a copy's store setting and the store inside it.
+        var preserve = new HashSet<string>(Production.BuilderUserPreserve, StringComparer.OrdinalIgnoreCase);
+        Check(Production.Preserved("aji-runtime.conf", preserve), "aji-runtime.conf isn't preserved");
+        Check(Production.Preserved("animejanai/runtime/packs/trt-runtime/11.4/nvinfer_11.dll", preserve), "animejanai/runtime isn't preserved");
+        Check(!Production.Preserved("aji-runtime.exe", preserve) && !Production.Preserved("animejanai/runtime-notes.txt", preserve),
+            "Preserved more than the store");
+        string manifest = Path.Combine(root, "preserve-manifest.json");
+        File.WriteAllText(manifest, JsonSerializer.Serialize(new { user_preserve = Production.BuilderUserPreserve }));
+        Check(Production.UserPreserve(manifest).SetEquals(preserve), "The updater reads user_preserve differently");
+        Pass("user-preserve-store");
+    }
     Console.WriteLine($"Completed {passed} updater regression cases.");
     return 0;
 }
