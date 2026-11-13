@@ -98,8 +98,9 @@ These env vars are the actual dev hooks. All are read in
 | `ANIMEJANAI_PACKS_DIR` | **Updater**, not the assembler (`AnimeJaNaiUpdater/Program.cs:857`). Point at a local dir holding `packs.json` + the pack archives so `--components` / `--install` / `--recommend` work against **unpublished** packs. Essential while a release is still a draft: the public releases API cannot see draft assets. |
 | `AJI_RUNTIME_LOCAL` | A local `aji-runtime(.exe)` (the shared pack store's tool) instead of the pinned the-database/aji-runtime release. |
 | `ANIMEJANAI_RUNTIME_MIRROR` | **Updater.** A local dir holding the shared runtime release's `packs-<platform>.json` + archives, so store mode installs without the network. |
-| `AJI_RUNTIME_STORE` | **aji-runtime** (the updater runs it). Points the shared pack store at a test folder. Use it for every test run: the real store is shared with the user's other apps. |
+| `AJI_RUNTIME_STORE` | **aji-runtime** (the updater runs it). Points the shared pack store at a test folder; it overrides `aji-runtime.conf`, so a zip copy then gets no default settings file. To test the per-copy and settings-file behaviour, set `LOCALAPPDATA` to a scratch folder instead (aji-runtime derives the per-user store from it). Use one or the other for every test run: the real store is shared with the user's other apps. |
 | `ANIMEJANAI_ROOT` | **Benchmark tool** fallback for the install root when `--install-root` is not given. |
+| `ANIMEJANAI_SETUP_LOCATION` | **Updater** (testing). Stands in for the setup installer's uninstall entry when it decides whether a copy with `unins???.exe` / `installed-by-setup.txt` is the installed copy: a folder, or empty for no entry. Needed to simulate an installed copy on a PC where mpv-AnimeJaNai is really installed (that entry names the real folder, so every other copy is a zip copy). |
 | `ANIMEJANAI_NVIDIA_GPUS` | **`animejanai_backend.lua`** (testing). Stands in for `nvidia-smi --query-gpu=uuid,compute_cap,name --format=csv,noheader`, lines separated by `;`, e.g. `GPU-1234, 6.1, NVIDIA GeForce GTX 1080`, to try the pre-Turing rules without such a GPU. |
 | `AJI_ORT_VERBOSE=1` | Runtime, not build: makes ONNX Runtime log node placement to stderr. Use it to confirm no `Conv`/`PReLU` landed on `CPUExecutionProvider` on the DirectML backend. |
 
@@ -115,12 +116,40 @@ change to `Downloader.cs` affects both.
 
 ```
 AnimeJaNaiUpdater.exe [--check|--apply|--components|--install <pack>|--remove <pack>|--auto|--recommend]
+AnimeJaNaiUpdater.exe --storage --json | --storage inside|shared|<folder>
 ```
 
 `--check` prints `UPDATE_AVAILABLE <ver>` or `UP_TO_DATE <ver>` (consumed by
 `scripts/animejanai_update.lua`). `--components` also accepts `--json`. `--recommend` is what
 the Inno Setup wizard shells out to for the GPU-aware component picker, parsing `NVIDIA=`,
 `GPU=`, `NVIDIA_TOO_OLD=`, `TRT_PACKS=`, `RIFE=` lines back out of stdout.
+
+**Which pack store, and whose ref.** The copy the setup installer made keeps the plain ref id
+`mpv-animejanai`: it has an `unins???.exe` beside the updater or `installed-by-setup.txt` (which the
+installer writes before it first runs the updater), and the installer's uninstall entry
+(`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\<AppId>_is1`, `InstallLocation` /
+`Inno Setup: App Path`, for both AppIds in `animejanai.iss`) names this folder or doesn't exist. A
+copy of the installed folder elsewhere on the same PC has the files but not the entry, so it is a zip
+copy. Any other Windows copy (a portable zip) passes
+`--per-copy --app-path <launcher>` to every `ensure` / `show` / `unref` / `use`, so its ref is
+`mpv-animejanai-<8 hex>` of its path. TensorRT counts as installed only when the ref `show` reads
+names this copy's launcher and `animejanai/inference/aji-runtime.json` is there; another copy's ref
+is never changed or dropped. A zip copy with no `aji-runtime.conf` and no TensorRT yet writes
+`store = animejanai\runtime` (`aji-runtime use animejanai\runtime`) before `--components`,
+`--install`, `--remove`, `--auto` and `--storage` touch the store: relative, so the folder can be
+moved or copied to another PC. An older zip copy that already has TensorRT in the per-user store
+stays there (its next `--auto` moves the ref to the per-copy id). Linux installs keep the plain id
+and the per-user store.
+
+`--storage --json` (for AnimeJaNai Manager > Components > Storage) prints one JSON object:
+`choice` (`inside` | `shared` | `custom`), `root`, `moved`, `target`, `available` (from
+`aji-runtime location --json`), `inside`, `shared` (the per-user store), `installed` (TensorRT of
+this copy's own in that store) and `bytes` (its pack folders' size). It exits non-zero outside store
+mode or with an aji-runtime older than 0.3.0. `--storage inside|shared|<folder>` switches with
+`aji-runtime use` (packs move by hard link or copy, `AJI_MOVE <copied> <total>` lines on stdout);
+it's refused while the player runs from this folder, and on failure the reason is the last line.
+Both write UTF-8. `aji-runtime.conf` and `animejanai/runtime` are in `user_preserve` and never
+shipped.
 
 TensorRT needs compute capability 7.5+ (GeForce RTX 20 / GTX 16 series and newer;
 `GpuSupport.TrtMinComputeCapability` in `AnimeJaNaiUpdater/GpuSupport.cs`). An older NVIDIA GPU

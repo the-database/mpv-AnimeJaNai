@@ -98,10 +98,27 @@ runtime release (`RuntimeTag`, animejanai-inference `runtime-<n>`, pinned by its
 `manifest.json` `runtime`), installed by `aji-runtime(.exe)` at the install root.
 
 - **Updater:** store mode is on when the manifest pins `runtime`, `aji-runtime` is beside it, and it
-  isn't running in the AppImage (whose AppRun manages its own ref). Its `trt-*` packs come from the store (ref `mpv-animejanai`); RIFE
+  isn't running in the AppImage (whose AppRun manages its own ref). Its `trt-*` packs come from the store; RIFE
   stays this release's component pack. Every change is one `aji-runtime ensure`, which writes
   `animejanai/inference/aji-runtime.json`. An older install's TensorRT files are adopted by SHA-256,
   then deleted. Pack names and `--components --json` are unchanged.
+- **Which store, whose ref (aji-runtime 0.3.0+):** aji-runtime uses the store `aji-runtime.conf`
+  beside it names (`store = <folder>`, relative to the file), else the per-user one. The copy the setup
+  installer made (`unins???.exe` beside the updater, or the `installed-by-setup.txt` the installer
+  writes before it first runs the updater, AND the installer's uninstall entry, `HKCU\...\Uninstall\
+  <AppId>_is1` `InstallLocation`, names this folder or doesn't exist) keeps the plain ref id
+  `mpv-animejanai` and the per-user store; its uninstaller runs `unref --app-id mpv-animejanai
+  --app-path {app}\mpvnet.exe`, which leaves a plain ref naming another path alone. Any other Windows
+  copy (a portable zip, or a copy of the installed folder) passes `--per-copy --app-path <launcher>` (ref
+  `mpv-animejanai-<8 hex>`), and a fresh one writes `store = animejanai\runtime`: TensorRT inside its
+  own folder, with relative paths in `aji-runtime.json`, so the folder can be moved or copied to
+  another PC. TensorRT counts as installed only when the ref `show` reads names this copy's launcher
+  and `aji-runtime.json` is there; nothing ever unrefs or shrinks another copy's ref. Linux installs
+  keep the plain id. `aji-runtime.conf` and `animejanai/runtime` are in `user_preserve` and never
+  shipped (the assembler refuses a tree that has them).
+- **Components > Storage:** `AnimeJaNaiUpdater --storage --json` reports the choice (`inside`,
+  `shared`, `custom`), and `--storage inside|shared|<folder>` switches it (`aji-runtime use`, which
+  takes the packs along by hard link or copy). See `docs/DEVELOPMENT.md`.
 - **Readers of `aji-runtime.json`:** libaji loads TensorRT from the store pack by full path and runs
   that pack's `trtexec` (ignoring the `trtexec=` in `mpv-animejanai.conf`).
   `animejanai_backend.lua` (`trt_runtime_installed`) and the Manager (`RuntimePacks.TrtInstalled`)
@@ -115,13 +132,15 @@ runtime release (`RuntimeTag`, animejanai-inference `runtime-<n>`, pinned by its
   pack. Local builds without it keep TensorRT in the tree. `DirectML_LICENSE.txt` stays in the core.
 - **Not in the store:** RIFE (its engines would land in the read-only pack: the video ABI needs an
   engine cache dir first), and DirectML (in the core).
-- **Uninstall:** Inno `[UninstallRun]` and `installer/linux/uninstall.sh` run `aji-runtime unref`.
-- **A moved store:** AnimeJaNai Manager > Components > Storage moves it to another drive
-  (`aji-runtime move`; the default path becomes a link, so `aji-runtime.json` stays valid). While the
-  moved folder is missing (an unplugged drive), TensorRT only looks uninstalled: `animejanai_backend.lua`
-  asks `aji-runtime location --json`, keeps `backend=TensorRT` and says so on the OSD instead of
-  switching to DirectML, and the updater's store changes stop with the same message. Engine caches
-  stay next to the ONNX in the install folder.
+- **Uninstall:** Inno `[UninstallRun]` and `installer/linux/uninstall.sh` run `aji-runtime unref`
+  (in whatever store `aji-runtime.conf` names; a store inside the install goes with the folder).
+- **A missing store folder:** AnimeJaNai Manager > Components > Storage moves the per-user store to
+  another drive (`aji-runtime move`; the default path becomes a link, so `aji-runtime.json` stays
+  valid), or points this copy at a folder the user picks. While the folder is missing (an unplugged
+  drive; `location --json` says `available: false`), TensorRT only looks uninstalled:
+  `animejanai_backend.lua` asks `aji-runtime location --json`, keeps `backend=TensorRT` and says so
+  on the OSD instead of switching to DirectML, and the updater's store changes stop with the same
+  message. Engine caches stay next to the ONNX in the install folder.
 
 ## Building and releasing
 

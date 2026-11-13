@@ -90,10 +90,11 @@ local function exists(rel)
     return false
 end
 
--- The shared pack store's aji-runtime.json, which the updater has aji-runtime
--- write beside libaji: the folders libaji loads TensorRT and its builder kernels
--- from. nil without it (an install from before the store, or the AppImage):
--- then they are in the inference folder.
+-- The pack store's aji-runtime.json, which the updater has aji-runtime write
+-- beside libaji: the folders libaji loads TensorRT and its builder kernels
+-- from (absolute, or relative to the file when the store is inside this
+-- install: a portable copy that can be moved). nil without it (an install from
+-- before the store, or the AppImage): then they are in the inference folder.
 local function runtime_packs()
     local inf = mp.command_native({'expand-path', '~~/../animejanai/inference'})
     local f = io.open(utils.join_path(inf, 'aji-runtime.json'), 'rb')
@@ -133,11 +134,13 @@ local function trt_runtime_installed()
     return exists('animejanai/inference/' .. nvinfer)
 end
 
--- The shared pack store's folder when it has been moved and is missing (a
--- drive that isn't connected): then TensorRT only looks uninstalled, its packs
--- are on that drive. From `aji-runtime location --json` (aji-runtime 0.2.0+,
--- at the install root, or in the AppImage), asked only when aji-runtime.json
--- names a TensorRT pack that isn't there. nil otherwise; checked once.
+-- The pack store's folder when it is missing (a drive that isn't connected):
+-- the per-user store moved to another drive, or a folder chosen in AnimeJaNai
+-- Manager > Components > Storage. Then TensorRT only looks uninstalled, its
+-- packs are on that drive. From `aji-runtime location --json` (aji-runtime
+-- 0.2.0+, at the install root, or in the AppImage), asked only when
+-- aji-runtime.json names a TensorRT pack that isn't there. nil otherwise;
+-- checked once.
 local store_missing_checked, store_missing_folder
 local function trt_store_missing()
     if store_missing_checked then
@@ -169,18 +172,21 @@ local function trt_store_missing()
         return nil
     end
     local t = utils.parse_json(r.stdout or '')
-    if type(t) == 'table' and t.moved == true and t.available == false then
-        store_missing_folder = type(t.target) == 'string' and t.target or '?'
+    if type(t) == 'table' and t.available == false then
+        -- a moved per-user store's files are in its target; any other store's
+        -- in its root
+        local folder = t.moved == true and t.target or t.root
+        store_missing_folder = type(folder) == 'string' and folder or '?'
     end
     return store_missing_folder
 end
 
 local function store_missing_hint(folder)
-    local where = os.getenv('ANIMEJANAI_APPIMAGE') == '1'
-        and 'the JaNai app you moved it with'
-        or 'AnimeJaNai Manager (Ctrl+E) > Components > Storage'
-    return 'The shared runtime\'s folder ' .. folder .. ' isn\'t available. ' ..
-        'Is its drive connected? Reconnect it, or reset the location in ' .. where
+    local fix = os.getenv('ANIMEJANAI_APPIMAGE') == '1'
+        and 'reset the location in the JaNai app you moved it with'
+        or 'choose another place in AnimeJaNai Manager (Ctrl+E) > Components > Storage'
+    return 'The TensorRT runtime\'s folder ' .. folder .. ' isn\'t available. ' ..
+        'Is its drive connected? Reconnect it, or ' .. fix
 end
 
 -- Whether a TensorRT builder (kernel) pack is installed: in the store when
