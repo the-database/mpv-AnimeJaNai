@@ -38,6 +38,9 @@
 #define UpdaterExe "AnimeJaNaiUpdater.exe"
 
 [Setup]
+; AnimeJaNaiUpdater (SetupInstallLocations) reads both AppIds' uninstall entries
+; (HKCU ...\Uninstall\<AppId>_is1) to tell this install from a copy of its folder;
+; keep them in sync (tests/updater-regressions checks it).
 #ifdef InstallerTest
 AppId={{78315E8B-A449-4D53-940F-452A227D80AA}
 #else
@@ -136,13 +139,19 @@ Root: HKCU; Subkey: "Software\Classes\AnimeJaNai.mpv\shell\open"; ValueType: str
 {#Assoc(".m2v")}
 #endif
 
-; First drop this install's ref in the shared pack store (%LOCALAPPDATA%\the-database\aji,
-; shared with other apps): the TensorRT runtime no other installed app uses is
-; removed with it. An install from before the store has no aji-runtime.exe;
-; without it the folder's deletion below leaves a dead ref that the store frees
-; later anyway.
+; First drop this install's ref in its pack store: the per-user one
+; (%LOCALAPPDATA%\the-database\aji, shared with other apps), or the folder
+; aji-runtime.conf beside aji-runtime.exe names (inside this install or one the
+; user chose in AnimeJaNai Manager > Components > Storage; aji-runtime reads it).
+; The TensorRT runtime no other installed app uses is removed with it. An
+; install from before the store has no aji-runtime.exe; without it, or with the
+; store's drive unplugged, the folder's deletion below leaves a dead ref that
+; the store frees later anyway. A store inside the install goes with the folder.
+; --app-path: the plain ref is dropped only while it names this install's player
+; (the path the updater writes it with); a ref another copy of the player wrote
+; is left alone (aji-runtime 0.3.0+, which this package ships).
 [UninstallRun]
-Filename: "{app}\aji-runtime.exe"; Parameters: "unref --app-id mpv-animejanai"; Flags: runhidden skipifdoesntexist waituntilterminated; RunOnceId: "mpv-animejanai-unref"
+Filename: "{app}\aji-runtime.exe"; Parameters: "unref --app-id mpv-animejanai --app-path ""{app}\{#PlayerExe}"""; Flags: runhidden skipifdoesntexist waituntilterminated; RunOnceId: "mpv-animejanai-unref"
 
 ; Remove the whole per-user app folder on uninstall, including files created at
 ; runtime that the installer never tracked (built engines + timing caches in
@@ -343,6 +352,15 @@ begin
 
   if CurStep <> ssPostInstall then
     Exit;
+
+  // Mark this copy as installed by setup before the updater first runs in it: the updater keeps the
+  // plain shared-store ref id (mpv-animejanai, which [UninstallRun] drops) for a copy with this
+  // marker or an unins???.exe whose folder this setup's uninstall entry (HKCU ...\Uninstall\
+  // <AppId>_is1, InstallLocation) names or that has no entry yet, and a per-copy id for any other
+  // copy (a portable zip, or a copy of this folder elsewhere). The marker covers any point where the
+  // uninstaller isn't written yet. [UninstallDelete] removes it with the folder.
+  SaveStringToFile(ExpandConstant('{app}\installed-by-setup.txt'),
+    'Installed by the mpv-AnimeJaNai setup. AnimeJaNaiUpdater reads this file; keep it.' + #13#10, False);
 
   if TransactionalInstall then
   begin

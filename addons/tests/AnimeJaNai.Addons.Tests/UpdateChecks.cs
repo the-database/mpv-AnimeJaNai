@@ -257,6 +257,39 @@ internal static partial class Checks
             using var restarted = InstallationActivity.Acquire(target);
             True(File.ReadAllText(Path.Combine(target, "managed.txt")) == "new");
         });
+        await Test("Updates keep the copy's pack store setting and the store inside its folder", async () =>
+        {
+            // a portable copy's aji-runtime.conf and animejanai/runtime (its TensorRT packs) are never
+            // shipped; the full/staged update and component changes must leave them as they are
+            string source = Area(), target = Area();
+            File.WriteAllText(Path.Combine(source, "managed.txt"), "new");
+            Directory.CreateDirectory(Path.Combine(source, "animejanai/inference"));
+            File.WriteAllText(Path.Combine(source, "animejanai/inference/aji.dll"), "new");
+            File.WriteAllText(Path.Combine(target, "aji-runtime.conf"), "store = animejanai\\runtime\n");
+            string pack = Directory.CreateDirectory(Path.Combine(target, "animejanai/runtime/packs/trt/11.4")).FullName;
+            File.WriteAllText(Path.Combine(pack, "nvinfer_11.dll"), "pack");
+            Directory.CreateDirectory(Path.Combine(target, "animejanai/runtime/refs"));
+            File.WriteAllText(Path.Combine(target, "animejanai/runtime/refs/mpv-animejanai-0123abcd.json"), "ref");
+            var preserve = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "aji-runtime.conf", "animejanai/runtime" };
+            await AddonUpdateTransaction.ApplyAsync(source, target, preserve);
+            True(File.ReadAllText(Path.Combine(target, "managed.txt")) == "new");
+            True(File.ReadAllText(Path.Combine(target, "aji-runtime.conf")) == "store = animejanai\\runtime\n");
+            True(File.ReadAllText(Path.Combine(pack, "nvinfer_11.dll")) == "pack");
+            True(File.Exists(Path.Combine(target, "animejanai/runtime/refs/mpv-animejanai-0123abcd.json")));
+            // a component change (RIFE) beside it
+            string component = Area();
+            Directory.CreateDirectory(Path.Combine(component, "animejanai/rife"));
+            File.WriteAllText(Path.Combine(component, "animejanai/rife/rife.onnx"), "rife");
+            File.WriteAllText(Path.Combine(component, "components.json"), "{}");
+            await AddonUpdateTransaction.ApplyAsync(component, target, new HashSet<string>(), component: true);
+            True(File.ReadAllText(Path.Combine(target, "aji-runtime.conf")) == "store = animejanai\\runtime\n");
+            True(File.ReadAllText(Path.Combine(pack, "nvinfer_11.dll")) == "pack");
+            // nothing creates the setting in a copy that has none
+            string fresh = Area();
+            File.WriteAllText(Path.Combine(fresh, "managed.txt"), "old");
+            await AddonUpdateTransaction.ApplyAsync(source, fresh, preserve);
+            True(!File.Exists(Path.Combine(fresh, "aji-runtime.conf")) && !Directory.Exists(Path.Combine(fresh, "animejanai/runtime")));
+        });
         await Test("Incomplete addon inventory is rejected before installed files change", async () =>
         {
             string source = Area(), target = Area();
