@@ -15,6 +15,8 @@ Ensure your NVIDIA graphics drivers are up to date. Download and extract the [la
 
 On Windows, AMD and Intel Arc GPUs upscale with DirectML, which ships with every install. The player switches to it by itself when TensorRT can't run on your PC; you can also choose the backend in the AnimeJaNai Manager (`Ctrl+E`).
 
+The portable Windows archive keeps the TensorRT runtime inside its own folder, so you can move the folder or copy it to another PC and it keeps working. The installed version keeps it in a folder shared with the other JaNai apps. You can change where it goes in the AnimeJaNai Manager (`Ctrl+E`) under Components > Storage.
+
 When playing a video for the first time, a TensorRT engine file will be created for the selected ONNX model. Playback will be paused and a command prompt box will open. Please make sure to wait while the engine is created. Engine creation only needs to happen once per model. Playback will resume on its own when finished.
 
 To confirm upscaling status, press `ctrl+J` to view upscaling stats. This shows the current profile, and the currently running upscaling models if any. 
