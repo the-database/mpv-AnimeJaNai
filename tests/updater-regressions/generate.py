@@ -33,6 +33,11 @@ builder=(here.parents[1]/'BuildMpvUpscale2xAnimeJaNai/Program.cs').read_text(enc
 block=builder[builder.index('user_preserve = new[]'):]
 block=block[:block.index('},')]
 preserve=re.findall(r'^\s*"([^"]+)",', block, re.M)
+# the installer's AppIds (Inno's {{ escape is one brace) and the ones the updater reads
+iss=(here.parents[1]/'installer/animejanai.iss').read_text(encoding='utf-8-sig')
+iss_ids=[i.replace('{{','{',1) for i in re.findall(r'^AppId=(\S+)', iss, re.M)]
+fn=source[source.index('static List<string> SetupInstallLocations()'):]
+updater_ids=re.findall(r'"(\{[0-9A-Za-z-]+\})"', fn[:fn.index('foreach (var value')])
 marker=next(s for s in source.splitlines() if s.startswith('const string SetupMarker ='))
 wrapper='''using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -55,13 +60,15 @@ class Production
     public string? Mismatch(PackIndex index) => PackVersionMismatch(index);
     public static void Preflight(string source, string target, HashSet<string> preserve, string ownName) =>
         EnsureReplaceable(source, target, preserve, ownName);
-    public static bool SetupInstall(string dir) => IsSetupInstall(dir);
+    public static bool SetupInstall(string dir, params string[] setupLocations) => IsSetupInstall(dir, setupLocations);
     public static StoreRef? OwnRef(string json, string appPath) => ParseOwnRef(json, appPath);
     public static StoreLocation? Location(string json) => ParseLocation(json);
     public static bool Preserved(string rel, HashSet<string> preserve) => IsPreserved(rel, preserve);
     public static HashSet<string> UserPreserve(string manifest) => ReadUserPreserve(manifest);
     public static readonly string[] BuilderUserPreserve = [PRESERVE];
-'''.replace('REPO',repo).replace('MARKER',marker).replace('PRESERVE',', '.join('"%s"' % v for v in preserve))
+    public static readonly string[] InstallerAppIds = [ISSIDS];
+    public static readonly string[] UpdaterAppIds = [UPDIDS];
+'''.replace('REPO',repo).replace('MARKER',marker).replace('PRESERVE',', '.join('"%s"' % v for v in preserve)).replace('ISSIDS',', '.join('"%s"' % v for v in iss_ids)).replace('UPDIDS',', '.join('"%s"' % v for v in updater_ids))
 (out/'Production.cs').write_text(wrapper+'\n'.join(methods)+'\n'+latest+'\n}\n'+
     source[source.index('record Release('):],encoding='utf-8')
 (out/'Program.cs').write_bytes((here/'Cases.cs').read_bytes())

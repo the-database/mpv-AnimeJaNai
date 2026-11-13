@@ -168,6 +168,19 @@ try
         File.Delete(Path.Combine(dir, "unins000.exe"));
         File.WriteAllText(Path.Combine(dir, "installed-by-setup.txt"), "");
         Check(Production.SetupInstall(dir), "The setup's marker was ignored");
+        // The installer's uninstall entry (InstallLocation has a trailing separator, App Path none).
+        File.WriteAllText(Path.Combine(dir, "unins000.exe"), "");
+        Check(Production.SetupInstall(dir, dir + Path.DirectorySeparatorChar, dir), "The entry naming this folder made it a zip copy");
+        Check(Production.SetupInstall(dir, dir.ToUpperInvariant() + Path.DirectorySeparatorChar), "Folder case decided the copy kind");
+        string elsewhere = Path.Combine(root, "installed-elsewhere");
+        Check(!Production.SetupInstall(dir, elsewhere + Path.DirectorySeparatorChar, elsewhere),
+            "A copy of the installed folder (the entry names another folder) took the installed copy's id");
+        // both AppIds' entries: this folder's makes it the installed copy, whatever the other names
+        Check(Production.SetupInstall(dir, elsewhere, dir), "An entry for the other AppId hid this folder's");
+        string zip = Path.Combine(root, "copy-kind-zip"); Directory.CreateDirectory(zip);
+        Check(!Production.SetupInstall(zip, zip), "An entry naming a folder without the setup's files made it installed");
+        Check(Production.InstallerAppIds.Length == 2 && Production.InstallerAppIds.OrderBy(i => i).SequenceEqual(Production.UpdaterAppIds.OrderBy(i => i)),
+            $"The updater reads other AppIds ({string.Join(",", Production.UpdaterAppIds)}) than the installer has ({string.Join(",", Production.InstallerAppIds)})");
         Pass("copy-kind");
     }
     {
