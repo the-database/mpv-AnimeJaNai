@@ -18,15 +18,16 @@ def method(signature):
     return source[start:end]
 methods=[method(s) for s in ('void SyncInputConf()', 'string ReadLocalVersion()',
     'static string ReadManifestString(', 'string? PackVersionMismatch(',
-    'Task<Release> GetInstalledReleaseAsync()', 'async Task<Release> GetReleaseAsync(string url)',
+    'string InstalledComponentTag()', 'static async Task<string?> GetReleaseFileAsync(',
+    'async Task<string> GetLatestTagAsync()', 'async Task<Release> GetLatestReleaseAsync()',
+    'async Task<Release> ProbeReleaseAsync(string tag)', 'async Task<Release> GetReleaseAsync(string url)',
     'async Task<PackIndex> GetReleasePackIndexAsync()', 'static void EnsureReplaceable(',
     'static bool IsPreserved(', 'static void TryDelete(', 'static HashSet<string> ReadUserPreserve(',
     'static bool IsSetupInstall(', 'static bool SamePath(', 'static StoreRef? ParseOwnRef(',
     'static StoreLocation? ParseLocation(')]
-for one_line in ('string ReadComponentVersion() =>', 'static string NormalizeRel('):
+for one_line in ('string ReadComponentVersion() =>', 'static string NormalizeRel(', 'string ReleaseDownloadUrl('):
     start=source.index(one_line)
     methods.append(source[start:source.index(';',start)+1])
-latest=next(s for s in source.splitlines() if s.startswith('Task<Release> GetLatestReleaseAsync()'))
 repo=next(s for s in source.splitlines() if s.startswith('const string Repo ='))
 # the assembler's user_preserve list, as the package's manifest.json carries it
 builder=(here.parents[1]/'BuildMpvUpscale2xAnimeJaNai/Program.cs').read_text(encoding='utf-8-sig')
@@ -50,10 +51,9 @@ class Production
     private readonly bool isWinRid;
     private readonly string platformRid;
     REPO
-    private readonly string apiLatest = $"https://api.github.com/repos/{Repo}/releases/latest";
     public Production(string root, HttpMessageHandler handler, bool windows = true)
     { installDir=root; this.handler=handler; isWinRid=windows; platformRid=windows ? "win-x64" : "linux-x64"; }
-    HttpClient NewClient() => new HttpClient(handler, disposeHandler:false);
+    HttpClient NewClient(bool redirects = true) => new HttpClient(handler, disposeHandler:false);
     public void Sync() => SyncInputConf();
     public Task<PackIndex> Packs() => GetReleasePackIndexAsync();
     public Task<Release> Latest() => GetLatestReleaseAsync();
@@ -69,7 +69,7 @@ class Production
     public static readonly string[] InstallerAppIds = [ISSIDS];
     public static readonly string[] UpdaterAppIds = [UPDIDS];
 '''.replace('REPO',repo).replace('MARKER',marker).replace('PRESERVE',', '.join('"%s"' % v for v in preserve)).replace('ISSIDS',', '.join('"%s"' % v for v in iss_ids)).replace('UPDIDS',', '.join('"%s"' % v for v in updater_ids))
-(out/'Production.cs').write_text(wrapper+'\n'.join(methods)+'\n'+latest+'\n}\n'+
+(out/'Production.cs').write_text(wrapper+'\n'.join(methods)+'\n}\n'+
     source[source.index('record Release('):],encoding='utf-8')
 (out/'Program.cs').write_bytes((here/'Cases.cs').read_bytes())
 (out/'Checks.csproj').write_text('''<Project Sdk="Microsoft.NET.Sdk">
