@@ -59,15 +59,32 @@ try
         File.WriteAllText(Path.Combine(dir, "version.txt"), version + "\n");
         var index = await new Production(dir, http).Packs();
         Check(index.PackageVersion == version, "Selected another release's packs");
-        Check(http.Urls[0].EndsWith("/releases/tags/" + version), "Did not request exact installed tag");
+        Check(http.Urls[0].EndsWith("/releases/download/" + version + "/packs.json"), "Did not request exact installed tag");
         Check(!http.Urls.Any(u => u.EndsWith("/latest")), "Component lookup requested latest");
+        Check(!http.Urls.Any(u => u.Contains("api.github.com")), "Component lookup used the rate-limited REST API");
+        Check(index.Packs.Single().Url == $"https://github.com/the-database/mpv-upscale-2x_animejanai/releases/download/{version}/component-rife.7z",
+            "Pack URL isn't the release download URL");
         Pass("installed-tag-" + version);
     }
     {
         var http = new FixtureHttp();
         var release = await new Production(root, http).Latest();
-        Check(release.Tag == "3.5.0" && http.Urls.Single().EndsWith("/latest"), "Changed application-update selection");
+        Check(release.Tag == "3.5.0" && http.Urls[0].EndsWith("/releases/latest") && http.Urls[1].EndsWith("/releases/tags/3.5.0"),
+            "Changed application-update selection");
+        Check(release.Assets.Any(a => a.Name == "packs.json"), "Lost the API's file list");
         Pass("application-latest-control");
+    }
+    {
+        // the REST API rate limited (403): the update's files are found by name instead
+        var http = new FixtureHttp { ApiLimited = true };
+        var release = await new Production(root, http).Latest();
+        Check(release.Tag == "3.5.0", "Lost the latest tag without the API");
+        Check(release.Assets.Select(a => a.Name).SequenceEqual(new[] { "manifest.json",
+            "mpv-upscale-2x_animejanai-overlay-3.5.0.7z", "mpv-upscale-2x_animejanai-full-package-3.5.0.7z.001",
+            "mpv-upscale-2x_animejanai-full-package-3.5.0.7z.002" }), "Wrong files without the API: " +
+            string.Join(", ", release.Assets.Select(a => a.Name)));
+        Check(release.Assets.All(a => a.Url.Contains("/releases/download/3.5.0/")), "Probed files aren't download URLs");
+        Pass("application-latest-rate-limited");
     }
     {
         var http = new FixtureHttp();
@@ -83,14 +100,14 @@ try
         File.WriteAllText(Path.Combine(dir, "version.txt"), "3.7.0");
         bool failed = false;
         try { await new Production(dir, http).Packs(); }
-        catch (HttpRequestException) { failed = true; }
+        catch (InvalidOperationException) { failed = true; }
         Check(failed && http.Urls.Count == 1, "Missing tag silently fell back to another release");
         Pass("missing-release");
     }
     {
         var http = new FixtureHttp();
         var index = await new Production(Path.Combine(root, "3.6.0"), http, false).Packs();
-        Check(index.PackageVersion == "3.6.0" && http.Urls[1].EndsWith("packs-linux-x64.json"), "Wrong platform index");
+        Check(index.PackageVersion == "3.6.0" && http.Urls[0].EndsWith("/3.6.0/packs-linux-x64.json"), "Wrong platform index");
         Pass("linux-index-control");
     }
     {
@@ -110,7 +127,7 @@ try
             "{\"package_version\":\"3.6.1-test.1\",\"component_package_version\":\"3.6.0\"}");
         var app = new Production(dir, http);
         var index = await app.Packs();
-        Check(index.PackageVersion == "3.6.0" && http.Urls[0].EndsWith("/tags/3.6.0"),
+        Check(index.PackageVersion == "3.6.0" && http.Urls[0].Contains("/releases/download/3.6.0/"),
             "Test package did not select its explicit component release");
         Check(app.Mismatch(index) == null, "Rejected explicitly selected matching packs");
         Check(app.Mismatch(index with { PackageVersion = "3.5.0" }) != null,
@@ -233,13 +250,29 @@ catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
 class FixtureHttp : HttpMessageHandler
 {
     public List<string> Urls = new();
+    public bool ApiLimited;
     public static string Index(string version) => JsonSerializer.Serialize(new { package_version = version,
         packs = new[] { new { name = "rife", asset = "component-rife.7z", bytes = 1, files = new[] { "fixture" } } } });
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
     {
         var url = request.RequestUri!; Urls.Add(url.ToString());
         string path = url.AbsolutePath, version = path.Contains("3.6.0") ? "3.6.0" : "3.5.0";
-        if (path.EndsWith("3.7.0")) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        if (path.Contains("3.7.0")) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        if (path.EndsWith("/releases/latest"))
+        {
+            var moved = new HttpResponseMessage(HttpStatusCode.Found);
+            moved.Headers.Location = new Uri("https://github.com/the-database/mpv-AnimeJaNai/releases/tag/3.5.0");
+            return Task.FromResult(moved);
+        }
+        if (url.Host == "api.github.com" && ApiLimited)
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+        if (request.Method == HttpMethod.Head)
+        {
+            string name = path[(path.LastIndexOf('/') + 1)..];
+            bool published = name is "manifest.json" or "mpv-upscale-2x_animejanai-overlay-3.5.0.7z"
+                or "mpv-upscale-2x_animejanai-full-package-3.5.0.7z.001" or "mpv-upscale-2x_animejanai-full-package-3.5.0.7z.002";
+            return Task.FromResult(new HttpResponseMessage(published ? HttpStatusCode.OK : HttpStatusCode.NotFound));
+        }
         string body = path.EndsWith(".json") ? Index(version) : JsonSerializer.Serialize(new {
             tag_name = version, assets = new[] {
                 new { name = "packs.json", browser_download_url = $"https://fixture.invalid/{version}/packs.json" },

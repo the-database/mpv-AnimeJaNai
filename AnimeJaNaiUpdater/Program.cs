@@ -53,7 +53,6 @@ using AnimeJaNai.Updates;
 using static Downloader;
 
 const string Repo = "the-database/mpv-upscale-2x_animejanai";
-string apiLatest = $"https://api.github.com/repos/{Repo}/releases/latest";
 
 // Single-file exe: BaseDirectory is the folder the exe runs from = the install root.
 string installDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, '/');
@@ -206,11 +205,11 @@ async Task CheckAsync()
     SyncInputConf();
     MigrateAnimeJaNaiConf();
     MigrateMpvConfProfile();
-    var release = await GetLatestReleaseAsync();
+    string latest = await GetLatestTagAsync();
     string local = ReadLocalVersion();
-    if (IsNewer(release.Tag, local))
+    if (IsNewer(latest, local))
     {
-        Console.WriteLine($"UPDATE_AVAILABLE {release.Tag}");
+        Console.WriteLine($"UPDATE_AVAILABLE {latest}");
     }
     else
     {
@@ -951,7 +950,83 @@ string ReadLocalVersion()
     return File.Exists(path) ? File.ReadAllText(path).Trim() : "0.0.0";
 }
 
-Task<Release> GetLatestReleaseAsync() => GetReleaseAsync(apiLatest);
+// Release lookups stay off GitHub's REST API where they can: without a token it allows 60 requests
+// an hour per IP address, and the update check on every mpv start plus every Components refresh
+// used to spend one each. Once it ran out, the API answered 403, the component lookup printed
+// "This release's component packs are unavailable (...)" and Components failed. Release files
+// download from github.com/<repo>/releases/download/<tag>/<name>, which that limit doesn't cover.
+string ReleaseDownloadUrl(string tag, string name) => $"https://github.com/{Repo}/releases/download/{Uri.EscapeDataString(tag)}/{Uri.EscapeDataString(name)}";
+
+// The newest release's tag, from github.com's /releases/latest redirect to .../releases/tag/<tag>.
+async Task<string> GetLatestTagAsync()
+{
+    using var client = NewClient(redirects: false);
+    var url = new Uri($"https://github.com/{Repo}/releases/latest");
+    for (int hop = 0; hop < 5; hop++)
+    {
+        using var response = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, url));
+        if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is Uri next)
+        {
+            url = next.IsAbsoluteUri ? next : new Uri(url, next);
+            const string marker = "/releases/tag/";
+            int at = url.AbsolutePath.IndexOf(marker, StringComparison.Ordinal);
+            if (at >= 0)
+            {
+                return Uri.UnescapeDataString(url.AbsolutePath[(at + marker.Length)..].TrimEnd('/'));
+            }
+            continue;
+        }
+        response.EnsureSuccessStatusCode();
+        break;
+    }
+    throw new InvalidOperationException("GitHub didn't say which release is the latest.");
+}
+
+// The newest release and its files, for an update: the REST API's file list, else (rate limited,
+// or no API access) the files an update uses, found by name.
+async Task<Release> GetLatestReleaseAsync()
+{
+    string tag = await GetLatestTagAsync();
+    try
+    {
+        return await GetReleaseAsync($"https://api.github.com/repos/{Repo}/releases/tags/{Uri.EscapeDataString(tag)}");
+    }
+    catch (HttpRequestException)
+    {
+        return await ProbeReleaseAsync(tag);
+    }
+}
+
+// A release's update files by the names deploy.yml publishes them under: the manifests, the
+// overlays, the Linux tarball and the Windows full-package volumes (.001, .002, ... until one is
+// missing). Each is checked with a HEAD request to its download URL.
+async Task<Release> ProbeReleaseAsync(string tag)
+{
+    const string pkg = "mpv-upscale-2x_animejanai";
+    using var client = NewClient();
+    var assets = new List<Asset>();
+    async Task<bool> Add(string name)
+    {
+        using var response = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, ReleaseDownloadUrl(tag, name)));
+        if (response.IsSuccessStatusCode)
+        {
+            assets.Add(new Asset(name, ReleaseDownloadUrl(tag, name)));
+        }
+        return response.IsSuccessStatusCode;
+    }
+    foreach (var name in new[] { "manifest.json", $"manifest-{platformRid}.json", $"{pkg}-overlay-{tag}.7z",
+                                 $"{pkg}-overlay-{tag}-{platformRid}.7z", $"{pkg}-v{tag}-{platformRid}.tar.zst" })
+    {
+        await Add(name);
+    }
+    if (isWinRid)
+    {
+        for (int part = 1; part < 100 && await Add($"{pkg}-full-package-{tag}.7z.{part:D3}"); part++)
+        {
+        }
+    }
+    return new Release(tag, assets);
+}
 
 // A test/core-only package may reuse an explicitly pinned component release
 // when its inference/runtime/model dependencies are unchanged. Normal packages
@@ -959,7 +1034,7 @@ Task<Release> GetLatestReleaseAsync() => GetReleaseAsync(apiLatest);
 string ReadComponentVersion() => ReadManifestString(
     localManifest, "component_package_version", ReadLocalVersion()).Trim();
 
-Task<Release> GetInstalledReleaseAsync()
+string InstalledComponentTag()
 {
     string tag = ReadComponentVersion();
     if (string.IsNullOrWhiteSpace(tag) || tag == "0.0.0")
@@ -967,7 +1042,19 @@ Task<Release> GetInstalledReleaseAsync()
         throw new InvalidOperationException(
             "Cannot select component packs: the installed component version is missing or empty.");
     }
-    return GetReleaseAsync($"https://api.github.com/repos/{Repo}/releases/tags/{Uri.EscapeDataString(tag)}");
+    return tag;
+}
+
+// A release file's text, or null when the release doesn't have it (404).
+static async Task<string?> GetReleaseFileAsync(HttpClient client, string url)
+{
+    using var response = await client.GetAsync(url);
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return null;
+    }
+    response.EnsureSuccessStatusCode();
+    return await response.Content.ReadAsStringAsync();
 }
 
 async Task<Release> GetReleaseAsync(string url)
@@ -1074,31 +1161,32 @@ async Task<PackIndex> GetReleasePackIndexAsync()
 {
     string? local = Environment.GetEnvironmentVariable("ANIMEJANAI_PACKS_DIR");
     string json;
-    List<Asset> assets;
+    Func<string, string?> urlOf;
     if (!string.IsNullOrEmpty(local))
     {
         // the platform's index, as a release names it (packs-linux-x64.json on Linux)
         string localIndex = Path.Combine(local, isWinRid ? "packs.json" : $"packs-{platformRid}.json");
         json = File.ReadAllText(File.Exists(localIndex) ? localIndex : Path.Combine(local, "packs.json"));
-        assets = Directory.GetFiles(local, "component-*.7z")
+        var assets = Directory.GetFiles(local, "component-*.7z")
             .Select(f => new Asset(Path.GetFileName(f), f)).ToList();
+        urlOf = name => assets.FirstOrDefault(a => a.Name == name)?.Url;
     }
     else
     {
         // Packs must match this installation, including prereleases and older
-        // versions. The latest endpoint is only for updating the application.
-        var release = await GetInstalledReleaseAsync();
+        // versions. The latest release is only for updating the application.
+        // From the release's download URLs, not the REST API (see ReleaseDownloadUrl).
+        string tag = InstalledComponentTag();
         // packs index is RID-suffixed on Linux (packs-linux-x64.json) so it can
         // coexist with the Windows packs.json on a shared release; its "asset"
         // fields already carry the matching component-*-<rid>.7z names.
         string packsName = isWinRid ? "packs.json" : $"packs-{platformRid}.json";
-        var idx = release.Assets.FirstOrDefault(a => a.Name == packsName)
-            ?? release.Assets.FirstOrDefault(a => a.Name == "packs.json")
-            ?? throw new InvalidOperationException(
-                $"Release {release.Tag} publishes no component packs (packs.json missing).");
         using var client = NewClient();
-        json = await client.GetStringAsync(idx.Url);
-        assets = release.Assets;
+        json = await GetReleaseFileAsync(client, ReleaseDownloadUrl(tag, packsName))
+            ?? (packsName != "packs.json" ? await GetReleaseFileAsync(client, ReleaseDownloadUrl(tag, "packs.json")) : null)
+            ?? throw new InvalidOperationException(
+                $"Release {tag} publishes no component packs (packs.json missing).");
+        urlOf = name => name.Length > 0 ? ReleaseDownloadUrl(tag, name) : null;
     }
 
     var packs = new List<Pack>();
@@ -1111,7 +1199,7 @@ async Task<PackIndex> GetReleasePackIndexAsync()
         packs.Add(new Pack(
             e.GetProperty("name").GetString() ?? "",
             asset,
-            assets.FirstOrDefault(a => a.Name == asset)?.Url,
+            urlOf(asset),
             e.GetProperty("bytes").GetInt64(),
             files,
             e.TryGetProperty("dep", out var d) ? d.GetString() : null,
@@ -2285,9 +2373,9 @@ async Task<int> AutoStoreAsync(PackIndex index, List<string> rec, bool hasNvidia
     return 0;
 }
 
-static HttpClient NewClient()
+static HttpClient NewClient(bool redirects = true)
 {
-    var client = new HttpClient();
+    var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = redirects });
     client.DefaultRequestHeaders.UserAgent.ParseAdd("AnimeJaNaiUpdater");
     return client;
 }
