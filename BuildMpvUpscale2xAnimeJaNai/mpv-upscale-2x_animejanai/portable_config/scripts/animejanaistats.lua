@@ -54,6 +54,39 @@ end
 mp.register_event("start-file", clear)
 mp.observe_property("vf", "native", clear)
 
+-- Held-frame reuse, from the filter's stats line "held frames: reused <r> of
+-- <n>" (a share such as "(30.9%)" may follow): of the <n> frames it decided,
+-- <r> got the previous frame's upscale again instead of running the model.
+-- The line becomes "Reused: 31% of frames". The filter only writes it while
+-- reuse applies, so without it (reuse turned off, RIFE or a temporal model,
+-- an older filter) nothing is shown; a line that doesn't add up is dropped.
+local function reuse_percent(reused, frames)
+    local pct = math.floor(100 * reused / frames + 0.5)
+    if pct == 0 and reused > 0 then
+        return "<1%"
+    end
+    return pct .. "%"
+end
+
+local function format_stats(content)
+    if content == nil then
+        return nil
+    end
+    local out = {}
+    for line, eol in content:gmatch("([^\r\n]*)(\r?\n?)") do
+        local reused, frames = line:match("held frames:%s*reused%s+(%d+)%s+of%s+(%d+)")
+        if reused then
+            reused, frames = tonumber(reused), tonumber(frames)
+            if frames > 0 and reused <= frames then
+                out[#out + 1] = "Reused: " .. reuse_percent(reused, frames) .. " of frames" .. eol
+            end
+        else
+            out[#out + 1] = line .. eol
+        end
+    end
+    return table.concat(out)
+end
+
 -- Function to be called when the custom action is triggered
 function show_animejanai_stats()
     if showingMessage then
@@ -68,7 +101,7 @@ function show_animejanai_stats()
             message = stopped_message()
         else
             local data_file_path = (mp.command_native({'expand-path', "~~/../animejanai/currentanimejanai.log"}))
-            message = read_file(data_file_path)
+            message = format_stats(read_file(data_file_path))
 
             if message == "" then
                 message = "Error during upscale; press ~ to view error in console"

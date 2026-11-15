@@ -39,6 +39,7 @@ workload; they do not represent every real video.
    builder settings and normal cache keys are preserved.
 2. Load the clip through the real native `animejanai` filter. Require the expected
    input dimensions and exact 2× output before warming up for 3 seconds.
+   Held-frame reuse is off (`reuse-held=no`), so every frame runs the model.
 3. Measure for 10 seconds with mpv's monotonic clock. Count native
    `end video-flip` trace events within this window. FPS is the number of intervals
    between those events divided by their fractional elapsed time. No timeline
