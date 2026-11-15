@@ -422,7 +422,7 @@ a passing JavaScript build does not validate a media pipeline.
 
 The maintained tutorial check extracts this guide's manifest and JavaScript,
 compiles and runs them, checks denied permissions, saved state, settings, update
-and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/5b980a033cf50e663e5e51c046ed3c48da8ca9b5/addons/tools/test-tutorial.ps1). The host's
+and rollback. It is [tools/test-tutorial.ps1](https://github.com/422415/mpv-AnimeJaNai/blob/55fe47f6d1e68ae346ae0444a46601a870295de7/addons/tools/test-tutorial.ps1). The host's
 separate suite also runs an unchanged older API 1.0 binary. Keep those old-client
 fixtures when adding a feature; do not silently change existing field meanings.
 
@@ -4163,7 +4163,7 @@ those refinements; the final DirectML GPU regression also passed. Native CI
 passed 39/39, including the repeated libmpv load/unload lifetime regression.
 
 Native source: mpv `4502d289069a1678c05931bb7c9f15d6922f0a08`;
-inference `42194a8ae2d03df6605644394ae18ee1cae1ab28`.
+inference `8798297f9ae6cf22aff6aac6dc3480d443d8b4f7`.
 Matching inference runtime: TensorRT 11.1.0.106 / CUDA 13.3.0,
 ONNX Runtime 1.24.4 / DirectML 1.15.4.
 

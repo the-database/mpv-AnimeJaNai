@@ -142,7 +142,7 @@ const string MpvForkNativeMetadataSha256 = "e4c506afa6bcd07ce0dc1ebf2b8b4772b76f
 // The commits of the ManagerVersion/AjiVersion releases above, recorded in
 // addon-package.json (bump_pins.py sets them with those pins).
 const string AddonManagerSource = "db4ba59f6416d7a42829ec3102cf15e09f7758e6";   // AnimeJaNaiManager 0.15.2
-const string AddonInferenceSource = "a69907bc0edc3552372c66cc57af5cbea5fdb564"; // animejanai-inference v0.31.0
+const string AddonInferenceSource = "071755ff2228d15ef6985010aa4ee2eaaf523f84"; // animejanai-inference v0.31.0
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
 // Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
