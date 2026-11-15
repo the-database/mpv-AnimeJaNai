@@ -90,7 +90,7 @@ const string AjiRuntimeRepo       = "the-database/aji-runtime";
 const string AjiRuntimeVersion    = "v0.3.0";
 const string AjiRuntimeSha256Win   = "f25b32c9f02e8227a7c33b63e55c88d43de7ec8d1b876f9199169050f17b85b4";
 const string AjiRuntimeSha256Linux = "9de51f674534a6b38b8317852b066048aaf4be47e001646fa92197e93a38cc2a";
-const string AjiVersion           = "v0.29.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json)
+const string AjiVersion           = "v0.29.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json; native kernels for SPAN/Compact, RIFE and TemporalFix on sm_80+, [global] native=off disables)
 // The SHA-256s of the release assets the build downloads (aji-windows-x64.zip, aji-linux-x64.tar.zst),
 // like every GitHub-hosted pin below: computed from the downloaded file by scripts/bump_pins.py (which
 // cross-checks GitHub's recorded digest) and enforced on every build.
