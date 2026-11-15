@@ -106,9 +106,9 @@ const string SevenZipSha256Win    = "f27a8f103c84785026edcba1f67faf1357225df9d19
 const string SevenZipSha256Linux  = "22cf82fcc6eb7474f1d5bb4f02c0f8ebd573a718089d6833dc30f8350a3b232e";
 const string MpvNetVersion        = "v7.1.2.0-ajn.2";
 const string MpvNetSha256         = "b3a6938a8b73f83ecc6eb65ba65a95051ff3c02f1bea7c90e0ec80f8ce41ec38";
-const string ManagerVersion       = "0.15.1";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
-const string ManagerSha256Win     = "159af1b36f7fea61e6a19c3501f03e6b80045ec504e33e202ade82d584e6cf17";
-const string ManagerSha256Linux   = "8c52e174cdd0bad34797960628da5cb83c6d0af0d750f8a3198db47bf2bfa78d";
+const string ManagerVersion       = "0.15.2";       // Companion release with benchmark v2 metadata; publish both Manager platform assets before packaging.
+const string ManagerSha256Win     = "588fe1ec9442995720b6c988a7312549e3077537515648a072376c607a0a83ab";
+const string ManagerSha256Linux   = "95e437496b290126211d888b621b7519e280ed50faaedb593f4ba34b0a9c7d96";
 
 // DirectML backend runtime (backend=DirectML in animejanai.conf). These are
 // the last DirectML-flavored releases: Microsoft moved DML to sustained
@@ -141,7 +141,7 @@ const string MpvForkGitHash = "41868e1757";   // git short hash (master; aji ABI
 const string MpvForkNativeMetadataSha256 = "e4c506afa6bcd07ce0dc1ebf2b8b4772b76f4e7785a4dbf095950c15930ca65c"; // mpv-addon-native-x86_64.json
 // The commits of the ManagerVersion/AjiVersion releases above, recorded in
 // addon-package.json (bump_pins.py sets them with those pins).
-const string AddonManagerSource = "5d888e52520377d897e442b14a20e25320473b60";   // AnimeJaNaiManager 0.15.1
+const string AddonManagerSource = "db4ba59f6416d7a42829ec3102cf15e09f7758e6";   // AnimeJaNaiManager 0.15.2
 const string AddonInferenceSource = "a69907bc0edc3552372c66cc57af5cbea5fdb564"; // animejanai-inference v0.31.0
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
