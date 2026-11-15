@@ -145,9 +145,28 @@ try
             return 0;
         case "--apply":
             return await ApplyAsync();
+        case "--components" when args.Contains("--json"):
+        {
+            // Exactly one JSON object on stdout: the Manager parses all of the output. Anything
+            // printed on the way (a pack index that can't be fetched, a store that couldn't be
+            // set) goes into the object's "notes" instead of ahead of it.
+            var stdout = Console.Out;
+            var notes = new StringWriter();
+            Console.SetOut(notes);
+            try
+            {
+                DefaultZipStore();
+                await ComponentsAsync(null, json: true, jsonOut: stdout, notes: notes);
+            }
+            finally
+            {
+                Console.SetOut(stdout);
+            }
+            return 0;
+        }
         case "--components":
             DefaultZipStore();
-            await ComponentsAsync(null, args.Contains("--json"));
+            await ComponentsAsync(null);
             return 0;
         case "--install":
             DefaultZipStore();
@@ -1272,7 +1291,7 @@ bool PreselectPack(Pack pack, Dictionary<string, string> installed, List<string>
     installed.ContainsKey(pack.Name) || rec.Contains(pack.Name) ||
     (pack.Name == "rife" && ComponentsNeverManaged());
 
-async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
+async Task ComponentsAsync(PackIndex? prefetched, bool json = false, TextWriter? jsonOut = null, StringWriter? notes = null)
 {
     var index = prefetched ?? await GetPackIndexAsync();
     var installed = ReadInstalledComponents(index);
@@ -1286,7 +1305,7 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
         // cover only the NVIDIA GPUs TensorRT can use: a GPU too old for it (GpuSupport) is in
         // unsupported_gpus instead, so a Manager from before that key treats a PC with only such
         // GPUs as one without an NVIDIA GPU (DirectML).
-        Console.WriteLine(JsonSerializer.Serialize(new
+        (jsonOut ?? Console.Out).WriteLine(JsonSerializer.Serialize(new
         {
             package_version = index.PackageVersion,
             version_mismatch = PackVersionMismatch(index),
@@ -1305,6 +1324,9 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false)
                 recommended = rec.Contains(p.Name),
                 preselect = PreselectPack(p, installed, rec),
             }),
+            // what the updater said while gathering this (e.g. "This release's component packs are
+            // unavailable (...)"), one line each; empty when all went well
+            notes = (notes?.ToString() ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         }));
         return;
     }
