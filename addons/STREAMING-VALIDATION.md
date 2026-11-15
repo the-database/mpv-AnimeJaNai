@@ -44,7 +44,7 @@ those refinements; the final DirectML GPU regression also passed. Native CI
 passed 39/39, including the repeated libmpv load/unload lifetime regression.
 
 Native source: mpv `4502d289069a1678c05931bb7c9f15d6922f0a08`;
-inference `42194a8ae2d03df6605644394ae18ee1cae1ab28`.
+inference `8798297f9ae6cf22aff6aac6dc3480d443d8b4f7`.
 Matching inference runtime: TensorRT 11.1.0.106 / CUDA 13.3.0,
 ONNX Runtime 1.24.4 / DirectML 1.15.4.
 
