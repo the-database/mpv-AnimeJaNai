@@ -114,10 +114,12 @@ try
                 File.WriteAllText(control, JsonSerializer.Serialize(new { width, height,
                     warmup_seconds = warmup, seconds, report = reportPath }));
                 string Quote(string value) => "%" + Encoding.UTF8.GetByteCount(value) + "%" + value;
+                // reuse-held=no: every frame runs the model, so scores and recommendations stay pure
+                // inference whatever [global] reuse_held_frames says and however still the clip is.
                 string vf = "@aji:animejanai:lib=" + Quote(Library("aji")) + ":conf=" + Quote(conf) +
                     ":model-dir=" + Quote(Path.Combine(root, "onnx")) +
                     ":rife-model-dir=" + Quote(Path.Combine(root, "rife")) + ":trtexec=" + Quote(Native("trtexec")) +
-                    ":stats=" + Quote(Path.Combine(run, tag + ".model.log")) + $":slot={slot}:passthrough=no";
+                    ":stats=" + Quote(Path.Combine(run, tag + ".model.log")) + $":slot={slot}:passthrough=no:reuse-held=no";
                 var playerArgs = new List<string> { "--load-scripts=no",
                     "--config-dir=" + Path.Combine(installRoot, "portable_config"),
                     "--idle=no", "--keep-open=no", "--loop-file=inf", "--pause=no",
