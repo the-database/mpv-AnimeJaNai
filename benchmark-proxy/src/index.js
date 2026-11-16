@@ -22,7 +22,7 @@
 //   GITHUB_REPO    e.g. "the-database/mpv-upscale-2x_animejanai"
 //   GITHUB_BASE    base branch for PRs, e.g. "main"
 
-import { measurementError, normalizeMeasurement } from "./measurement.mjs";
+import { measurementError, normalizeMeasurement, nativeKernelsError } from "./measurement.mjs";
 
 const ROUTE = "/api/benchmarks";
 const MAX_BODY = 16 * 1024; // 16 KB
@@ -75,6 +75,8 @@ function validate(b) {
   const metadataError = measurementError(b.schema, b.measurement);
   if (metadataError) return metadataError;
   if (typeof b.backend !== "string" || !ALLOWED_BACKENDS.has(b.backend)) return "invalid backend";
+  const nativeError = nativeKernelsError(b.backend, b.measurement);
+  if (nativeError) return nativeError;
   for (const k of ["app_version", "gpu", "cpu", "os", "driver", "submitted_by"]) {
     if (b[k] != null && (typeof b[k] !== "string" || b[k].length > STR_MAX)) return `invalid ${k}`;
   }

@@ -7,8 +7,11 @@ namespace AnimeJaNaiBenchmark;
 
 // Gpu: the GPU that ran the chain, from the stats log's "GPU:" line (aji v0.22.0+; null before), so a
 // submission names the GPU that was measured rather than one picked from the PC's adapter list.
+// NativeKernels (TensorRT only): true when every sample's stats log says the models ran on libaji's
+// native GPU kernels, false when none did; null when unknown or mixed.
 public sealed record MeasurementMetadata(
-    string Method, string Mode, string? OutputResolution = null, double? DisplayHz = null, string? Gpu = null);
+    string Method, string Mode, string? OutputResolution = null, double? DisplayHz = null, string? Gpu = null,
+    bool? NativeKernels = null);
 
 public sealed record Sample(string Model, string InputResolution, int Round,
     FrameMeasurement Metrics, JsonElement Player);

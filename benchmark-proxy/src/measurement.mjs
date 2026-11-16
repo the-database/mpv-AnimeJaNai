@@ -17,7 +17,16 @@ export function measurementError(schema, measurement) {
   if (measurement.display_hz != null && (typeof measurement.display_hz !== "number" ||
       !Number.isFinite(measurement.display_hz) || measurement.display_hz <= 0 || measurement.display_hz > 1000))
     return "invalid display refresh rate";
+  if (measurement.native_kernels != null && typeof measurement.native_kernels !== "boolean")
+    return "invalid native_kernels";
   return null;
+}
+
+// native_kernels says whether a TensorRT run used libaji's native GPU kernels (runner from 3.12.2);
+// no other backend has them.
+export function nativeKernelsError(backend, measurement) {
+  return measurement?.native_kernels != null && backend !== "TensorRT"
+    ? "native_kernels only applies to TensorRT" : null;
 }
 
 export function normalizeMeasurement(measurement) {
@@ -27,5 +36,6 @@ export function normalizeMeasurement(measurement) {
     mode: measurement.mode,
     ...(measurement.output_resolution != null ? { output_resolution: measurement.output_resolution } : {}),
     ...(measurement.display_hz != null ? { display_hz: Math.round(measurement.display_hz * 1000) / 1000 } : {}),
+    ...(typeof measurement.native_kernels === "boolean" ? { native_kernels: measurement.native_kernels } : {}),
   };
 }

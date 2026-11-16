@@ -87,7 +87,7 @@
   </p>
 
   <script type="module">
-    import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel } from "./measurement.mjs";
+    import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel, backendLabel } from "./measurement.mjs";
     const TEMPLATE_ORDER = ["Quality", "Balanced", "Performance"];
 
     const cleanCpu = (s) => (s || "").replace(/\((R|TM|tm)\)/g, "").replace(/\s{2,}/g, " ").trim();
@@ -146,7 +146,7 @@
       if (s.cpu) bits.push(`<b>${esc(cpuFull(s))}</b>`);
       if (ramText(s)) bits.push(esc(ramText(s)));
       if (s.os) bits.push(esc(osShort(s.os)));
-      if (s.backend) bits.push(esc(s.backend));
+      if (s.backend) bits.push(esc(backendLabel(s)));
       if (s.driver) bits.push(`<span title="Driver ${esc(s.driver)}">driver ${esc(driverPretty(s))}</span>`);
       if (s.app_version) bits.push("v" + esc(s.app_version));
       if (s.submitted_at) bits.push(fmtDate(s.submitted_at));

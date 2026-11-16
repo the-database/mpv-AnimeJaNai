@@ -45,6 +45,12 @@ size recorded during the run; `display_hz` is optional. This is distinct from
 the input resolutions in `results` and the model's 2× output. Pipeline-only
 measurements use `mode: "pipeline"` and omit both display fields.
 
+`measurement.native_kernels` (optional, TensorRT only, runner from 3.12.2) is
+`true` when the run used libaji's native GPU kernels and `false` when it used
+TensorRT engines. The catalog labels results by it; TensorRT results from before
+3.12.0 always used engines, and unflagged 3.12.0/3.12.1 results stay plain
+"TensorRT" because they could be either.
+
 Schema 1 remains accepted for old benchmark files and contains no `measurement`.
 The catalog lists legacy results separately; it does not infer an output screen
 or upgrade their timing method. Native-display comparisons are filtered to one
