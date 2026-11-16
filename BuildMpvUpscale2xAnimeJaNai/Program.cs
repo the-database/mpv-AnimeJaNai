@@ -90,12 +90,12 @@ const string AjiRuntimeRepo       = "the-database/aji-runtime";
 const string AjiRuntimeVersion    = "v0.3.0";
 const string AjiRuntimeSha256Win   = "f25b32c9f02e8227a7c33b63e55c88d43de7ec8d1b876f9199169050f17b85b4";
 const string AjiRuntimeSha256Linux = "9de51f674534a6b38b8317852b066048aaf4be47e001646fa92197e93a38cc2a";
-const string AjiVersion           = "v0.31.0";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json; native kernels for SPAN/Compact, RIFE and TemporalFix on sm_80+, [global] native=off disables)
+const string AjiVersion           = "v0.31.1";      // github.com/the-database/animejanai-inference release tag (built against TensorRT 11.4; aji ABI v9; "GPU:" line in the stats log; loads TensorRT from the shared pack store through aji-runtime.json; native kernels for SPAN/Compact, RIFE and TemporalFix on sm_80+, [global] native=off disables)
 // The SHA-256s of the release assets the build downloads (aji-windows-x64.zip, aji-linux-x64.tar.zst),
 // like every GitHub-hosted pin below: computed from the downloaded file by scripts/bump_pins.py (which
 // cross-checks GitHub's recorded digest) and enforced on every build.
-const string AjiSha256Win         = "eee4db1eafb08ae958e2d9b9ce6460ade2d914d082cf0ff017ebab8e0faa8b9d";
-const string AjiSha256Linux       = "32e081303019a6e9dd8a1a33416c21b515c7fbf4689da3b7793a61d0f97bb603";
+const string AjiSha256Win         = "a57d434159cf607b086c89bf9d0d2ea115d7730a54168a800238e5ded184be22";
+const string AjiSha256Linux       = "c57fd50594ae305e0774cfdd64d32335629e1c1995b7eb219aeef433931278b6";
 
 // 7-Zip "extra" (Windows) / linux-x64 standalone console, from the
 // github.com/ip7z/7zip release (7-zip.org no longer hosts every version).
@@ -142,7 +142,7 @@ const string MpvForkNativeMetadataSha256 = "e4c506afa6bcd07ce0dc1ebf2b8b4772b76f
 // The commits of the ManagerVersion/AjiVersion releases above, recorded in
 // addon-package.json (bump_pins.py sets them with those pins).
 const string AddonManagerSource = "db4ba59f6416d7a42829ec3102cf15e09f7758e6";   // AnimeJaNaiManager 0.15.2
-const string AddonInferenceSource = "071755ff2228d15ef6985010aa4ee2eaaf523f84"; // animejanai-inference v0.31.0
+const string AddonInferenceSource = "f9788b6ecd5487fa3028c2a3c048ef2a149b52a3"; // animejanai-inference v0.31.1
 // Linux mpv bundle: a github.com/the-database/mpv release asset (tar.zst).
 // Overridable via MPV_LINUX_LOCAL (a local meson build dir, e.g. ~/src/mpv/build).
 // Same master commit as the Windows pin above (19c0fcf895). The Linux workflow
