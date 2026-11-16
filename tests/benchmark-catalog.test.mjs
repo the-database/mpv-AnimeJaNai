@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import worker from "../benchmark-proxy/src/index.js";
-import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel } from "../site/measurement.mjs";
+import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel, backendLabel } from "../site/measurement.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const base = { schema: 1, backend: "TensorRT", gpu: "NVIDIA GeForce RTX 4090", results: { Balanced: { "1920x1080": 89.5 } } };
@@ -60,12 +60,15 @@ test("aggregation retains v2 metadata and existing schema 1 submissions", async 
       await mkdir(path.join(dir, subdir), { recursive: true });
     for (const file of ["scripts/build-benchmarks.mjs", "benchmark-proxy/src/measurement.mjs"])
       await cp(path.join(root, file), path.join(dir, file));
-    const records = [base, native("2560x1440"), pipeline, { ...base, schema: 2 }];
+    const records = [base, native("2560x1440"), pipeline, { ...base, schema: 2 },
+      { ...pipeline, measurement: { ...pipeline.measurement, native_kernels: true } },
+      { ...pipeline, backend: "DirectML", gpu: "AMD Radeon RX 7600", measurement: { ...pipeline.measurement, native_kernels: false } }];
     for (const [i, s] of records.entries())
       await writeFile(path.join(dir, `data/benchmarks/submissions/${i}.json`), JSON.stringify(s));
     execFileSync(process.execPath, [path.join(dir, "scripts/build-benchmarks.mjs")], { stdio: "pipe" });
     const data = JSON.parse(await readFile(path.join(dir, "site/benchmarks.json"), "utf8"));
-    assert.equal(data.count, 3);
+    assert.equal(data.count, 4, "native_kernels on a non-TensorRT result is dropped.");
+    assert.equal(data.submissions.find(s => s.id === "4").measurement.native_kernels, true);
     assert.equal(data.submissions.find(s => s.id === "1").measurement.output_resolution, "2560x1440");
     assert.equal(data.submissions.find(s => s.id === "0").schema, 1);
     assert.equal(data.submissions.find(s => s.id === "0").measurement, undefined);
@@ -74,4 +77,31 @@ test("aggregation retains v2 metadata and existing schema 1 submissions", async 
     assert.ok(path.basename(dir).startsWith("ajn-catalog-"));
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("native GPU kernels are recorded for TensorRT and labeled in the catalog", async (t) => {
+  const records = [];
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    if (init.method === "PUT") {
+      const body = JSON.parse(init.body);
+      records.push(JSON.parse(Buffer.from(body.content, "base64").toString("utf8")));
+    }
+    return Response.json({ object: { sha: "fixture" }, html_url: "https://example.test/pr" });
+  });
+  const submit = (body) => worker.fetch(new Request("https://example.test/api/benchmarks", {
+    method: "POST", body: JSON.stringify(body),
+  }), { GITHUB_REPO: "fixture/repo", GITHUB_TOKEN: "fixture" });
+  const flagged = (value, extra = {}) => ({ ...pipeline, ...extra, measurement: { ...pipeline.measurement, native_kernels: value } });
+  assert.equal((await submit(flagged(true, { app_version: "3.12.2" }))).status, 201);
+  assert.equal((await submit(flagged(false, { app_version: "3.12.2" }))).status, 201);
+  assert.equal(records[0].measurement.native_kernels, true);
+  assert.equal(records[1].measurement.native_kernels, false);
+  for (const s of [flagged("yes"), flagged(true, { backend: "DirectML", gpu: "AMD Radeon RX 7600" })])
+    assert.equal((await submit(s)).status, 400);
+  assert.equal(records.length, 2);
+  assert.equal(backendLabel(records[0]), "TensorRT backend · native GPU kernels");
+  assert.equal(backendLabel(records[1]), "TensorRT engines");
+  assert.equal(backendLabel({ ...base, app_version: "3.9.0" }), "TensorRT engines", "Before 3.12.0 there were no native kernels.");
+  assert.equal(backendLabel({ ...base, app_version: "3.12.1" }), "TensorRT", "Unflagged 3.12.x results could be either.");
+  assert.equal(backendLabel({ ...base, backend: "DirectML" }), "DirectML");
 });

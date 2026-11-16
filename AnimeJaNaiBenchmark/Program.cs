@@ -54,6 +54,8 @@ try
     string backend = IniValue(conf, "global", "backend") ?? "TensorRT";
     bool d3d = windows && (backend.Equals("DirectML", StringComparison.OrdinalIgnoreCase) ||
         backend.Equals("ncnn", StringComparison.OrdinalIgnoreCase));
+    bool tensorRt = backend.Equals("TensorRT", StringComparison.OrdinalIgnoreCase);
+    var nativeSamples = new List<bool>();
     string player = windows ? Path.Combine(installRoot, "mpvnet.exe") : Path.Combine(installRoot, "mpv", "mpv");
     string Native(string name) => Path.Combine(inference, windows ? name + ".exe" : name);
     string Library(string name) => Path.Combine(inference, windows ? name + ".dll" : "lib" + name + ".so");
@@ -79,7 +81,7 @@ try
     if (mode == "native-display")
         Console.WriteLine("Video windows will open fullscreen. Leave them visible; resizing/minimizing invalidates the run.");
     Console.WriteLine($"Each sample: {warmup}s warmup, {seconds}s measured. {rounds} alternating rounds.");
-    Console.WriteLine($"Engines prepare before timing. Raw measurements: {run}");
+    Console.WriteLine($"Models prepare before timing. Raw measurements: {run}");
 
     foreach (string res in resolutions)
     {
@@ -90,7 +92,7 @@ try
         Directory.CreateDirectory(clipDir);
         string clip = video != null ? Path.GetFullPath(video) : Path.Combine(clipDir, res + ".mp4");
         if (video == null) File.Copy(Path.Combine(bench, res + ".mp4"), clip, overwrite: true);
-        if (backend.Equals("TensorRT", StringComparison.OrdinalIgnoreCase))
+        if (tensorRt)
         {
             string dummy = Path.Combine(run, "build-input.nv12");
             File.WriteAllBytes(dummy, new byte[checked(width * height * 3 / 2)]);
@@ -169,10 +171,15 @@ try
                         displayHz ??= hz.GetDouble();
                 }
                 // The stats log names the GPU the filter ran on (aji v0.22.0+). Every sample must agree.
-                string? sampleGpu = File.Exists(Path.Combine(run, tag + ".model.log"))
-                    ? File.ReadLines(Path.Combine(run, tag + ".model.log"))
-                        .FirstOrDefault(l => l.StartsWith("GPU: ", StringComparison.Ordinal))?[5..].Trim()
-                    : null;
+                string modelLog = Path.Combine(run, tag + ".model.log");
+                string[] statsLines = File.Exists(modelLog) ? File.ReadAllLines(modelLog) : Array.Empty<string>();
+                string? sampleGpu = statsLines
+                    .FirstOrDefault(l => l.StartsWith("GPU: ", StringComparison.Ordinal))?[5..].Trim();
+                // Each model step says "Native kernels: <model>" or "Native kernels not used for <model>"
+                // (aji v0.29.0+); a TensorRT run whose log has neither ran TensorRT engines.
+                if (tensorRt && statsLines.Length > 0)
+                    nativeSamples.Add(statsLines.Any(l => l.Contains(". Native kernels: ", StringComparison.Ordinal)) &&
+                        !statsLines.Any(l => l.Contains("Native kernels not used for ", StringComparison.Ordinal)));
                 if (gpu != null && sampleGpu != null && sampleGpu != gpu)
                     throw new InvalidDataException($"The GPU changed from {gpu} to {sampleGpu}.");
                 gpu ??= sampleGpu;
@@ -184,7 +191,18 @@ try
             }
         }
     }
-    var metadata = new MeasurementMetadata("mpv-output-trace-v2", mode, outputResolution, displayHz, gpu);
+    bool? nativeKernels = nativeSamples.Count == 0 ? null
+        : nativeSamples.All(n => n) ? true
+        : nativeSamples.All(n => !n) ? false
+        : null;
+    if (nativeSamples.Count > 0)
+        Console.WriteLine(nativeKernels switch
+        {
+            true => "Models ran on native GPU kernels.",
+            false => "Models ran on TensorRT engines.",
+            null => "Some models ran on native GPU kernels and some on TensorRT engines; the result won't say which.",
+        });
+    var metadata = new MeasurementMetadata("mpv-output-trace-v2", mode, outputResolution, displayHz, gpu, nativeKernels);
     string table = BenchmarkResult.Format(backend, metadata, samples, slots.Select(Name).ToArray(), resolutions);
     File.WriteAllText(Path.Combine(run, "benchmark.txt"), table);
     File.WriteAllText(Path.Combine(root, "benchmark.txt"), table);

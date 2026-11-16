@@ -5,7 +5,7 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { measurementError, normalizeMeasurement } from "../benchmark-proxy/src/measurement.mjs";
+import { measurementError, nativeKernelsError, normalizeMeasurement } from "../benchmark-proxy/src/measurement.mjs";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,6 +47,7 @@ function valid(s) {
   if (!s || typeof s !== "object") return false;
   if (measurementError(s.schema, s.measurement)) return false;
   if (!ALLOWED_BACKENDS.has(s.backend)) return false;
+  if (nativeKernelsError(s.backend, s.measurement)) return false;
   if (!s.results || typeof s.results !== "object") return false;
   let measured = 0;
   for (const template of Object.keys(s.results)) {

@@ -94,6 +94,10 @@ with a single-line metadata header immediately above it:
 Benchmark metadata: {"method":"mpv-output-trace-v2","mode":"native-display","output_resolution":"2560x1440","display_hz":144}
 ```
 
+On the TensorRT backend it also carries `"native_kernels":true` when every sample's
+stats log shows the models on libaji's native GPU kernels, or `false` when none
+did; it is left out when the samples disagree.
+
 The Manager submits this as schema 2. Metadata and scores live in the same file,
 so a separate stale sidecar cannot relabel another table. Model row names remain
 `Balanced` and `Performance`, and column names remain the input resolutions.
