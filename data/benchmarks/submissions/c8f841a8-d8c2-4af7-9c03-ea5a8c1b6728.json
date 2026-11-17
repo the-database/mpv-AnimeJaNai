@@ -1,0 +1,43 @@
+{
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "2560x1440",
+    "display_hz": 500,
+    "native_kernels": true
+  },
+  "id": "c8f841a8-d8c2-4af7-9c03-ea5a8c1b6728",
+  "submitted_at": "2026-11-17T04:02:19.871Z",
+  "app_version": "3.12.2",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "vram_mb": 16303,
+  "gpu_power_w": 300,
+  "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor",
+  "cpu_mhz": 4700,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32165,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26300",
+  "driver": "32.0.16.2124",
+  "results": {
+    "Balanced": {
+      "480x360": 528.8,
+      "640x480": 406.06,
+      "768x576": 332.16,
+      "1280x720": 209.68,
+      "1920x1080": 103.25
+    },
+    "Performance": {
+      "480x360": 654.96,
+      "640x480": 550.31,
+      "768x576": 472.78,
+      "1280x720": 361.52,
+      "1920x1080": 162.24
+    }
+  },
+  "submitted_by": "fakeishere",
+  "note": ""
+}
