@@ -1514,6 +1514,40 @@ async Task ComponentsAsync(PackIndex? prefetched, bool json = false, TextWriter?
     }
 }
 
+// Before 3.12.3 a failed component change left its extracted pack in %TEMP% (animejanai-packs-<id> or
+// animejanai-remove-<id>; about 0.9 GB for RIFE), once per retry. Each component change deletes those older
+// than an hour, which no running change still uses, and downloads kept for a retry (animejanai-packs) older
+// than a week.
+static void CleanStalePackTemp()
+{
+    string temp = Path.GetTempPath();
+    var now = DateTime.UtcNow;
+    try
+    {
+        foreach (var dir in Directory.EnumerateDirectories(temp, "animejanai-*"))
+        {
+            if (Regex.IsMatch(Path.GetFileName(dir), "^animejanai-(packs|remove)-[0-9a-f]{32}$") &&
+                now - Directory.GetCreationTimeUtc(dir) > TimeSpan.FromHours(1))
+            {
+                TryDelete(() => Directory.Delete(dir, true));
+            }
+        }
+        string kept = Path.Combine(temp, "animejanai-packs");
+        if (Directory.Exists(kept))
+        {
+            foreach (var file in Directory.EnumerateFiles(kept))
+            {
+                if (now - File.GetLastWriteTimeUtc(file) > TimeSpan.FromDays(7))
+                {
+                    TryDelete(() => File.Delete(file));
+                }
+            }
+        }
+    }
+    catch (IOException) { }
+    catch (UnauthorizedAccessException) { }
+}
+
 async Task<int> InstallComponentAsync(string name)
 {
     if (string.IsNullOrEmpty(name))
@@ -1521,6 +1555,7 @@ async Task<int> InstallComponentAsync(string name)
         Console.WriteLine("--install needs a pack name (see --components)");
         return 2;
     }
+    CleanStalePackTemp();
     var index = await GetPackIndexAsync();
     var pack = index.Packs.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     if (pack is null)
@@ -1647,6 +1682,7 @@ async Task<int> InstallComponentAsync(string name)
 
 int RemoveComponent(string name)
 {
+    CleanStalePackTemp();
     var index = GetPackIndexAsync().GetAwaiter().GetResult();
     var pack = index.Packs.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     if (pack is null)
@@ -1669,12 +1705,18 @@ int RemoveComponent(string name)
     if (OperatingSystem.IsWindows() && File.Exists(Path.Combine(installDir, AddonUpdateTransaction.PackageManifest)))
     {
         string staging = Path.Combine(Path.GetTempPath(), "animejanai-remove-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staging);
-        var state = ReadInstalledComponents(index); state.Remove(pack.Name);
-        File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
-        AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true,
-            removals: pack.Files.Select(f => f.Replace('\\', '/'))).GetAwaiter().GetResult();
-        Directory.Delete(staging, true);
+        try
+        {
+            Directory.CreateDirectory(staging);
+            var state = ReadInstalledComponents(index); state.Remove(pack.Name);
+            File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
+            AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true,
+                removals: pack.Files.Select(f => f.Replace('\\', '/'))).GetAwaiter().GetResult();
+        }
+        finally
+        {
+            TryDelete(() => Directory.Delete(staging, true));
+        }
         Console.WriteLine($"{pack.Name} removed. Addon work was stopped; engine caches and added models were preserved.");
         return 0;
     }
