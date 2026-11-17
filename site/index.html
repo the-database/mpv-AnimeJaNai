@@ -87,7 +87,7 @@
   </p>
 
   <script type="module">
-    import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel, backendLabel } from "./measurement.mjs";
+    import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel, backendLabel, ALL_OUTPUTS } from "./measurement.mjs";
     const TEMPLATE_ORDER = ["Quality", "Balanced", "Performance"];
 
     const cleanCpu = (s) => (s || "").replace(/\((R|TM|tm)\)/g, "").replace(/\s{2,}/g, " ").trim();
@@ -193,7 +193,8 @@
         const measurementSel = document.getElementById("measurement");
         const outputSel = document.getElementById("outputResolution");
         const outputs = outputResolutions(subs);
-        outputSel.innerHTML = outputs.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
+        outputSel.innerHTML = `<option value="${ALL_OUTPUTS}">All</option>`
+          + outputs.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
         measurementSel.value = subs.some((s) => measurementKind(s) === "native-display") ? "native-display" :
           subs.some((s) => measurementKind(s) === "pipeline") ? "pipeline" : "legacy";
         const expandBtn = document.getElementById("expandAll");
@@ -212,7 +213,7 @@
           const mode = measurementSel.value;
           document.getElementById("outputLabel").hidden = mode !== "native-display";
           document.getElementById("measurementNote").textContent = mode === "native-display"
-            ? "Maximum decode + 2× AI upscale + fullscreen rendering throughput, with presentation sync, audio, and subtitles disabled. Columns are input resolutions; the selected render resolution is the final screen size. Renderer settings can also affect FPS."
+            ? "Maximum decode + 2× AI upscale + fullscreen rendering throughput, with presentation sync, audio, and subtitles disabled. Columns are input resolutions; the render resolution (shown on each system) is the final screen size, and a larger screen costs FPS, so pick one to compare like with like. Renderer settings can also affect FPS."
             : mode === "pipeline"
             ? "Maximum decode + 2× AI upscale throughput, without display rendering. Compare separately from native-display scores. Columns are input resolutions."
             : "Historical results use an unversioned measurement method and may contain timing artifacts. Their rendering resolution is unknown; they are not comparable to v2 scores.";

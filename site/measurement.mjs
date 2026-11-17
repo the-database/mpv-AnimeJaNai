@@ -10,9 +10,14 @@ export function outputResolutions(submissions) {
     .map((s) => s.measurement.output_resolution))].sort((a, b) => pixels(b) - pixels(a) || a.localeCompare(b));
 }
 
+// outputResolution "all" (the catalog's default) keeps every native-display render size; each
+// system's spec line names its own, so results from different screens stay labelled.
+export const ALL_OUTPUTS = "all";
+
 export function matchesMeasurement(submission, mode, outputResolution) {
   return measurementKind(submission) === mode &&
-    (mode !== "native-display" || submission.measurement.output_resolution === outputResolution);
+    (mode !== "native-display" || outputResolution === ALL_OUTPUTS ||
+      submission.measurement.output_resolution === outputResolution);
 }
 
 export function measurementLabel(submission) {
