@@ -1407,6 +1407,18 @@ async Task<List<string>> EmitComponentPacks()
         {
             sha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
         }
+        // file_sha256: each extracted file's hash, so the updater can recognize a pack someone put in
+        // place by hand (the archive extracted into the folder) as exactly this release's.
+        var fileSha256 = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var f in allFiles)
+        {
+            var abs = Path.Combine(installDirectory, f);
+            if (File.Exists(abs))
+            {
+                using var stream = File.OpenRead(abs);
+                fileSha256[f] = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            }
+        }
         index.Add(new
         {
             name,
@@ -1417,6 +1429,7 @@ async Task<List<string>> EmitComponentPacks()
             sha256,
             installed_bytes = installedBytes,
             files = allFiles,
+            file_sha256 = fileSha256,
         });
         packedFiles.AddRange(allFiles);
         Console.WriteLine($"  component-{name}.7z ({new FileInfo(archive).Length / 1048576} MB, {allFiles.Length} files)");

@@ -191,7 +191,9 @@ catch (Exception ex)
 {
     Console.WriteLine($"Updater error: {ex.Message}");
     if (AnimeJaNai.Addons.Management.InstallationActivity.Pending(installDir))
-        Console.WriteLine("Addon startup is paused. Close AnimeJaNai and run AnimeJaNaiUpdater --recover, or run the installer again.");
+        Console.WriteLine(mode is "--install" or "--remove" or "--auto"
+            ? "The change didn't finish and addons are paused until it's undone: close the player, then click Apply changes in AnimeJaNai Manager > Components again (or run AnimeJaNaiUpdater --recover)."
+            : "Addon startup is paused. Close AnimeJaNai and run AnimeJaNaiUpdater --recover, or run the installer again.");
     return 1;
 }
 
@@ -742,6 +744,17 @@ async Task DownloadWithProgress(Asset asset, string dest)
     });
 }
 
+// A pack downloaded by an earlier, failed install that is still the published archive.
+static bool DownloadedPackMatches(Pack pack, string archive)
+{
+    if (string.IsNullOrEmpty(pack.Sha256) || !File.Exists(archive) || new FileInfo(archive).Length != pack.Bytes)
+    {
+        return false;
+    }
+    using var stream = File.OpenRead(archive);
+    return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).Equals(pack.Sha256, StringComparison.OrdinalIgnoreCase);
+}
+
 // A downloaded pack against packs.json's sha256 (older indexes have none).
 static void VerifyPackSha256(Pack pack, string archive)
 {
@@ -1204,7 +1217,10 @@ async Task<PackIndex> GetReleasePackIndexAsync()
             files,
             e.TryGetProperty("dep", out var d) ? d.GetString() : null,
             e.TryGetProperty("installed_bytes", out var ib) ? ib.GetInt64() : 0,
-            Sha256: e.TryGetProperty("sha256", out var sha) ? sha.GetString() : null));
+            Sha256: e.TryGetProperty("sha256", out var sha) ? sha.GetString() : null,
+            FileSha256: e.TryGetProperty("file_sha256", out var fs)
+                ? fs.EnumerateObject().ToDictionary(f => f.Name, f => f.Value.GetString() ?? "", StringComparer.OrdinalIgnoreCase)
+                : null));
     }
     return new PackIndex(
         doc.RootElement.TryGetProperty("package_version", out var v)
@@ -1244,6 +1260,41 @@ bool PackContentMatches(Pack pack)
     return true;
 }
 
+// Every file of the pack is on disk with the published file's SHA-256 (packs.json file_sha256, from
+// 3.12.3 on; an older index has none, so nothing is inferred). Sizes are compared first, so the hashing
+// only runs for a copy that looks complete.
+bool PackOnDisk(Pack pack)
+{
+    if (pack.Files.Count == 0 || pack.InstalledBytes <= 0 || pack.FileSha256 is null ||
+        pack.Files.Any(f => !pack.FileSha256.ContainsKey(f)))
+    {
+        return false;
+    }
+    long total = 0;
+    foreach (var f in pack.Files)
+    {
+        var fi = new FileInfo(Path.Combine(installDir, f));
+        if (!fi.Exists)
+        {
+            return false;
+        }
+        total += fi.Length;
+    }
+    if (total != pack.InstalledBytes)
+    {
+        return false;
+    }
+    foreach (var f in pack.Files)
+    {
+        using var stream = File.OpenRead(Path.Combine(installDir, f));
+        if (!Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).Equals(pack.FileSha256[f], StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Installed state: components.json, else inferred from what's on disk so
 // full installs that predate the manager work out of the box. In store mode
 // the trt-* packs are the store's for this install.
@@ -1277,6 +1328,23 @@ Dictionary<string, string> ReadPrivateComponents(PackIndex index)
             foreach (var e in doc.RootElement.GetProperty("installed").EnumerateObject())
             {
                 installed[e.Name] = e.Value.GetString() ?? "";
+            }
+            // A pack put in place by hand (component-rife.7z extracted into the folder) isn't in the
+            // record; it counts when the files hash to the published pack's, so Manager shows it
+            // installed and --install doesn't download it again. It goes into the record then, so the
+            // files are hashed once, not on every Manager refresh.
+            bool found = false;
+            foreach (var pack in index.Packs.Where(p => !p.Store && !installed.ContainsKey(p.Name)))
+            {
+                if (PackOnDisk(pack))
+                {
+                    installed[pack.Name] = pack.Dep is null ? index.PackageVersion : ReadManifestDep(localManifest, pack.Dep);
+                    found = true;
+                }
+            }
+            if (found)
+            {
+                try { WriteInstalledComponents(installed); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
             return installed;
         }
@@ -1518,10 +1586,22 @@ async Task<int> InstallComponentAsync(string name)
     }
 
     bool addonUpdate = OperatingSystem.IsWindows() && File.Exists(Path.Combine(installDir, AddonUpdateTransaction.PackageManifest));
-    string work = Path.Combine(Path.GetTempPath(), addonUpdate ? "animejanai-packs-" + Guid.NewGuid().ToString("N") : "animejanai-packs");
+    if (addonUpdate)
+    {
+        // before the download, not after it: the transaction would refuse the same change
+        AddonUpdateTransaction.RequireFilesNotInUse(installDir, pack.Files);
+    }
+    // The download stays here until the install succeeds, so a retry after a failed install (a file
+    // in use, no disk space) reuses it instead of fetching the pack again.
+    string work = Path.Combine(Path.GetTempPath(), "animejanai-packs");
     Directory.CreateDirectory(work);
     string archive = Path.Combine(work, pack.Asset);
-    if (pack.Url.Contains("://"))
+    bool reused = DownloadedPackMatches(pack, archive);
+    if (reused)
+    {
+        Console.WriteLine($"Using the {pack.Asset} downloaded earlier.");
+    }
+    else if (pack.Url.Contains("://"))
     {
         await DownloadWithProgress(new Asset(pack.Asset, pack.Url), archive);
     }
@@ -1529,17 +1609,27 @@ async Task<int> InstallComponentAsync(string name)
     {
         File.Copy(pack.Url, archive, true); // ANIMEJANAI_PACKS_DIR dev path
     }
-    VerifyPackSha256(pack, archive);
+    if (!reused)
+    {
+        VerifyPackSha256(pack, archive);
+    }
     Console.WriteLine($"Installing {pack.Name}...");
     if (addonUpdate)
     {
-        string staging = Path.Combine(work, "staged");
-        Extract(archive, staging);
-        var state = ReadInstalledComponents(index);
-        state[pack.Name] = target != "" ? target : index.PackageVersion;
-        File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
-        await AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true);
-        TryDelete(() => Directory.Delete(work, true));
+        string staging = Path.Combine(Path.GetTempPath(), "animejanai-packs-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Extract(archive, staging);
+            var state = ReadInstalledComponents(index);
+            state[pack.Name] = target != "" ? target : index.PackageVersion;
+            File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
+            await AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true);
+        }
+        finally
+        {
+            TryDelete(() => Directory.Delete(staging, true));
+        }
+        TryDelete(() => File.Delete(archive));
         Console.WriteLine($"{pack.Name} installed. Addon work was stopped for the component update; start it again when ready.");
         return 0;
     }
@@ -2406,7 +2496,8 @@ record Asset(string Name, string Url);
 // Store: one of the shared runtime release's packs (aji-runtime installs it into the pack store; Files
 // are paths inside the pack).
 record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files, string? Dep,
-            long InstalledBytes = 0, bool Store = false, string? Sha256 = null);
+            long InstalledBytes = 0, bool Store = false, string? Sha256 = null,
+            Dictionary<string, string>? FileSha256 = null);
 // Replaced (store mode): this release's own packs that the store's replace, for the files an older
 // version installed.
 record PackIndex(string PackageVersion, List<Pack> Packs, List<Pack>? Replaced = null);
