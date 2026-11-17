@@ -163,14 +163,26 @@ public static class AddonUpdateTransaction
             ? "Close the player and AnimeJaNai Manager before applying or recovering this update."
             : "Close the player before changing component packs. You can keep Manager open.");
     }
-    // The player may have loaded component files (TensorRT, RIFE models), so a component change that
-    // replaces or deletes one waits for it to close. Adding files it doesn't have yet doesn't: that is
-    // a first RIFE install from Manager, which the player itself sends people to (Ctrl+E).
-    // components.json is never held open.
-    public static void RequirePlayerClosedFor(string root, IEnumerable<string> relativePaths)
+    // A component change can run while the player is open, as long as nothing holds the files it
+    // replaces or deletes: the player keeps the inference DLLs it loaded open, but reads RIFE and other
+    // models into memory and closes them, so installing, reinstalling or removing RIFE works mid-playback
+    // (and the player itself sends people to Manager for it, Ctrl+E). Files that don't exist yet are
+    // never in use. A file that gets opened after this check fails the commit, which then rolls back.
+    public static void RequireFilesNotInUse(string root, IEnumerable<string> relativePaths)
     {
-        if (relativePaths.Any(p => !p.Equals("components.json", StringComparison.OrdinalIgnoreCase) && File.Exists(Child(root, p))))
-            RequireAppsClosed(root, includeManager: false);
+        var held = new List<string>();
+        foreach (string relative in relativePaths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string path = Child(root, relative);
+            if (!File.Exists(path)) continue;
+            try { using var probe = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException) { held.Add(relative); }
+            catch (UnauthorizedAccessException) when ((File.GetAttributes(path) & FileAttributes.ReadOnly) == 0) { held.Add(relative); }
+        }
+        if (held.Count == 0) return;
+        throw new IOException($"Close the player and try again: it is using {Path.GetFileName(held[0])}" +
+            (held.Count > 1 ? $" and {held.Count - 1} other file{(held.Count > 2 ? "s" : "")} this change replaces." : ", which this change replaces.") +
+            " You can keep Manager open.");
     }
     private static void Intent(string root)
     {
@@ -200,7 +212,7 @@ public static class AddonUpdateTransaction
         if (component && File.Exists(Child(target, InstallationActivity.DirectoryName + "/journal.json")))
             RequireAppsClosed(target, includeManager: false);
         else if (component)
-            RequirePlayerClosedFor(target, FilesIn(source).Select(f => Path.GetRelativePath(source, f).Replace('\\', '/')).Concat(removals ?? []));
+            RequireFilesNotInUse(target, FilesIn(source).Select(f => Path.GetRelativePath(source, f).Replace('\\', '/')).Concat(removals ?? []));
         else
             RequireAppsClosed(target);
         Intent(target);
@@ -321,6 +333,13 @@ public static class AddonUpdateTransaction
         }
         catch
         {
+            // A component change that fails part-way (a file the player opened after the in-use check)
+            // is undone right away, so the install and addon startup aren't left waiting for a recovery
+            // run. If undoing it fails too, the journal stays and the next change or --recover finishes it.
+            if (component)
+            {
+                try { RecoverCore(target); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            }
             CleanupUnprepared(target);
             throw;
         }

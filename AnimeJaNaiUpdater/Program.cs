@@ -191,7 +191,9 @@ catch (Exception ex)
 {
     Console.WriteLine($"Updater error: {ex.Message}");
     if (AnimeJaNai.Addons.Management.InstallationActivity.Pending(installDir))
-        Console.WriteLine("Addon startup is paused. Close AnimeJaNai and run AnimeJaNaiUpdater --recover, or run the installer again.");
+        Console.WriteLine(mode is "--install" or "--remove" or "--auto"
+            ? "The change didn't finish and addons are paused until it's undone: close the player, then click Apply changes in AnimeJaNai Manager > Components again (or run AnimeJaNaiUpdater --recover)."
+            : "Addon startup is paused. Close AnimeJaNai and run AnimeJaNaiUpdater --recover, or run the installer again.");
     return 1;
 }
 
@@ -740,6 +742,17 @@ async Task DownloadWithProgress(Asset asset, string dest)
             last = p;
         }
     });
+}
+
+// A pack downloaded by an earlier, failed install that is still the published archive.
+static bool DownloadedPackMatches(Pack pack, string archive)
+{
+    if (string.IsNullOrEmpty(pack.Sha256) || !File.Exists(archive) || new FileInfo(archive).Length != pack.Bytes)
+    {
+        return false;
+    }
+    using var stream = File.OpenRead(archive);
+    return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).Equals(pack.Sha256, StringComparison.OrdinalIgnoreCase);
 }
 
 // A downloaded pack against packs.json's sha256 (older indexes have none).
@@ -1576,12 +1589,19 @@ async Task<int> InstallComponentAsync(string name)
     if (addonUpdate)
     {
         // before the download, not after it: the transaction would refuse the same change
-        AddonUpdateTransaction.RequirePlayerClosedFor(installDir, pack.Files);
+        AddonUpdateTransaction.RequireFilesNotInUse(installDir, pack.Files);
     }
-    string work = Path.Combine(Path.GetTempPath(), addonUpdate ? "animejanai-packs-" + Guid.NewGuid().ToString("N") : "animejanai-packs");
+    // The download stays here until the install succeeds, so a retry after a failed install (a file
+    // in use, no disk space) reuses it instead of fetching the pack again.
+    string work = Path.Combine(Path.GetTempPath(), "animejanai-packs");
     Directory.CreateDirectory(work);
     string archive = Path.Combine(work, pack.Asset);
-    if (pack.Url.Contains("://"))
+    bool reused = DownloadedPackMatches(pack, archive);
+    if (reused)
+    {
+        Console.WriteLine($"Using the {pack.Asset} downloaded earlier.");
+    }
+    else if (pack.Url.Contains("://"))
     {
         await DownloadWithProgress(new Asset(pack.Asset, pack.Url), archive);
     }
@@ -1589,17 +1609,27 @@ async Task<int> InstallComponentAsync(string name)
     {
         File.Copy(pack.Url, archive, true); // ANIMEJANAI_PACKS_DIR dev path
     }
-    VerifyPackSha256(pack, archive);
+    if (!reused)
+    {
+        VerifyPackSha256(pack, archive);
+    }
     Console.WriteLine($"Installing {pack.Name}...");
     if (addonUpdate)
     {
-        string staging = Path.Combine(work, "staged");
-        Extract(archive, staging);
-        var state = ReadInstalledComponents(index);
-        state[pack.Name] = target != "" ? target : index.PackageVersion;
-        File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
-        await AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true);
-        TryDelete(() => Directory.Delete(work, true));
+        string staging = Path.Combine(Path.GetTempPath(), "animejanai-packs-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Extract(archive, staging);
+            var state = ReadInstalledComponents(index);
+            state[pack.Name] = target != "" ? target : index.PackageVersion;
+            File.WriteAllText(Path.Combine(staging, "components.json"), JsonSerializer.Serialize(new { installed = state }));
+            await AddonUpdateTransaction.ApplyAsync(staging, installDir, new HashSet<string>(), component: true);
+        }
+        finally
+        {
+            TryDelete(() => Directory.Delete(staging, true));
+        }
+        TryDelete(() => File.Delete(archive));
         Console.WriteLine($"{pack.Name} installed. Addon work was stopped for the component update; start it again when ready.");
         return 0;
     }
