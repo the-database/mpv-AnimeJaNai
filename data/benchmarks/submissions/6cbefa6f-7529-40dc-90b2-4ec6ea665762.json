@@ -1,0 +1,42 @@
+{
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "1920x1080",
+    "display_hz": 144.003,
+    "native_kernels": true
+  },
+  "id": "6cbefa6f-7529-40dc-90b2-4ec6ea665762",
+  "submitted_at": "2026-11-17T17:24:33.569Z",
+  "app_version": "3.12.3",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 3060 Laptop GPU",
+  "vram_mb": 6144,
+  "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+  "cpu_mhz": 2300,
+  "cpu_cores": 14,
+  "cpu_threads": 20,
+  "ram_mb": 32436,
+  "ram_speed_mhz": 4800,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1692",
+  "results": {
+    "Balanced": {
+      "480x360": 193.19,
+      "640x480": 124.11,
+      "768x576": 100.08,
+      "1280x720": 52.86,
+      "1920x1080": 24.98
+    },
+    "Performance": {
+      "480x360": 297.89,
+      "640x480": 217.58,
+      "768x576": 189.23,
+      "1280x720": 98.62,
+      "1920x1080": 49.09
+    }
+  },
+  "submitted_by": "",
+  "note": "Laptop HP Victus 16-d1000"
+}
