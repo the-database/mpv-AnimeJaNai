@@ -8,9 +8,11 @@
 --   DirectML  -> D3D11 frames (hwdec=d3d11va, D3D11 VO: mpv has no
 --                D3D11->Vulkan interop, so a Vulkan VO would hw-download
 --                every output frame)
---   Vulkan    -> D3D11 frames too: on Windows libaji's Vulkan backend runs
---                on DirectML's D3D11/D3D12 frame pipeline (and runs models
---                without Vulkan kernels on DirectML itself)
+--   Vulkan    -> Windows: D3D11 frames too: libaji's Vulkan backend runs on
+--                DirectML's D3D11/D3D12 frame pipeline (and runs models
+--                without Vulkan kernels on DirectML itself).
+--                Linux: Vulkan frames (hwdec=vulkan, Vulkan VO): libaji runs
+--                on the decoder's own Vulkan device.
 -- (backend=ncnn is retired and treated as DirectML by the shim.)
 --
 -- mpv.conf carries the TensorRT defaults (hwdec=nvdec,
@@ -505,10 +507,13 @@ if backend == 'tensorrt' and mp.get_property('platform') == 'windows' then
         trt_unavailable = too_old_message(old) .. '. Select DirectML in AnimeJaNai Manager (Ctrl+E)'
     end
 elseif backend == 'tensorrt' then
-    -- Linux: TensorRT is the only backend, so a GPU too old for it can't upscale
+    -- Linux: TensorRT, or Vulkan where the engine has it (libaji_vk.so)
     local ok, old = trt_gpus()
     if ok and #ok == 0 and #old > 0 then
-        trt_unavailable = too_old_message(old) .. ', the only upscaling engine on Linux'
+        trt_unavailable = too_old_message(old) ..
+            (exists('animejanai/inference/libaji_vk.so')
+                and '. Select Vulkan in AnimeJaNai Manager (Ctrl+E)'
+                or ', the only upscaling engine on Linux')
     end
 end
 if trt_unavailable then
@@ -519,13 +524,24 @@ if trt_unavailable then
 end
 
 local hwdec = 'nvdec'
+local is_vulkan = backend == 'vulkan' or backend == 'vk'
 -- DirectML/ncnn and Vulkan use D3D11 frames (hwdec=d3d11va, gpu-api=d3d11).
--- Windows-only: there is no D3D11 on Linux, where only the TensorRT
--- (CUDA/nvdec) backend exists, so this branch is guarded behind the platform.
-if (backend == 'directml' or backend == 'ncnn' or backend == 'vulkan' or backend == 'vk')
+-- Windows-only: there is no D3D11 on Linux, so this branch is guarded behind
+-- the platform.
+if (backend == 'directml' or backend == 'ncnn' or is_vulkan)
         and mp.get_property('platform') == 'windows' then
     hwdec = 'd3d11va'
     mp.set_property('gpu-api', 'd3d11')
+elseif is_vulkan then
+    -- Linux: Vulkan frames on the decoder's device, which is the VO's: the
+    -- filter needs both on Vulkan (mpv's default device, the GPU choice being
+    -- Auto here)
+    hwdec = 'vulkan'
+    mp.set_property('gpu-api', 'vulkan')
+    if not exists('animejanai/inference/libaji_vk.so') then
+        fallback_hint = 'The Vulkan backend is not in this install - ' ..
+            'press Ctrl+E to open AnimeJaNai Manager'
+    end
 end
 
 -- Which GPU upscales. The Manager writes [global] gpu_tensorrt (a Vulkan device
@@ -569,7 +585,7 @@ if hwdec == 'nvdec' then
     elseif new_enough and unset('vulkan-device') then
         apply_gpu('vulkan-device', new_enough.uuid)
     end
-elseif unset('d3d11-adapter') then
+elseif hwdec == 'd3d11va' and unset('d3d11-adapter') then
     if gpu_choice.directml then
         apply_gpu('d3d11-adapter', gpu_choice.directml)
     elseif mp.get_property('d3d11-adapter-preference') == 'default' then
@@ -582,7 +598,8 @@ elseif unset('d3d11-adapter') then
 end
 mp.set_property('hwdec', hwdec)
 msg.info(string.format('backend %s -> hwdec=%s%s', backend, hwdec,
-                       hwdec == 'd3d11va' and ', gpu-api=d3d11' or ''))
+                       hwdec == 'd3d11va' and ', gpu-api=d3d11' or
+                       hwdec == 'vulkan' and ', gpu-api=vulkan' or ''))
 
 -- Opt-in GPU subtitle rendering: only ever applied on top of the stable
 -- defaults, never the reverse, so a user who set any of these options in
