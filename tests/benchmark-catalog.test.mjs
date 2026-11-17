@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import worker from "../benchmark-proxy/src/index.js";
-import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel, backendLabel } from "../site/measurement.mjs";
+import { measurementKind, outputResolutions, matchesMeasurement, measurementLabel, backendLabel, ALL_OUTPUTS } from "../site/measurement.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const base = { schema: 1, backend: "TensorRT", gpu: "NVIDIA GeForce RTX 4090", results: { Balanced: { "1920x1080": 89.5 } } };
@@ -46,6 +46,7 @@ test("catalog separates timing methods and native render resolutions before rank
   const subs = [base, native("2560x1440"), native("3840x2160"), pipeline];
   assert.deepEqual(outputResolutions(subs), ["3840x2160", "2560x1440"]);
   assert.deepEqual(subs.filter(s => matchesMeasurement(s, "native-display", "2560x1440")), [subs[1]]);
+  assert.deepEqual(subs.filter(s => matchesMeasurement(s, "native-display", ALL_OUTPUTS)), [subs[1], subs[2]]);
   assert.deepEqual(subs.filter(s => matchesMeasurement(s, "pipeline", "3840x2160")), [pipeline]);
   assert.deepEqual(subs.filter(s => matchesMeasurement(s, "legacy", "")), [base]);
   assert.equal(measurementKind({ results: base.results }), "legacy"); // pre-v2 aggregate omitted schema
