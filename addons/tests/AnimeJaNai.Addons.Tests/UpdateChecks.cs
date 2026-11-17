@@ -210,6 +210,37 @@ internal static partial class Checks
             await AddonUpdateTransaction.ApplyAsync(source, target, new HashSet<string>(), component: true, removals: ["animejanai/inference/component.bin"]);
             True(!File.Exists(runtime) && File.ReadAllText(Path.Combine(target, "components.json")) == "new state");
         });
+        await Test("A running player blocks component changes only to files it may hold", async () =>
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            string target = Area();
+            File.Copy(Path.Combine(Environment.SystemDirectory, "PING.EXE"), Path.Combine(target, "mpv.exe"));
+            using var player = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                Path.Combine(target, "mpv.exe"), "-n 60 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true })!;
+            try
+            {
+                File.WriteAllText(Path.Combine(target, "components.json"), "{}");
+                string add = Area();
+                Directory.CreateDirectory(Path.Combine(add, "animejanai/rife"));
+                File.WriteAllText(Path.Combine(add, "animejanai/rife/rife.onnx"), "rife");
+                File.WriteAllText(Path.Combine(add, "components.json"), "added");
+                await AddonUpdateTransaction.ApplyAsync(add, target, new HashSet<string>(), component: true);
+                True(File.ReadAllText(Path.Combine(target, "animejanai/rife/rife.onnx")) == "rife" &&
+                    File.ReadAllText(Path.Combine(target, "components.json")) == "added");
+                string replace = Area();
+                Directory.CreateDirectory(Path.Combine(replace, "animejanai/rife"));
+                File.WriteAllText(Path.Combine(replace, "animejanai/rife/rife.onnx"), "newer");
+                bool blocked = false;
+                try { await AddonUpdateTransaction.ApplyAsync(replace, target, new HashSet<string>(), component: true); }
+                catch (IOException error) when (error.Message.StartsWith("Close the player")) { blocked = true; }
+                True(blocked && File.ReadAllText(Path.Combine(target, "animejanai/rife/rife.onnx")) == "rife" && !InstallationActivity.Pending(target));
+                blocked = false;
+                try { await AddonUpdateTransaction.ApplyAsync(Area(), target, new HashSet<string>(), component: true, removals: ["animejanai/rife/rife.onnx"]); }
+                catch (IOException error) when (error.Message.StartsWith("Close the player")) { blocked = true; }
+                True(blocked && File.Exists(Path.Combine(target, "animejanai/rife/rife.onnx")));
+            }
+            finally { player.Kill(); player.WaitForExit(); }
+        });
         await Test("Interrupted replacement blocks activation and recovery restores the complete prior file set", async () =>
         {
             string source = Area(), target = Area();

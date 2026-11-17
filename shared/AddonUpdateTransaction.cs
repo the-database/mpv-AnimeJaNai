@@ -163,6 +163,15 @@ public static class AddonUpdateTransaction
             ? "Close the player and AnimeJaNai Manager before applying or recovering this update."
             : "Close the player before changing component packs. You can keep Manager open.");
     }
+    // The player may have loaded component files (TensorRT, RIFE models), so a component change that
+    // replaces or deletes one waits for it to close. Adding files it doesn't have yet doesn't: that is
+    // a first RIFE install from Manager, which the player itself sends people to (Ctrl+E).
+    // components.json is never held open.
+    public static void RequirePlayerClosedFor(string root, IEnumerable<string> relativePaths)
+    {
+        if (relativePaths.Any(p => !p.Equals("components.json", StringComparison.OrdinalIgnoreCase) && File.Exists(Child(root, p))))
+            RequireAppsClosed(root, includeManager: false);
+    }
     private static void Intent(string root)
     {
         string directory = Child(root, InstallationActivity.DirectoryName);
@@ -187,7 +196,13 @@ public static class AddonUpdateTransaction
             source.StartsWith(Path.TrimEndingDirectorySeparator(target) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new IOException("Update staging and installation must be separate directories.");
         using var update = Lock(target);
-        RequireAppsClosed(target, includeManager: !component);
+        // recovering an interrupted transaction (RecoverCore) restores files the player may hold
+        if (component && File.Exists(Child(target, InstallationActivity.DirectoryName + "/journal.json")))
+            RequireAppsClosed(target, includeManager: false);
+        else if (component)
+            RequirePlayerClosedFor(target, FilesIn(source).Select(f => Path.GetRelativePath(source, f).Replace('\\', '/')).Concat(removals ?? []));
+        else
+            RequireAppsClosed(target);
         Intent(target);
         try
         {

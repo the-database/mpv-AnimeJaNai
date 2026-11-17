@@ -1244,6 +1244,27 @@ bool PackContentMatches(Pack pack)
     return true;
 }
 
+// Every file of the pack is on disk and they add up to the published pack's extracted size. Needs an
+// index with installed_bytes; without it nothing says the files are this release's.
+bool PackOnDisk(Pack pack)
+{
+    if (pack.Files.Count == 0 || pack.InstalledBytes <= 0)
+    {
+        return false;
+    }
+    long total = 0;
+    foreach (var f in pack.Files)
+    {
+        var fi = new FileInfo(Path.Combine(installDir, f));
+        if (!fi.Exists)
+        {
+            return false;
+        }
+        total += fi.Length;
+    }
+    return total == pack.InstalledBytes;
+}
+
 // Installed state: components.json, else inferred from what's on disk so
 // full installs that predate the manager work out of the box. In store mode
 // the trt-* packs are the store's for this install.
@@ -1277,6 +1298,16 @@ Dictionary<string, string> ReadPrivateComponents(PackIndex index)
             foreach (var e in doc.RootElement.GetProperty("installed").EnumerateObject())
             {
                 installed[e.Name] = e.Value.GetString() ?? "";
+            }
+            // A pack put in place by hand (component-rife.7z extracted into the folder) isn't in the
+            // record; it counts when the files are exactly the published pack's, so Manager shows it
+            // installed and --install doesn't download it again.
+            foreach (var pack in index.Packs.Where(p => !p.Store && !installed.ContainsKey(p.Name)))
+            {
+                if (PackOnDisk(pack))
+                {
+                    installed[pack.Name] = pack.Dep is null ? index.PackageVersion : ReadManifestDep(localManifest, pack.Dep);
+                }
             }
             return installed;
         }
@@ -1518,6 +1549,11 @@ async Task<int> InstallComponentAsync(string name)
     }
 
     bool addonUpdate = OperatingSystem.IsWindows() && File.Exists(Path.Combine(installDir, AddonUpdateTransaction.PackageManifest));
+    if (addonUpdate)
+    {
+        // before the download, not after it: the transaction would refuse the same change
+        AddonUpdateTransaction.RequirePlayerClosedFor(installDir, pack.Files);
+    }
     string work = Path.Combine(Path.GetTempPath(), addonUpdate ? "animejanai-packs-" + Guid.NewGuid().ToString("N") : "animejanai-packs");
     Directory.CreateDirectory(work);
     string archive = Path.Combine(work, pack.Asset);

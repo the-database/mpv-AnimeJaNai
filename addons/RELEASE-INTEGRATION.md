@@ -66,7 +66,7 @@ For addon builds, `deps.mpvfork` records `native:<sha256>` of the sorted `filena
 
 Addon data/settings are preserved independently of the release's preservation list. **Remove addon** preserves them too. Full application uninstall retains the existing policy of deleting the app tree, including data inside it. It drains this installation and unregisters only Run values still pointing at its own quoted launcher/login command. External/shared data roots and startup entries now pointing at another installation remain untouched.
 
-Component installation/removal uses the same transaction for its runtime/model files and `components.json`, so those records recover together. Close the player first; Manager may stay open for these operations. Existing addon work stops and can be started again afterwards.
+Component installation/removal uses the same transaction for its runtime/model files and `components.json`, so those records recover together. Adding files the install doesn't have yet (a first RIFE install) works with the player open; replacing or removing component files needs the player closed, and the updater says so before downloading anything. Manager may stay open for these operations. Existing addon work stops and can be started again afterwards.
 
 ## Lifecycle and native validation
 
