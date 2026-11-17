@@ -1204,7 +1204,10 @@ async Task<PackIndex> GetReleasePackIndexAsync()
             files,
             e.TryGetProperty("dep", out var d) ? d.GetString() : null,
             e.TryGetProperty("installed_bytes", out var ib) ? ib.GetInt64() : 0,
-            Sha256: e.TryGetProperty("sha256", out var sha) ? sha.GetString() : null));
+            Sha256: e.TryGetProperty("sha256", out var sha) ? sha.GetString() : null,
+            FileSha256: e.TryGetProperty("file_sha256", out var fs)
+                ? fs.EnumerateObject().ToDictionary(f => f.Name, f => f.Value.GetString() ?? "", StringComparer.OrdinalIgnoreCase)
+                : null));
     }
     return new PackIndex(
         doc.RootElement.TryGetProperty("package_version", out var v)
@@ -1244,11 +1247,13 @@ bool PackContentMatches(Pack pack)
     return true;
 }
 
-// Every file of the pack is on disk and they add up to the published pack's extracted size. Needs an
-// index with installed_bytes; without it nothing says the files are this release's.
+// Every file of the pack is on disk with the published file's SHA-256 (packs.json file_sha256, from
+// 3.12.3 on; an older index has none, so nothing is inferred). Sizes are compared first, so the hashing
+// only runs for a copy that looks complete.
 bool PackOnDisk(Pack pack)
 {
-    if (pack.Files.Count == 0 || pack.InstalledBytes <= 0)
+    if (pack.Files.Count == 0 || pack.InstalledBytes <= 0 || pack.FileSha256 is null ||
+        pack.Files.Any(f => !pack.FileSha256.ContainsKey(f)))
     {
         return false;
     }
@@ -1262,7 +1267,19 @@ bool PackOnDisk(Pack pack)
         }
         total += fi.Length;
     }
-    return total == pack.InstalledBytes;
+    if (total != pack.InstalledBytes)
+    {
+        return false;
+    }
+    foreach (var f in pack.Files)
+    {
+        using var stream = File.OpenRead(Path.Combine(installDir, f));
+        if (!Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).Equals(pack.FileSha256[f], StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Installed state: components.json, else inferred from what's on disk so
@@ -1300,14 +1317,21 @@ Dictionary<string, string> ReadPrivateComponents(PackIndex index)
                 installed[e.Name] = e.Value.GetString() ?? "";
             }
             // A pack put in place by hand (component-rife.7z extracted into the folder) isn't in the
-            // record; it counts when the files are exactly the published pack's, so Manager shows it
-            // installed and --install doesn't download it again.
+            // record; it counts when the files hash to the published pack's, so Manager shows it
+            // installed and --install doesn't download it again. It goes into the record then, so the
+            // files are hashed once, not on every Manager refresh.
+            bool found = false;
             foreach (var pack in index.Packs.Where(p => !p.Store && !installed.ContainsKey(p.Name)))
             {
                 if (PackOnDisk(pack))
                 {
                     installed[pack.Name] = pack.Dep is null ? index.PackageVersion : ReadManifestDep(localManifest, pack.Dep);
+                    found = true;
                 }
+            }
+            if (found)
+            {
+                try { WriteInstalledComponents(installed); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
             return installed;
         }
@@ -2442,7 +2466,8 @@ record Asset(string Name, string Url);
 // Store: one of the shared runtime release's packs (aji-runtime installs it into the pack store; Files
 // are paths inside the pack).
 record Pack(string Name, string Asset, string? Url, long Bytes, List<string> Files, string? Dep,
-            long InstalledBytes = 0, bool Store = false, string? Sha256 = null);
+            long InstalledBytes = 0, bool Store = false, string? Sha256 = null,
+            Dictionary<string, string>? FileSha256 = null);
 // Replaced (store mode): this release's own packs that the store's replace, for the files an older
 // version installed.
 record PackIndex(string PackageVersion, List<Pack> Packs, List<Pack>? Replaced = null);
