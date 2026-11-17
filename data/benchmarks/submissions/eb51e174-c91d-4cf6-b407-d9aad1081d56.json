@@ -1,0 +1,43 @@
+{
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "3840x2160",
+    "display_hz": 120,
+    "native_kernels": true
+  },
+  "id": "eb51e174-c91d-4cf6-b407-d9aad1081d56",
+  "submitted_at": "2026-11-17T08:32:57.530Z",
+  "app_version": "3.12.2",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "vram_mb": 24564,
+  "gpu_power_w": 480,
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900K",
+  "cpu_mhz": 3000,
+  "cpu_cores": 24,
+  "cpu_threads": 32,
+  "ram_mb": 32532,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.2101",
+  "results": {
+    "Balanced": {
+      "480x360": 515.56,
+      "640x480": 436.01,
+      "768x576": 390.02,
+      "1280x720": 253.57,
+      "1920x1080": 143.6
+    },
+    "Performance": {
+      "480x360": 610.7,
+      "640x480": 550.11,
+      "768x576": 512.31,
+      "1280x720": 384.18,
+      "1920x1080": 247.68
+    }
+  },
+  "submitted_by": "Munemune",
+  "note": ""
+}
