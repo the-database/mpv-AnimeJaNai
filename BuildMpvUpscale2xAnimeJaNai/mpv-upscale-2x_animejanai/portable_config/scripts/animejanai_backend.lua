@@ -8,6 +8,9 @@
 --   DirectML  -> D3D11 frames (hwdec=d3d11va, D3D11 VO: mpv has no
 --                D3D11->Vulkan interop, so a Vulkan VO would hw-download
 --                every output frame)
+--   Vulkan    -> D3D11 frames too: on Windows libaji's Vulkan backend runs
+--                on DirectML's D3D11/D3D12 frame pipeline (and runs models
+--                without Vulkan kernels on DirectML itself)
 -- (backend=ncnn is retired and treated as DirectML by the shim.)
 --
 -- mpv.conf carries the TensorRT defaults (hwdec=nvdec,
@@ -516,10 +519,10 @@ if trt_unavailable then
 end
 
 local hwdec = 'nvdec'
--- DirectML/ncnn use D3D11 frames (hwdec=d3d11va, gpu-api=d3d11). Windows-only:
--- there is no D3D11 on Linux, where only the TensorRT (CUDA/nvdec) backend
--- exists, so this branch is guarded behind the platform.
-if (backend == 'directml' or backend == 'ncnn')
+-- DirectML/ncnn and Vulkan use D3D11 frames (hwdec=d3d11va, gpu-api=d3d11).
+-- Windows-only: there is no D3D11 on Linux, where only the TensorRT
+-- (CUDA/nvdec) backend exists, so this branch is guarded behind the platform.
+if (backend == 'directml' or backend == 'ncnn' or backend == 'vulkan' or backend == 'vk')
         and mp.get_property('platform') == 'windows' then
     hwdec = 'd3d11va'
     mp.set_property('gpu-api', 'd3d11')
