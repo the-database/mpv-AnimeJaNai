@@ -9,18 +9,24 @@
 //   mpv-animejanai --open-dialog --owner <window-id> [--multi] [--folder] [--title T]
 //                  [--filter "Name|*.a;*.b|Name|*.*"] [--initial <dir>]
 //                                           native file picker; UTF-8 paths on stdout, one per
-//                                           line; exit 1 when cancelled
+//                                           line; exit 1 when cancelled (Linux: 3 when there is
+//                                           no dialog program, zenity or kdialog)
 //   mpv-animejanai --register video|audio|image|path [--default]
 //   mpv-animejanai --unregister video|audio|image|path|all
 //                                           per-user file associations and PATH (Windows)
+//   mpv-animejanai --register desktop [--default] [--exec <path>]
+//   mpv-animejanai --unregister desktop|all  menu entry, icon, default player (Linux)
 //   mpv-animejanai --window-rect <window-id> prints "x y w h" as --geometry takes them (Windows)
 //
 // Any other argument that starts with "-" is an mpv option. A launch with mpv options starts its
 // own player, like --new-instance. The console build (shipped as mpv-animejanai.com) runs mpv.com
-// in the caller's console and waits for it.
+// in the caller's console and waits for it. On Linux there is one build: it execs mpv/mpv with
+// the bundled libraries on LD_LIBRARY_PATH, so the launcher process becomes the player.
 //
 // Environment: ANIMEJANAI_CONFIG_DIR replaces <install>/portable_config (tests, the AppImage);
-// ANIMEJANAI_LAUNCHER_LOG=<file> appends a timing log.
+// ANIMEJANAI_LAUNCHER_LOG=<file> appends a timing log; on Linux ANIMEJANAI_EXTRA_LIBS adds
+// library folders after the bundled ones, and the player gets the caller's LD_LIBRARY_PATH in
+// ANIMEJANAI_ORIG_LD_LIBRARY_PATH (for the programs it runs).
 using AnimeJaNai.Launcher;
 
 return Launcher.Run(args);
@@ -69,6 +75,8 @@ namespace AnimeJaNai.Launcher
             "       mpv-animejanai --open-dialog --owner <window-id> [--multi] [--folder] [--title T] [--filter F] [--initial DIR]\n" +
             "       mpv-animejanai --register video|audio|image|path [--default]\n" +
             "       mpv-animejanai --unregister video|audio|image|path|all\n" +
+            "       mpv-animejanai --register desktop [--default] [--exec PATH]   (Linux)\n" +
+            "       mpv-animejanai --unregister desktop|all                      (Linux)\n" +
             "       mpv-animejanai --window-rect <window-id>";
     }
 

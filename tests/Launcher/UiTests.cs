@@ -8,7 +8,8 @@ using System.Text.Json.Nodes;
 // The player gets this test program as its "launcher" (animejanai_ui-launcher): Stub.Run answers
 // --open-dialog from a file the test writes, records --register calls instead of touching the
 // registry, and passes --window-rect to the real launcher.
-sealed partial class Tests
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+sealed partial class WindowsTests
 {
     string uiConfig = "";
     string stubFile = "";

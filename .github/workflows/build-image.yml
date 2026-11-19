@@ -3,10 +3,13 @@ name: Build Linux build image
 # Builds + pushes the old-baseline (Ubuntu 22.04, glibc 2.35) build image used by
 # the Linux legs of this repo (deploy.yml) and the sibling repos' build-linux
 # workflows (the-database/mpv, the-database/animejanai-inference). Run once, then
-# re-run only when build/Dockerfile.ubuntu2204 changes.
+# re-run only when build/Dockerfile.ubuntu2204 changes. Pushes rebuild it from main
+# only: the tag is shared, so a branch that edits the Dockerfile must not replace it
+# before it merges (dispatch the workflow on the branch to try an image).
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - build/Dockerfile.ubuntu2204
       - .github/workflows/build-image.yml
