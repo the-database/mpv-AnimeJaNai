@@ -16,9 +16,15 @@ APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICONS="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
 
 rm -f "$BIN/mpv-animejanai"
-rm -f "$APPS/mpv-animejanai.desktop"
-rm -f "$ICONS/mpv-animejanai.png"
-update-desktop-database "$APPS" 2>/dev/null || true
+APP="$HERE/mpv-animejanai"
+if [ -x "$APP" ] && [ "$(head -c 2 "$APP")" != "#!" ]; then
+    # the launcher binary: entry, icon, and its default-player entries in mimeapps.list
+    "$APP" --unregister desktop || true
+else
+    rm -f "$APPS/mpv-animejanai.desktop"
+    rm -f "$ICONS/mpv-animejanai.png"
+    update-desktop-database "$APPS" 2>/dev/null || true
+fi
 
 echo "Removed launcher symlink + desktop entry."
 echo "Delete this folder to remove the player itself; user config under"

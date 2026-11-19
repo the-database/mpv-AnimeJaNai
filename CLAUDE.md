@@ -51,9 +51,13 @@ It contains:
    (Native AOT C#; `.exe` GUI build plus a console build shipped as `.com`). Starts the bundled
    mpv with the interface scripts (`portable_config/animejanai-ui/`) and a taskbar identity, hands
    files to the running player over its IPC pipe, and is the native helper the scripts call
-   (`--open-dialog`, `--register`, `--window-rect`). Not in the package yet: the plan is
-   `plans/mpv-animejanai-frontend/plan.md` in the-database/animejan.ai (Phase 5 is the switch).
-   Checks: `dotnet run --project tests/Launcher -- <release tree> <launcher dir>`.
+   (`--open-dialog`, `--register`, `--window-rect`). On Linux (`-r linux-x64`, `Linux/*.cs`) it
+   execs `mpv/mpv` with the bundled libraries on `LD_LIBRARY_PATH`, hands files over the player's
+   Unix socket, shows dialogs through zenity / kdialog, and `--register desktop` writes the
+   `.desktop` entry that `installer/linux/install.sh`, `uninstall.sh` and `AppRun --install` use.
+   Not in the package yet: the plan is `plans/mpv-animejanai-frontend/plan.md` in
+   the-database/animejan.ai (Phase 5 is the switch).
+   Checks: `dotnet run --project tests/Launcher -- <release tree> <launcher dir>` (both OSes).
 
 A user-facing release is the C# app's output, not anything in source form.
 
@@ -179,7 +183,8 @@ All three csproj target **net10.0**, and `.github/workflows/deploy.yml` pins
 
 There is no test suite and no linter configured, except `dotnet run --project tests/UpdaterGpu`
 (the updater's TensorRT GPU rules, `AnimeJaNaiUpdater/GpuSupport.cs`) and `tests/Launcher` (the
-launcher against an extracted release tree; `--only registry` needs no tree, which is what CI runs).
+launcher against an extracted release tree; `--only registry` needs no tree, which is what CI runs:
+the registry checks on Windows, the `.desktop`, installer-script and stubbed-dialog checks on Linux).
 
 See `docs/DEVELOPMENT.md` for the full assembler CLI (`--target`, `--packs`, `--packs-only`)
 and the local-component override env vars, and `docs/RELEASE.md` for the release runbook.
