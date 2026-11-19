@@ -4,7 +4,8 @@ using Microsoft.Win32;
 // --migrate-shell: our shortcuts and ProgID move from mpvnet.exe to the launcher; nothing else does.
 // Shortcuts live in a scratch folder (ANIMEJANAI_TEST_SHELL_DIRS), the registry is redirected
 // (ANIMEJANAI_TEST_HKCU): the user's real ones are never touched.
-sealed partial class Tests
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+sealed partial class WindowsTests
 {
     void MigrateShell()
     {

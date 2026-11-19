@@ -5,7 +5,8 @@ using System.Runtime.InteropServices;
 // PLAYER_MIGRATED, animejanai_update.lua moves the user to the launcher, from mpv.net only.
 // A copy of the release tree made of hard links (the user's install is not used), its own config
 // dir, and this test program as AnimeJaNaiUpdater.exe printing PLAYER_MIGRATED.
-sealed partial class Tests
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+sealed partial class WindowsTests
 {
     void HandOffFromMpvNet()
     {

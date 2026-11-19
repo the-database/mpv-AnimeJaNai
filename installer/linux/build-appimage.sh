@@ -51,6 +51,8 @@ else
     printf '\211PNG\r\n\032\n\0\0\0\rIHDR\0\0\0\1\0\0\0\1\10\6\0\0\0\37\25\304\211\0\0\0\rIDATx\234c\374\17\0\0\1\1\0\5\030\335\215\260\0\0\0\0IEND\256B`\202' > "$icon"
 fi
 
+# appimagetool needs an entry inside the image. Keep its fields in step with the one the launcher
+# writes for --install (LinuxDesktop.DesktopEntry in AnimeJaNaiLauncher/Linux/LinuxDesktop.cs).
 cat > "$APPDIR/mpv-animejanai.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -61,7 +63,9 @@ Exec=AppRun %U
 Icon=mpv-animejanai
 Terminal=false
 Categories=AudioVideo;Player;Video;
-MimeType=video/x-matroska;video/mp4;video/webm;video/x-msvideo;video/quicktime;video/mpeg;
+MimeType=video/x-matroska;video/mp4;video/webm;video/x-msvideo;video/quicktime;video/mpeg;video/x-flv;video/3gpp;
+StartupNotify=true
+StartupWMClass=mpv-animejanai
 EOF
 
 # --- bundle mpv's deps (excludelist keeps host graphics libs out) ----------

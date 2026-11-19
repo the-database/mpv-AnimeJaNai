@@ -293,7 +293,15 @@ mp.register_script_message("register", function(kind)
         return
     end
     local args
-    if kind == "unreg" then
+    if platform ~= "windows" then
+        -- Linux: one desktop entry (menu entry, "Open with", default player) covers every kind.
+        if kind == "path" or kind == "unpath" then
+            osd("PATH registration is Windows-only (the install's launcher can be linked into ~/.local/bin).")
+            return
+        end
+        args = kind == "unreg" and { o.launcher, "--unregister", "desktop" }
+                                or { o.launcher, "--register", "desktop", "--default" }
+    elseif kind == "unreg" then
         args = { o.launcher, "--unregister", "all" }
     elseif kind == "unpath" then
         args = { o.launcher, "--unregister", "path" }

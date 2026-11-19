@@ -11,6 +11,10 @@ static class Install
     public const string AppId = "TheDatabase.mpvAnimeJaNai";
     public const string DisplayName = "mpv-AnimeJaNai";
 
+    /// Linux: the player's --wayland-app-id and --x11-name, and the .desktop entry's StartupWMClass,
+    /// so the desktop groups the window under the menu entry.
+    public const string LinuxAppId = "mpv-animejanai";
+
     /// The folder the launcher is in: the install root.
     public static string Root { get; } = AppContext.BaseDirectory.TrimEnd('\\', '/');
 
@@ -40,9 +44,16 @@ static class Install
     public static string InstanceName { get; } = "mpv-animejanai-" + Convert.ToHexStringLower(
         SHA256.HashData(Encoding.UTF8.GetBytes(ConfigDir.ToLowerInvariant())))[..8];
 
+    /// Per-user scratch for the socket, the launch lock and the launch stamp: $XDG_RUNTIME_DIR
+    /// (/tmp when unset) on Linux, the temp folder on Windows.
+    public static string RuntimeDir =>
+        OperatingSystem.IsWindows()
+            ? System.IO.Path.GetTempPath()
+            : Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") is { Length: > 0 } run ? run : "/tmp";
+
     /// The --input-ipc-server value for an instance name.
     public static string IpcServer(string name) =>
         OperatingSystem.IsWindows()
             ? $@"\\.\pipe\{name}"
-            : System.IO.Path.Combine(Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") is { Length: > 0 } run ? run : "/tmp", name + ".sock");
+            : System.IO.Path.Combine(RuntimeDir, name + ".sock");
 }
