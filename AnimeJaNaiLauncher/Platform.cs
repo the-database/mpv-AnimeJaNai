@@ -3,7 +3,8 @@ namespace AnimeJaNai.Launcher;
 /// A started player process.
 sealed record Started(int ExitCode, Func<bool> IsAlive);
 
-/// Operating-system specific parts. Windows lives in Windows/*.cs; Linux follows in Phase 2.
+/// Operating-system specific parts: Windows/*.cs and Linux/*.cs. On Linux the launcher execs the
+/// player (Launch.RunLinux), so Start, RunConsole, BringToFront and TagWindow are Windows-only.
 static partial class Platform
 {
     public static Started Start(string exe, List<string> args, bool appId)
@@ -16,7 +17,7 @@ static partial class Platform
         {
             return Win.StartProcess(exe, args, appId);
         }
-        throw new PlatformNotSupportedException("starting the player is Windows-only so far");
+        throw new PlatformNotSupportedException("this system execs the player instead");
     }
 
     public static int RunConsole(string exe, List<string> args)
@@ -29,7 +30,7 @@ static partial class Platform
         {
             return Win.RunAndWait(exe, args);
         }
-        throw new PlatformNotSupportedException("the console launcher is Windows-only so far");
+        throw new PlatformNotSupportedException("the console build is Windows-only: on Linux the launcher becomes mpv itself");
     }
 
     public static void BringToFront(long windowId)
@@ -54,7 +55,11 @@ static partial class Platform
         {
             return WinDialog.Run(args);
         }
-        throw new PlatformNotSupportedException("--open-dialog is Windows-only so far");
+        if (OperatingSystem.IsLinux())
+        {
+            return LinuxDialog.Run(args);
+        }
+        throw new PlatformNotSupportedException("--open-dialog is not supported on this system");
     }
 
     public static int Register(string[] args, bool register)
@@ -63,14 +68,19 @@ static partial class Platform
         {
             return WinRegistration.Run(args, register);
         }
-        throw new PlatformNotSupportedException("--register is Windows-only so far");
+        if (OperatingSystem.IsLinux())
+        {
+            return LinuxDesktop.Run(args, register);
+        }
+        throw new PlatformNotSupportedException("--register is not supported on this system");
     }
 
     public static int WindowRect(string[] args)
     {
         if (!OperatingSystem.IsWindows())
         {
-            throw new PlatformNotSupportedException("--window-rect is Windows-only");
+            // mpv has no window-position property, and Wayland gives no client its position.
+            throw new PlatformNotSupportedException("--window-rect is Windows-only (no window position on Linux)");
         }
         if (args.Length < 1 || !long.TryParse(args[0], out long wid))
         {

@@ -19,6 +19,10 @@ static partial class Launch
         // No hand-off to a running player and no taskbar identity: that's what a terminal user expects.
         return Platform.RunConsole(Install.Player(console: true), PlayerArguments(req, ipcServer: null, gui: false));
 #else
+        if (OperatingSystem.IsLinux())
+        {
+            return RunLinux(req);
+        }
         if (req.NoUi)
         {
             return Platform.Start(Install.Player(console: false), PlayerArguments(req, null, gui: true), appId: false).ExitCode;
@@ -91,6 +95,11 @@ static partial class Launch
                 a.Add($"--script-opts-append=select-menu_conf_path={menu}");
             }
             a.Add($"--script-opts-append=animejanai_ui-launcher={Install.GuiLauncherPath}");
+        }
+        if (!req.NoUi && !OperatingSystem.IsWindows())
+        {
+            a.Add($"--wayland-app-id={Install.LinuxAppId}");
+            a.Add($"--x11-name={Install.LinuxAppId}");
         }
         if (gui)
         {
@@ -197,7 +206,7 @@ static partial class Launch
         Log.Write("no window to tag");
     }
 
-    static string StampPath(string name) => Path.Combine(Path.GetTempPath(), name + ".last-launch");
+    static string StampPath(string name) => Path.Combine(Install.RuntimeDir, name + ".last-launch");
 
     static bool LastLaunchWithin(string name, int ms)
     {

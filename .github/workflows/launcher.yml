@@ -4,12 +4,14 @@ on:
     paths:
       - "AnimeJaNaiLauncher/**"
       - "tests/Launcher/**"
+      - "installer/linux/**"
       - ".github/workflows/launcher.yml"
   push:
     branches: [main]
     paths:
       - "AnimeJaNaiLauncher/**"
       - "tests/Launcher/**"
+      - "installer/linux/**"
       - ".github/workflows/launcher.yml"
   workflow_dispatch:
 permissions:
@@ -41,4 +43,40 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mpv-animejanai-launcher-win-x64
+          path: launcher-publish
+  linux:
+    # Built here on ubuntu-latest for the checks. Release builds publish in the Ubuntu 22.04
+    # build image (build/Dockerfile.ubuntu2204, which has clang) for the glibc floor the rest of
+    # the Linux package has; the glibc check below keeps this build under that floor too.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      # clang: the Native AOT linker. desktop-file-utils: desktop-file-validate for the checks.
+      - name: Install clang and desktop-file-utils
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang desktop-file-utils
+      - name: Publish
+        run: |
+          dotnet publish AnimeJaNaiLauncher -c Release -r linux-x64 -o launcher-publish
+          rm -f launcher-publish/*.dbg
+          ls -l launcher-publish
+      - name: glibc floor (2.35, Ubuntu 22.04)
+        run: |
+          need=$(objdump -T launcher-publish/mpv-animejanai | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)
+          echo "highest glibc symbol version: $need"
+          [ "$(printf '%s\n2.35\n' "$need" | sort -V | tail -1)" = "2.35" ]
+      # The player checks need a release tree with mpv/mpv; CI runs the ones that need no player:
+      # the .desktop entry and mimeapps.list (scratch XDG dirs), installer/linux calling the
+      # launcher, and --open-dialog through stub zenity / kdialog.
+      - name: Desktop, installer-script and dialog checks
+        run: |
+          mkdir -p "$RUNNER_TEMP/tree"
+          dotnet run --project tests/Launcher -c Release -- "$RUNNER_TEMP/tree" launcher-publish --only registry
+      - name: shellcheck installer/linux
+        run: shellcheck -s sh installer/linux/install.sh installer/linux/uninstall.sh installer/linux/AppRun
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mpv-animejanai-launcher-linux-x64
           path: launcher-publish

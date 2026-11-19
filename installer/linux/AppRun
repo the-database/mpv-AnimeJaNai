@@ -24,6 +24,30 @@ case "${1:-}" in
     ICONS="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
     desktop="$APPS/mpv-animejanai.desktop"
     MIMES="video/x-matroska;video/mp4;video/webm;video/x-msvideo;video/quicktime;video/mpeg;video/x-flv;video/3gpp;"
+    launcher="$HERE/mpv-animejanai"
+    if [ -x "$launcher" ] && [ "$(head -c 2 "$launcher")" != "#!" ]; then
+        # The launcher binary writes the entry, the icon and the defaults; Exec names this
+        # AppImage file. (A package whose launcher is still the shell script: written below.)
+        if [ "$1" = "--uninstall" ]; then
+            "$launcher" --unregister desktop
+            echo "Removed the AnimeJaNai menu entry + file associations."
+            echo "(cached engines/config in ${XDG_DATA_HOME:-$HOME/.local/share}/AnimeJaNai are kept; delete that folder to clear them)"
+            exit 0
+        fi
+        target="${APPIMAGE:-$HERE}"
+        [ -z "${APPIMAGE:-}" ] && echo "warning: \$APPIMAGE unset (run the .AppImage directly, not extracted); using $HERE" >&2
+        if [ "${2:-}" = "--default" ]; then
+            "$launcher" --register desktop --exec "$target" --default
+            echo "Installed and set as the default video player."
+        else
+            "$launcher" --register desktop --exec "$target"
+            echo "Installed: 'mpv AnimeJaNai' now appears in your app menu and right-click > Open With."
+            echo "(re-run with: --install --default  to also make it your default video player)"
+        fi
+        echo "  entry:    $desktop"
+        echo "  launches: $target"
+        exit 0
+    fi
     if [ "$1" = "--uninstall" ]; then
         rm -f "$desktop" "$ICONS/mpv-animejanai.png"
         update-desktop-database "$APPS" 2>/dev/null || true

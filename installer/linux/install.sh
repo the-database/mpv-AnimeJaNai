@@ -25,6 +25,12 @@ mkdir -p "$BIN" "$APPS" "$ICONS"
 
 ln -sf "$APP" "$BIN/mpv-animejanai"
 
+# The launcher binary writes the menu entry, the icon and the default-player entries itself
+# (--register desktop). A package whose launcher is still the shell script gets the entry
+# written here, as before.
+if [ "$(head -c 2 "$APP")" != "#!" ]; then
+    "$APP" --register desktop --default
+else # the shell-script launcher
 icon_line="Icon=mpv-animejanai"
 if [ -f "$HERE/animejanai.png" ]; then
     cp -f "$HERE/animejanai.png" "$ICONS/mpv-animejanai.png"
@@ -56,6 +62,7 @@ update-desktop-database "$APPS" 2>/dev/null || true
 for m in $(echo "$MIMES" | tr ';' ' '); do
     [ -n "$m" ] && xdg-mime default mpv-animejanai.desktop "$m" 2>/dev/null || true
 done
+fi
 
 echo "Installed:"
 echo "  launcher : $BIN/mpv-animejanai  ->  $APP"
