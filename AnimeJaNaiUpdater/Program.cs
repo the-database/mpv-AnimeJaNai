@@ -203,6 +203,10 @@ async Task CheckAsync()
 {
     // Before the network call, so post-update housekeeping happens even offline.
     CleanupLegacy();
+    if (await MigrateFromMpvNetAsync())
+    {
+        Console.WriteLine("PLAYER_MIGRATED");
+    }
     MigrateUserConf();
     SyncInputConf();
     MigrateAnimeJaNaiConf();
@@ -216,6 +220,80 @@ async Task CheckAsync()
     else
     {
         Console.WriteLine($"UP_TO_DATE {local}");
+    }
+}
+
+// mpv.net -> the mpv-animejanai launcher, once, on the first start after the update that switched
+// (the old updater applied it and relaunched mpv.net, whose start runs this --check). In this
+// order, so there is never a moment without a live store ref (a ref lives while its app_path
+// exists, and any app's gc frees packs no live ref holds):
+//   1. read the ref that names mpvnet.exe;
+//   2. ensure the same packs for the launcher (a setup install's plain ref is rewritten in place;
+//      a zip copy gets a per-copy ref of its own). Needs the runtime index: offline it fails,
+//      nothing changes, and the next start tries again; playback meanwhile uses aji-runtime.json;
+//   3. verify the new ref, then drop a zip copy's old per-copy ref (mpvnet.exe stays, so it would
+//      otherwise pin old pack versions forever);
+//   4. re-point our shortcuts and our file association from mpvnet.exe to the launcher.
+// Nothing is deleted: mpv.net's files and settings stay for whoever wants to keep using it.
+async Task<bool> MigrateFromMpvNetAsync()
+{
+    if (!OperatingSystem.IsWindows())
+    {
+        return false;
+    }
+    string oldLauncher = Path.Combine(installDir, "mpvnet.exe");
+    string marker = Path.Combine(installDir, "animejanai", ".frontend-migrated");
+    if (SamePath(appPath, oldLauncher) || !File.Exists(appPath) || !File.Exists(oldLauncher) || File.Exists(marker))
+    {
+        return false;
+    }
+    try
+    {
+        if (storeMode && File.Exists(ajiRuntime) && !StoreMissing())
+        {
+            string[] oldIds = zipCopy ? ["--app-id", StoreAppId, "--per-copy", "--app-path", oldLauncher] : ["--app-id", StoreAppId];
+            var (rc, json) = RunAjiRuntime(["show", .. oldIds], quiet: true);
+            if ((rc == 0 ? ParseOwnRef(json, oldLauncher) : null) is { } old && old.Packs.Count > 0)
+            {
+                var index = await GetStorePackIndexAsync();
+                var want = new HashSet<string>(old.Packs.Keys, StringComparer.OrdinalIgnoreCase);
+                if (StoreEnsure(index, want).Item1 != 0)
+                {
+                    Console.WriteLine("Player migration: the TensorRT runtime couldn't be moved to the new launcher yet; trying again on the next start.");
+                    return false;
+                }
+                if (ReadOwnRef() is null || !File.Exists(Path.Combine(inferenceDir, "aji-runtime.json")))
+                {
+                    Console.WriteLine("Player migration: the new launcher's store ref didn't verify; trying again on the next start.");
+                    return false;
+                }
+                if (zipCopy)
+                {
+                    RunAjiRuntime(["unref", "--app-id", StoreAppId, "--per-copy", "--app-path", oldLauncher], quiet: true);
+                }
+            }
+        }
+        var psi = new ProcessStartInfo(appPath) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        psi.ArgumentList.Add("--migrate-shell");
+        psi.ArgumentList.Add("--from");
+        psi.ArgumentList.Add(oldLauncher);
+        using (var p = Process.Start(psi)!)
+        {
+            string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+            p.WaitForExit();
+            if (output.Trim().Length > 0)
+            {
+                Console.WriteLine(output.Trim());
+            }
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
+        File.WriteAllText(marker, $"migrated from mpv.net {DateTime.UtcNow:O}\n");
+        return true;
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine($"Player migration postponed: {e.Message}");
+        return false;
     }
 }
 
@@ -562,7 +640,7 @@ void MigrateAnimeJaNaiConf()
 async Task<int> ApplyAsync()
 {
     // The launching lua quits mpv right after starting us; wait for it to release file locks.
-    WaitForProcessExit(Path.GetFileNameWithoutExtension(playerExe), TimeSpan.FromSeconds(30));
+    WaitForPlayersExit(TimeSpan.FromSeconds(30));
 
     // A partial manifest/version can falsely select an overlay or report that
     // the update already completed. Restore the installed state first.
@@ -653,6 +731,27 @@ static string ReadManifestString(string manifestPath, string key, string fallbac
     }
     catch { /* missing/unreadable manifest -> fallback */ }
     return fallback;
+}
+
+static List<string> ReadManifestStrings(string manifestPath, string key)
+{
+    var list = new List<string>();
+    try
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        if (doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in v.EnumerateArray())
+            {
+                if (e.ValueKind == JsonValueKind.String && e.GetString() is { Length: > 0 } s)
+                {
+                    list.Add(s);
+                }
+            }
+        }
+    }
+    catch { /* missing/unreadable manifest -> empty */ }
+    return list;
 }
 
 static string? ReadDepsRaw(string manifestPath)
@@ -1092,10 +1191,10 @@ async Task<Release> GetReleaseAsync(string url)
 
 void RelaunchMpv()
 {
-    // Launch through the platform launcher: mpvnet.exe on Windows (shell-exec
-    // so file associations/working dir resolve), the mpv-animejanai shell
-    // launcher on Linux (sets --config-dir + the bundled library path).
-    string launcher = Path.Combine(installDir, playerLauncher);
+    // Launch through the platform launcher, as the manifest on disk names it now: an update that
+    // renamed it (mpvnet.exe -> mpv-animejanai.exe) has just replaced the manifest this process
+    // read at startup. Shell-exec on Windows so the working dir resolves.
+    string launcher = Path.Combine(installDir, ReadManifestString(localManifest, "player_launcher", playerLauncher));
     if (!File.Exists(launcher))
     {
         return;
@@ -1127,13 +1226,46 @@ void RelaunchMpv()
     catch (Exception e) { Console.WriteLine($"Could not relaunch mpv: {e.Message}"); }
 }
 
-static void WaitForProcessExit(string name, TimeSpan timeout)
+// Waits for this install's players to exit: the manifest's wait_processes (mpv.exe, mpv.com, the
+// console launcher, and mpvnet.exe, which upgraded installs keep), else player_executable and
+// mpvnet.exe. Only processes running from this install folder count: mpv.exe is a common name, and
+// another mpv on the PC must not hold the update up.
+void WaitForPlayersExit(TimeSpan timeout)
 {
+    var names = ReadManifestStrings(localManifest, "wait_processes");
+    if (names.Count == 0)
+    {
+        names = [playerExe, "mpvnet.exe"];
+    }
+    var stems = names.Select(Path.GetFileNameWithoutExtension).Where(n => !string.IsNullOrEmpty(n)).Distinct().ToList();
+    bool Running() => stems.Any(stem => Process.GetProcessesByName(stem!).Any(p =>
+    {
+        try
+        {
+            string? image = p.MainModule?.FileName;
+            return image is null || IsUnder(image, installDir);
+        }
+        catch (Exception)
+        {
+            return true; // can't tell (another user's process): wait for it, as before
+        }
+        finally
+        {
+            p.Dispose();
+        }
+    }));
     var sw = Stopwatch.StartNew();
-    while (sw.Elapsed < timeout && Process.GetProcessesByName(name).Length > 0)
+    while (sw.Elapsed < timeout && Running())
     {
         Thread.Sleep(500);
     }
+}
+
+static bool IsUnder(string path, string dir)
+{
+    string full = Path.GetFullPath(path);
+    string root = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    return full.StartsWith(root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 }
 
 static void TryDelete(Action action)

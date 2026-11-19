@@ -19,6 +19,7 @@ sealed partial class WindowsTests(string tree, string launcherDir) : TestBase
         try
         {
             Section("registry (redirected HKCU)", Registration);
+            Section("--migrate-shell (scratch shortcuts, redirected HKCU)", MigrateShell);
             if (!onlyRegistry)
             {
                 Section("first launch, window identity, interface contract", FirstLaunch);
@@ -29,6 +30,7 @@ sealed partial class WindowsTests(string tree, string launcherDir) : TestBase
                 Section("--open-dialog", Dialog);
                 Section("interface scripts and menu", Interface);
                 Section("remembered volume and window", RememberedState);
+                Section("hand-off from mpv.net after the switch", HandOffFromMpvNet);
             }
         }
         finally

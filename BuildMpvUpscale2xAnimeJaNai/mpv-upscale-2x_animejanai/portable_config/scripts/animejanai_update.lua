@@ -5,6 +5,7 @@
 
 local mp = require 'mp'
 local msg = require 'mp.msg'
+local utils = require 'mp.utils'
 
 -- The updater ships at the install root, one level above portable_config (~~/ = config dir).
 local exe_name = mp.get_property("platform") == "windows" and "AnimeJaNaiUpdater.exe" or "AnimeJaNaiUpdater"
@@ -40,9 +41,43 @@ end
 
 mp.register_script_message("animejanai-update", start_update)
 
+-- The first start after the update that replaced mpv.net is still mpv.net: the old updater
+-- relaunched the name it knew. Once --check has moved the install over (PLAYER_MIGRATED), move the
+-- user to the new player: same file, same position (through watch-later), then close this one.
+-- Only inside mpv.net: plain mpv has no "mpvnet" client, so the probe fails there, and under the
+-- new player the interface is already loaded.
+local function in_mpvnet()
+    if mp.get_property_native("user-data/animejanai_ui/loaded") then
+        return false
+    end
+    return mp.commandv("script-message-to", "mpvnet", "animejanai-probe") == true
+end
+
+local function hand_off_to_launcher()
+    local root = updater:match("^(.*[/\\])") or ""
+    local launcher = root .. "mpv-animejanai.exe"
+    if mp.get_property("platform") ~= "windows" or not in_mpvnet() or not utils.file_info(launcher) then
+        return
+    end
+    msg.info("mpv.net replaced: reopening in " .. launcher)
+    mp.osd_message("AnimeJaNai now has its own player - reopening there...", 4)
+    local args = { launcher }
+    local path = mp.get_property("path")
+    if path then
+        mp.command("write-watch-later-config")
+        args[#args + 1] = path
+    end
+    mp.command_native({ name = "subprocess", args = args, detach = true, playback_only = false })
+    mp.add_timeout(0.5, function() mp.command("quit") end)
+end
+
 local function on_check(success, result)
     if not success or not result or result.status ~= 0 then
         return -- offline / updater missing / error: stay quiet
+    end
+    if (result.stdout or ""):find("PLAYER_MIGRATED", 1, true) then
+        hand_off_to_launcher()
+        return
     end
     local ver = (result.stdout or ""):match("UPDATE_AVAILABLE%s+(%S+)")
     if ver then

@@ -331,6 +331,9 @@ static class StubLauncher
         }
         switch (args[0])
         {
+            case "--check":
+                Console.Out.WriteLine(Environment.GetEnvironmentVariable("AJN_TEST_CHECK_OUTPUT") ?? "");
+                return 0;
             case "--open-dialog":
             {
                 var lines = File.ReadAllLines(Environment.GetEnvironmentVariable("AJN_TEST_STUB_FILE")!, Encoding.UTF8);

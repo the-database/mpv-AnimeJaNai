@@ -31,3 +31,5 @@ benchmark-proxy/node_modules/.cache/wrangler/wrangler-account.json
 /AnimeJaNaiLauncher/obj-console
 /tests/Launcher/bin
 /tests/Launcher/obj
+/tests/FrontendMigration/bin
+/tests/FrontendMigration/obj

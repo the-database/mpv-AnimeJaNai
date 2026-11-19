@@ -16,6 +16,10 @@
 //                                           per-user file associations and PATH (Windows)
 //   mpv-animejanai --register desktop [--default] [--exec <path>]
 //   mpv-animejanai --unregister desktop|all  menu entry, icon, default player (Linux)
+//   mpv-animejanai --migrate-shell --from <old exe>
+//                                           re-points our shortcuts and file association from
+//                                           the old player exe to this launcher (Windows; the
+//                                           updater runs it once when switching from mpv.net)
 //   mpv-animejanai --window-rect <window-id> prints "x y w h" as --geometry takes them (Windows)
 //
 // Any other argument that starts with "-" is an mpv option. A launch with mpv options starts its
@@ -49,6 +53,8 @@ namespace AnimeJaNai.Launcher
                             return Platform.Register(args[1..], register: true);
                         case "--unregister":
                             return Platform.Register(args[1..], register: false);
+                        case "--migrate-shell":
+                            return Platform.MigrateShell(args[1..]);
                         case "--window-rect":
                             return Platform.WindowRect(args[1..]);
                         case "--get-window-appid":
