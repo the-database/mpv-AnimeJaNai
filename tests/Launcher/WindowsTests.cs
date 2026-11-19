@@ -27,6 +27,8 @@ sealed partial class WindowsTests(string tree, string launcherDir) : TestBase
                 Section("--new-instance and --no-ui", SeparateInstances);
                 Section("console variant", Console_);
                 Section("--open-dialog", Dialog);
+                Section("interface scripts and menu", Interface);
+                Section("remembered volume and window", RememberedState);
             }
         }
         finally

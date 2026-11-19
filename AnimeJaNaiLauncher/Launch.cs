@@ -95,6 +95,12 @@ static partial class Launch
                 a.Add($"--script-opts-append=select-menu_conf_path={menu}");
             }
             a.Add($"--script-opts-append=animejanai_ui-launcher={Install.GuiLauncherPath}");
+            // Answers old "script-message-to mpvnet ..." bindings (its file name is its script name).
+            string compat = Path.Combine(Install.ConfigDir, "animejanai-ui-compat", "mpvnet.lua");
+            if (File.Exists(compat))
+            {
+                a.Add($"--script={compat}");
+            }
         }
         if (!req.NoUi && !OperatingSystem.IsWindows())
         {

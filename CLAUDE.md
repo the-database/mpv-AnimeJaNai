@@ -58,6 +58,12 @@ It contains:
    Not in the package yet: the plan is `plans/mpv-animejanai-frontend/plan.md` in
    the-database/animejan.ai (Phase 5 is the switch).
    Checks: `dotnet run --project tests/Launcher -- <release tree> <launcher dir>` (both OSes).
+   The interface it loads lives in the runtime overlay: `portable_config/animejanai-ui/`
+   (`main.lua`: dialogs, clipboard, profiles, bookmark, registration, remembered volume/window in
+   `animejanai-ui-state.json`; `menu.conf`: the right-click menu, which must keep each command
+   identical to its binding's in `input-animejanai.conf` so the key shows) and
+   `portable_config/animejanai-ui-compat/mpvnet.lua` (answers old `script-message-to mpvnet`
+   bindings). mpv.net and plain mpv never load either.
 
 A user-facing release is the C# app's output, not anything in source form.
 

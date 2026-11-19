@@ -23,6 +23,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 
+// Run by the player as the interface's launcher (see UiTests.cs).
+if (args.Length > 0 && args[0].StartsWith("--"))
+{
+    return StubLauncher.Run(args);
+}
 if (args.Length < 2)
 {
     Console.Error.WriteLine("usage: dotnet run --project tests/Launcher -- <release tree> <launcher dir> [--only registry]");
@@ -93,7 +98,7 @@ sealed class Ipc : IDisposable
         reader = new StreamReader(s, new UTF8Encoding(false), false, 4096, leaveOpen: true);
     }
 
-    public static Ipc? Connect(string name, int timeoutMs, string? runtimeDir = null)
+    public static Ipc? Connect(string name, int timeoutMs = 2000, string? runtimeDir = null)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -131,10 +136,26 @@ sealed class Ipc : IDisposable
         }
     }
 
-    public JsonNode? Get(string property)
+    public JsonNode? Get(string property) => Send("get_property", property);
+
+    public JsonNode? TryGet(string property)
+    {
+        try { return Get(property); }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    public bool TrySend(params object[] command)
+    {
+        try { Send(command); return true; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// Runs one command; returns its data, throws when mpv reports an error.
+    public JsonNode? Send(params object[] command)
     {
         int rid = ++id;
-        var line = Encoding.UTF8.GetBytes($"{{\"command\":[\"get_property\",\"{property}\"],\"request_id\":{rid}}}\n");
+        var cmd = new JsonArray(command.Select(c => (JsonNode?)JsonValue.Create(c)).ToArray());
+        var line = Encoding.UTF8.GetBytes(new JsonObject { ["command"] = cmd, ["request_id"] = rid }.ToJsonString() + '\n');
         stream.Write(line);
         stream.Flush();
         while (reader.ReadLine() is { } reply)
@@ -146,7 +167,7 @@ sealed class Ipc : IDisposable
             }
             if (node["error"]?.GetValue<string>() != "success")
             {
-                throw new InvalidOperationException($"{property}: {node["error"]}");
+                throw new InvalidOperationException($"{command[0]} {(command.Length > 1 ? command[1] : "")}: {node["error"]}");
             }
             return node["data"];
         }
