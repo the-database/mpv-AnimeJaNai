@@ -1,0 +1,9 @@
+<Project>
+  <!-- The console variant (-p:ConsoleBuild=true) builds from the same sources into its own
+       obj/bin folders, so both variants can be built one after the other. Set here because
+       BaseIntermediateOutputPath has to be known before the SDK is imported. -->
+  <PropertyGroup Condition="'$(ConsoleBuild)' == 'true'">
+    <BaseIntermediateOutputPath>obj-console\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin-console\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

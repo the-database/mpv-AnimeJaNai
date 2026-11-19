@@ -47,6 +47,14 @@ It contains:
    the libmpv fork's `vf_animejanai` filter (which loads `aji.dll`). `AnimeJaNaiManager.exe` and the
    inference binaries are **not** committed here — they're downloaded at build time.
 
+3. **`AnimeJaNaiLauncher/`** — `mpv-animejanai`, the player launcher that will replace mpv.net
+   (Native AOT C#; `.exe` GUI build plus a console build shipped as `.com`). Starts the bundled
+   mpv with the interface scripts (`portable_config/animejanai-ui/`) and a taskbar identity, hands
+   files to the running player over its IPC pipe, and is the native helper the scripts call
+   (`--open-dialog`, `--register`, `--window-rect`). Not in the package yet: the plan is
+   `plans/mpv-animejanai-frontend/plan.md` in the-database/animejan.ai (Phase 5 is the switch).
+   Checks: `dotnet run --project tests/Launcher -- <release tree> <launcher dir>`.
+
 A user-facing release is the C# app's output, not anything in source form.
 
 **Two sibling repos drive the actual upscaling (bump together):**
@@ -170,7 +178,8 @@ All three csproj target **net10.0**, and `.github/workflows/deploy.yml` pins
 `global.json`.
 
 There is no test suite and no linter configured, except `dotnet run --project tests/UpdaterGpu`
-(the updater's TensorRT GPU rules, `AnimeJaNaiUpdater/GpuSupport.cs`).
+(the updater's TensorRT GPU rules, `AnimeJaNaiUpdater/GpuSupport.cs`) and `tests/Launcher` (the
+launcher against an extracted release tree; `--only registry` needs no tree, which is what CI runs).
 
 See `docs/DEVELOPMENT.md` for the full assembler CLI (`--target`, `--packs`, `--packs-only`)
 and the local-component override env vars, and `docs/RELEASE.md` for the release runbook.

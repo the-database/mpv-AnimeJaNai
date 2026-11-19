@@ -1,0 +1,44 @@
+name: Launcher
+on:
+  pull_request:
+    paths:
+      - "AnimeJaNaiLauncher/**"
+      - "tests/Launcher/**"
+      - ".github/workflows/launcher.yml"
+  push:
+    branches: [main]
+    paths:
+      - "AnimeJaNaiLauncher/**"
+      - "tests/Launcher/**"
+      - ".github/workflows/launcher.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      # The Native AOT link step finds MSVC through vswhere.exe.
+      - name: Put vswhere on PATH
+        run: Add-Content $env:GITHUB_PATH "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+      - name: Publish (GUI and console builds)
+        run: |
+          dotnet publish AnimeJaNaiLauncher -c Release -r win-x64 -o launcher-publish
+          dotnet publish AnimeJaNaiLauncher -c Release -r win-x64 -p:ConsoleBuild=true -o launcher-console
+          Copy-Item launcher-console/mpv-animejanai.exe launcher-publish/mpv-animejanai.com
+          Remove-Item launcher-publish/*.pdb
+          Get-ChildItem launcher-publish | Format-Table Name, Length
+      # The player checks need an extracted release and a desktop; CI runs the registry ones
+      # (redirected HKCU, nothing real touched).
+      - name: Registry checks
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\tree" | Out-Null
+          dotnet run --project tests/Launcher -c Release -- "$env:RUNNER_TEMP\tree" launcher-publish --only registry
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mpv-animejanai-launcher-win-x64
+          path: launcher-publish
