@@ -1,0 +1,42 @@
+{
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "2560x1600",
+    "display_hz": 240,
+    "native_kernels": true
+  },
+  "id": "fcff6ad8-c317-430f-8465-fb8b334dda34",
+  "submitted_at": "2026-11-19T06:30:12.942Z",
+  "app_version": "3.12.3",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+  "vram_mb": 8188,
+  "cpu": "Intel(R) Core(TM) i9-14900HX",
+  "cpu_mhz": 2200,
+  "cpu_cores": 24,
+  "cpu_threads": 32,
+  "ram_mb": 32492,
+  "ram_speed_mhz": 5600,
+  "os": "Microsoft Windows 10.0.26300",
+  "driver": "32.0.16.1074",
+  "results": {
+    "Balanced": {
+      "480x360": 242.48,
+      "640x480": 184.1,
+      "768x576": 142.02,
+      "1280x720": 81.48,
+      "1920x1080": 38.85
+    },
+    "Performance": {
+      "480x360": 329.61,
+      "640x480": 273.41,
+      "768x576": 233.34,
+      "1280x720": 142.78,
+      "1920x1080": 67.72
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
