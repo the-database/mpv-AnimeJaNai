@@ -117,13 +117,23 @@ static partial class Win
         Log.Write($"foreground {ok}");
     }
 
+    /// The window as mpv's --geometry reads it back: the visible frame's top-left (geometry places
+    /// the frame, DWM's extended frame bounds, not the video area) and the video area's size, in
+    /// physical pixels. Per-monitor DPI aware for the call: unaware, Windows would hand this process
+    /// coordinates scaled to 96 DPI.
     public static (int X, int Y, int W, int H)? GetRect(nint hwnd)
     {
-        if (!IsWindow(hwnd) || !GetWindowRect(hwnd, out var r))
+        SetThreadDpiAwarenessContext(-4 /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 */);
+        if (!IsWindow(hwnd) || !GetClientRect(hwnd, out var client))
         {
             return null;
         }
-        return (r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+        if (DwmGetWindowAttribute(hwnd, 9 /* DWMWA_EXTENDED_FRAME_BOUNDS */, out var frame, Marshal.SizeOf<RECT>()) != 0
+            && !GetWindowRect(hwnd, out frame))
+        {
+            return null;
+        }
+        return (frame.Left, frame.Top, client.Right - client.Left, client.Bottom - client.Top);
     }
 
     /// Whether this process has a usable stderr (a console, or a pipe/file its caller reads).
@@ -249,7 +259,10 @@ static partial class Win
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsIconic(nint h);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsWindow(nint h);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool ShowWindow(nint h, int cmd);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetClientRect(nint h, out RECT r);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetWindowRect(nint h, out RECT r);
+    [LibraryImport("dwmapi.dll")] private static partial int DwmGetWindowAttribute(nint hwnd, int attribute, out RECT value, int size);
+    [LibraryImport("user32.dll")] private static partial nint SetThreadDpiAwarenessContext(nint context);
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)] private static partial int MessageBoxW(nint owner, string text, string caption, uint type);
     [LibraryImport("shell32.dll")] private static partial int SHGetPropertyStoreForWindow(nint hwnd, ref Guid iid, out nint ppv);
     [LibraryImport("ole32.dll")] private static partial int PropVariantClear(ref PROPVARIANT pv);

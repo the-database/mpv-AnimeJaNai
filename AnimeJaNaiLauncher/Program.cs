@@ -13,7 +13,7 @@
 //   mpv-animejanai --register video|audio|image|path [--default]
 //   mpv-animejanai --unregister video|audio|image|path|all
 //                                           per-user file associations and PATH (Windows)
-//   mpv-animejanai --window-rect <window-id> prints "x y w h" (Windows)
+//   mpv-animejanai --window-rect <window-id> prints "x y w h" as --geometry takes them (Windows)
 //
 // Any other argument that starts with "-" is an mpv option. A launch with mpv options starts its
 // own player, like --new-instance. The console build (shipped as mpv-animejanai.com) runs mpv.com

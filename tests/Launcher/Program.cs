@@ -15,6 +15,11 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Win32;
 
+// Run by the player as the interface's launcher (see UiTests.cs).
+if (args.Length > 0 && args[0].StartsWith("--"))
+{
+    return StubLauncher.Run(args);
+}
 if (!OperatingSystem.IsWindows())
 {
     Console.Error.WriteLine("Windows only (Linux checks come with the Linux launcher).");
@@ -56,6 +61,8 @@ sealed partial class Tests(string tree, string launcherDir)
                 Section("--new-instance and --no-ui", SeparateInstances);
                 Section("console variant", Console_);
                 Section("--open-dialog", Dialog);
+                Section("interface scripts and menu", Interface);
+                Section("remembered volume and window", RememberedState);
             }
         }
         finally
@@ -384,10 +391,26 @@ sealed class Ipc : IDisposable
         }
     }
 
-    public JsonNode? Get(string property)
+    public JsonNode? Get(string property) => Send("get_property", property);
+
+    public JsonNode? TryGet(string property)
+    {
+        try { return Get(property); }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    public bool TrySend(params object[] command)
+    {
+        try { Send(command); return true; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// Runs one command; returns its data, throws when mpv reports an error.
+    public JsonNode? Send(params object[] command)
     {
         int rid = ++id;
-        var line = Encoding.UTF8.GetBytes($"{{\"command\":[\"get_property\",\"{property}\"],\"request_id\":{rid}}}\n");
+        var cmd = new JsonArray(command.Select(c => (JsonNode?)JsonValue.Create(c)).ToArray());
+        var line = Encoding.UTF8.GetBytes(new JsonObject { ["command"] = cmd, ["request_id"] = rid }.ToJsonString() + "\n");
         pipe.Write(line);
         pipe.Flush();
         while (reader.ReadLine() is { } reply)
@@ -399,7 +422,7 @@ sealed class Ipc : IDisposable
             }
             if (node["error"]?.GetValue<string>() != "success")
             {
-                throw new InvalidOperationException($"{property}: {node["error"]}");
+                throw new InvalidOperationException($"{command[0]} {(command.Length > 1 ? command[1] : "")}: {node["error"]}");
             }
             return node["data"];
         }

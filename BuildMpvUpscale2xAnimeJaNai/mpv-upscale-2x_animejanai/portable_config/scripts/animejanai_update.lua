@@ -47,6 +47,8 @@ local function on_check(success, result)
     local ver = (result.stdout or ""):match("UPDATE_AVAILABLE%s+(%S+)")
     if ver then
         available_version = ver
+        -- The menu shows "Install Update" only while this is set (animejanai-ui/menu.conf).
+        mp.set_property("user-data/animejanai/update-available", ver)
         msg.info("Update available: " .. ver)
         local how = is_appimage and "press Ctrl+U for the download link."
                                  or "press Ctrl+U to install."
