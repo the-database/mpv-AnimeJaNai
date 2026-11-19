@@ -185,7 +185,9 @@ All three csproj target **net10.0**, and `.github/workflows/deploy.yml` pins
 
 There is no test suite and no linter configured, except `dotnet run --project tests/UpdaterGpu`
 (the updater's TensorRT GPU rules, `AnimeJaNaiUpdater/GpuSupport.cs`) and `tests/Launcher` (the
-launcher against an extracted release tree; `--only registry` needs no tree, which is what CI runs).
+launcher against an extracted release tree; `--only registry` needs no tree, which is what CI runs)
+and `tests/FrontendMigration` (the updater's one-time mpv.net -> launcher migration on a copy of a
+release, with a scratch store: `-- <release tree> <new updater exe> <launcher dir> [--seed-store <store>]`).
 
 See `docs/DEVELOPMENT.md` for the full assembler CLI (`--target`, `--packs`, `--packs-only`)
 and the local-component override env vars, and `docs/RELEASE.md` for the release runbook.

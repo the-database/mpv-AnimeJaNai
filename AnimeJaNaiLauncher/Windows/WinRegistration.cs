@@ -82,8 +82,8 @@ static partial class WinRegistration
         return 0;
     }
 
-    static string OpenCommand => Win.CommandLine(Install.GuiLauncherPath, []) + " \"%1\"";
-    static string Icon => Path.Combine(Install.Root, "mpv.exe") + ",0";
+    internal static string OpenCommand => Win.CommandLine(Install.GuiLauncherPath, []) + " \"%1\"";
+    internal static string Icon => Path.Combine(Install.Root, "mpv.exe") + ",0";
 
     static void Register(Kind kind, bool makeDefault)
     {
@@ -208,7 +208,7 @@ static partial class WinRegistration
     /// HKCU\<subkey> (RegOverridePredefKey), so a test never touches the user's real entries.
     static RegistryKey? testRoot;
 
-    static bool RedirectForTests()
+    internal static bool RedirectForTests()
     {
         if (Environment.GetEnvironmentVariable("ANIMEJANAI_TEST_HKCU") is not { Length: > 0 } sub)
         {

@@ -66,6 +66,20 @@ static partial class Platform
         throw new PlatformNotSupportedException("--register is Windows-only so far");
     }
 
+    public static int MigrateShell(string[] args)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("--migrate-shell is Windows-only");
+        }
+        int i = Array.IndexOf(args, "--from");
+        if (i < 0 || i + 1 >= args.Length)
+        {
+            throw new ArgumentException("usage: --migrate-shell --from <old exe>");
+        }
+        return WinShellMigration.Run(Path.GetFullPath(args[i + 1]));
+    }
+
     public static int WindowRect(string[] args)
     {
         if (!OperatingSystem.IsWindows())

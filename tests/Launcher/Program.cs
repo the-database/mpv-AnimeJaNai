@@ -53,6 +53,7 @@ sealed partial class Tests(string tree, string launcherDir)
         try
         {
             Section("registry (redirected HKCU)", Registration);
+            Section("--migrate-shell (scratch shortcuts, redirected HKCU)", MigrateShell);
             if (!onlyRegistry)
             {
                 Section("first launch, window identity, interface contract", FirstLaunch);
@@ -63,6 +64,7 @@ sealed partial class Tests(string tree, string launcherDir)
                 Section("--open-dialog", Dialog);
                 Section("interface scripts and menu", Interface);
                 Section("remembered volume and window", RememberedState);
+                Section("hand-off from mpv.net after the switch", HandOffFromMpvNet);
             }
         }
         finally
@@ -376,12 +378,12 @@ sealed class Ipc : IDisposable
         reader = new StreamReader(p, new UTF8Encoding(false), false, 4096, leaveOpen: true);
     }
 
-    public static Ipc? Connect(string name)
+    public static Ipc? Connect(string name, int timeoutMs = 2000)
     {
         var p = new NamedPipeClientStream(".", name, PipeDirection.InOut);
         try
         {
-            p.Connect(2000);
+            p.Connect(timeoutMs);
             return new Ipc(p);
         }
         catch (Exception)
