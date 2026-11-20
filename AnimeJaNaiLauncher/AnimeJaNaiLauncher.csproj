@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    mpv-animejanai: the player's launcher. Native AOT, no runtime needed.
+      dotnet publish AnimeJaNaiLauncher -c Release -r win-x64 -o <dir>
+          GUI variant, mpv-animejanai.exe (start menu, file associations, taskbar)
+      dotnet publish AnimeJaNaiLauncher -c Release -r win-x64 -p:ConsoleBuild=true -o <dir>
+          console variant; ship it renamed to mpv-animejanai.com (terminal use)
+    The console variant builds into obj-console/ and bin-console/ (Directory.Build.props).
+    The native linker step on Windows finds MSVC through vswhere.exe, which has to be on PATH.
+  -->
+  <PropertyGroup>
+    <OutputType Condition="'$(ConsoleBuild)' == 'true'">Exe</OutputType>
+    <OutputType Condition="'$(ConsoleBuild)' != 'true'">WinExe</OutputType>
+    <DefineConstants Condition="'$(ConsoleBuild)' == 'true'">$(DefineConstants);CONSOLE_BUILD</DefineConstants>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>mpv-animejanai</AssemblyName>
+    <RootNamespace>AnimeJaNai.Launcher</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <!-- Native AOT compiler and runtime pack: pinned past the 10.0.0-10.0.13 advisory
+         (GHSA-p3jp-9v83-76w9) instead of whatever the installed SDK bundles. -->
+    <RuntimeFrameworkVersion>10.0.15</RuntimeFrameworkVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Each variant's build folders are inside the project folder: keep the other one's out. -->
+    <Compile Remove="obj/**;obj-console/**;bin/**;bin-console/**" />
+  </ItemGroup>
+
+</Project>
