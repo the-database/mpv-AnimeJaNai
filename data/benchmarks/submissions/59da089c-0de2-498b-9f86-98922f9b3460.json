@@ -1,0 +1,42 @@
+{
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "3440x1440",
+    "display_hz": 120
+  },
+  "id": "59da089c-0de2-498b-9f86-98922f9b3460",
+  "submitted_at": "2026-11-20T20:09:38.543Z",
+  "app_version": "3.12.5",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon RX 9070 XT",
+  "vram_mb": 16191,
+  "gpu_power_w": 304,
+  "cpu": "AMD Ryzen 7 5700X 8-Core Processor",
+  "cpu_mhz": 3401,
+  "cpu_cores": 8,
+  "cpu_threads": 16,
+  "ram_mb": 32691,
+  "ram_speed_mhz": 3200,
+  "os": "Microsoft Windows 10.0.26100",
+  "driver": "32.0.32029.2010",
+  "results": {
+    "Balanced": {
+      "480x360": 239.96,
+      "640x480": 239.98,
+      "768x576": 239.98,
+      "1280x720": 150.79,
+      "1920x1080": 57.11
+    },
+    "Performance": {
+      "480x360": 240.01,
+      "640x480": 239.57,
+      "768x576": 240,
+      "1280x720": 239.62,
+      "1920x1080": 107.7
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
