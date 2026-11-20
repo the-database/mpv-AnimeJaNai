@@ -1006,6 +1006,17 @@ void WriteVersionAndManifest()
         "animejanai/onnx",
         "animejanai/benchmarks",
     };
+    // Every libaji library the package ships must ride the overlay too: the addon inventory lists each
+    // animejanai/inference/aji*.dll, and an overlay update that has neither the new file nor an installed
+    // copy fails ("Could not find file ...aji_vk.dll", 3.12.3 -> 3.12.4).
+    var unlisted = Directory.GetFiles(inferencePath)
+        .Select(Path.GetFileName)
+        .Where(n => n!.StartsWith(plat.IsWindows ? "aji" : "libaji", StringComparison.Ordinal) &&
+                    n.EndsWith(plat.IsWindows ? ".dll" : ".so", StringComparison.Ordinal) &&
+                    !plat.AjiLibs.Contains(n))
+        .ToList();
+    if (unlisted.Count > 0)
+        throw new InvalidDataException("libaji libraries missing from the overlay (Platform.AjiLibs): " + string.Join(", ", unlisted));
     overlayPaths.AddRange(plat.AjiLibs.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.AjiTools.Select(n => "animejanai/inference/" + n));
     overlayPaths.AddRange(plat.ManagerOverlay);
@@ -1487,7 +1498,7 @@ record Platform(
         YtDlpName: "yt-dlp.exe",
         AjiAsset: "aji-windows-x64.zip",
         ManagerAsset: "AnimeJaNaiManager-portable-x64.zip",
-        AjiLibs: new[] { "aji.dll", "aji_trt.dll", "aji_dml.dll" },
+        AjiLibs: new[] { "aji.dll", "aji_trt.dll", "aji_dml.dll", "aji_vk.dll" },
         AjiTools: new[] { "aji_harness.exe", "aji_harness_dml.exe", "aji_kernel_test.exe" },
         // Avalonia native libs + the Manager exe ride the overlay on Windows.
         ManagerOverlay: new[]
@@ -1511,7 +1522,7 @@ record Platform(
         YtDlpName: "yt-dlp_linux",
         AjiAsset: "aji-linux-x64.tar.zst",
         ManagerAsset: "AnimeJaNaiManager-portable-linux-x64.tar.zst",
-        AjiLibs: new[] { "libaji.so", "libaji_trt.so" },
+        AjiLibs: new[] { "libaji.so", "libaji_trt.so", "libaji_vk.so" },
         AjiTools: new[] { "aji_harness", "aji_kernel_test" },
         // The self-contained Avalonia Manager ships flat at the install root
         // (binary + Skia/HarfBuzz native libs), mirroring Windows; all of it
