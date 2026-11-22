@@ -1,0 +1,42 @@
+{
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "2560x1440",
+    "display_hz": 240
+  },
+  "id": "c8c02618-235b-4caf-94a5-305ba9c4375a",
+  "submitted_at": "2026-11-22T03:30:25.081Z",
+  "app_version": "3.12.5",
+  "backend": "DirectML",
+  "gpu": "AMD Radeon RX 7600",
+  "vram_mb": 8134,
+  "gpu_power_w": 165,
+  "cpu": "AMD Ryzen 5 7600X 6-Core Processor",
+  "cpu_mhz": 4701,
+  "cpu_cores": 6,
+  "cpu_threads": 12,
+  "ram_mb": 15750,
+  "ram_speed_mhz": 6200,
+  "os": "Microsoft Windows 10.0.26300",
+  "driver": "32.0.31035.1003",
+  "results": {
+    "Balanced": {
+      "480x360": 238.23,
+      "640x480": 159.61,
+      "768x576": 106.36,
+      "1280x720": 52.07,
+      "1920x1080": 22.15
+    },
+    "Performance": {
+      "480x360": 239.12,
+      "640x480": 238.62,
+      "768x576": 206.49,
+      "1280x720": 105.81,
+      "1920x1080": 44.38
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
