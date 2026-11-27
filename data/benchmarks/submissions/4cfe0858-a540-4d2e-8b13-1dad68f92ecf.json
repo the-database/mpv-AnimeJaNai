@@ -1,0 +1,43 @@
+{
+  "schema": 2,
+  "measurement": {
+    "method": "mpv-output-trace-v2",
+    "mode": "native-display",
+    "output_resolution": "3840x2160",
+    "display_hz": 240.016,
+    "native_kernels": true
+  },
+  "id": "4cfe0858-a540-4d2e-8b13-1dad68f92ecf",
+  "submitted_at": "2026-11-26T14:10:13.195Z",
+  "app_version": "3.12.5",
+  "backend": "TensorRT",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "vram_mb": 32607,
+  "gpu_power_w": 600,
+  "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor",
+  "cpu_mhz": 4300,
+  "cpu_cores": 16,
+  "cpu_threads": 32,
+  "ram_mb": 63154,
+  "ram_speed_mhz": 6000,
+  "os": "Microsoft Windows 10.0.26200",
+  "driver": "32.0.16.1714",
+  "results": {
+    "Balanced": {
+      "480x360": 658.04,
+      "640x480": 592.87,
+      "768x576": 509.14,
+      "1280x720": 350.85,
+      "1920x1080": 214.61
+    },
+    "Performance": {
+      "480x360": 770.06,
+      "640x480": 720.02,
+      "768x576": 632.06,
+      "1280x720": 494.3,
+      "1920x1080": 362.66
+    }
+  },
+  "submitted_by": "",
+  "note": ""
+}
